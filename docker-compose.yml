@@ -9,9 +9,21 @@ services:
       NODE_ENV: production
       PORT: 3000
       GUARDIAN_API_BASE_URL: http://guardian-api:3001
+      GUARDIAN_DEPLOYMENT_MODE: ${GUARDIAN_DEPLOYMENT_MODE:-on-premise}
       GUARDIAN_ROOT_USER: ${GUARDIAN_ROOT_USER:-root}
       GUARDIAN_ROOT_PASSWORD: ${GUARDIAN_ROOT_PASSWORD:-guardian-local-change-me}
       GUARDIAN_SESSION_SECRET: ${GUARDIAN_SESSION_SECRET:-guardian-local-session-secret-change-me}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      GUARDIAN_DYNAMODB_ENDPOINT: http://dynamodb:8000
+      GUARDIAN_TABLE: ${GUARDIAN_TABLE:-guardian-local}
+      GUARDIAN_QUEUE_URL: http://queue:9324/queue/guardian-events
+      GUARDIAN_EVIDENCE_BUCKET: ${GUARDIAN_EVIDENCE_BUCKET:-guardian-local-evidence}
+      GUARDIAN_S3_ENDPOINT: http://object-storage:9090
+      GUARDIAN_WHATSAPP_ORIGINATION_ID: ${GUARDIAN_WHATSAPP_ORIGINATION_ID:-}
+      GUARDIAN_NOTIFICATION_RECIPIENTS: ${GUARDIAN_NOTIFICATION_RECIPIENTS:-}
+      GUARDIAN_SES_FROM: ${GUARDIAN_SES_FROM:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_STARTER_PRICE_ID: ${STRIPE_STARTER_PRICE_ID:-}
@@ -27,6 +39,12 @@ services:
     depends_on:
       guardian-api:
         condition: service_healthy
+      dynamodb:
+        condition: service_started
+      queue:
+        condition: service_healthy
+      object-storage:
+        condition: service_healthy
 
   guardian-api:
     init: true
@@ -40,7 +58,6 @@ services:
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local
-      GUARDIAN_API_TOKEN: ${GUARDIAN_API_TOKEN:-local-development-only}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_STARTER_PRICE_ID: ${STRIPE_STARTER_PRICE_ID:-}
@@ -89,6 +106,9 @@ services:
       GUARDIAN_S3_ENDPOINT: http://object-storage:9090
       GUARDIAN_NOTIFICATION_MODE: log
       GUARDIAN_AI_MODE: mock
+      GUARDIAN_WHATSAPP_ORIGINATION_ID: ${GUARDIAN_WHATSAPP_ORIGINATION_ID:-}
+      GUARDIAN_NOTIFICATION_RECIPIENTS: ${GUARDIAN_NOTIFICATION_RECIPIENTS:-}
+      GUARDIAN_SES_FROM: ${GUARDIAN_SES_FROM:-}
     depends_on:
       guardian-api:
         condition: service_healthy

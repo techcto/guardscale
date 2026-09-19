@@ -1,1 +1,2 @@
-export default function Incidents(){return <main><section className="hero"><div className="eyebrow">Timeline</div><h1>Active incidents</h1></section><div className="card"><span className="status">All clear</span><p className="muted">No active correlated incidents.</p></div></main>}
+import IncidentsConsole from './incidents-console';
+export default function Incidents(){return <IncidentsConsole/>}

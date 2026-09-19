@@ -1,1 +1,0 @@
-import{NextRequest,NextResponse}from'next/server';import{agent,unauthorized}from'@/lib/http';import{store}from'@/lib/store';export function GET(req:NextRequest){const id=agent(req);return id?NextResponse.json(store.servers(id.tenantId)):unauthorized()}

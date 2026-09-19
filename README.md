@@ -19,7 +19,7 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-For local development, the compose defaults are username `root` and password `guardian-local-change-me`. Replace `GUARDIAN_ROOT_PASSWORD`, `GUARDIAN_SESSION_SECRET`, and `GUARDIAN_API_TOKEN` in `.env` before exposing the application beyond localhost.
+For local development, the compose defaults are username `root` and password `guardian-local-change-me`. Replace `GUARDIAN_ROOT_PASSWORD` and `GUARDIAN_SESSION_SECRET` in `.env` before exposing the application beyond localhost. Agent enrollment no longer uses a shared token — each organization gets its own enrollment secret, issued from the Nodes page.
 
 Stripe checkout is disabled until `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_STARTER_PRICE_ID`, and `STRIPE_SCALE_PRICE_ID` are configured. Card data is handled by Stripe Checkout and is never stored by Guardian.US.
 
