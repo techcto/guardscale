@@ -1,0 +1,38 @@
+server:
+  id: server-example-1
+  tenant: tenant-example
+logs:
+  apache_access: /var/log/httpd/access_log
+  apache_error: /var/log/httpd/error_log
+  php_error: /var/log/php-fpm/error.log
+  php_slow: /var/log/php-fpm/www-slow.log
+proxy:
+  trusted_cidrs:
+    - 10.0.0.0/8
+origin:
+  protected_hosts:
+    - origin.example.com
+  verification_headers:
+    - name: X-Origin-Verify
+      secret_file: /etc/guardian/secrets/origin-token
+admin:
+  protected_hosts:
+    - admin.example.com
+health:
+  protected_paths:
+    - /healthcheck
+detection:
+  warning_504_percent: 2
+  critical_504_percent: 10
+  emergency_504_percent: 30
+  traffic_multiplier_warning: 5
+  expensive_query_parameters:
+    - table_filter
+protection:
+  enabled: false
+  dry_run: true
+  default_ttl_seconds: 300
+storage:
+  state_dir: ./guardian-state
+  max_evidence_lines: 500
+  max_incidents: 20

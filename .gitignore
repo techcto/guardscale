@@ -1,0 +1,41 @@
+/bin/
+/dist/
+/coverage.out
+/origin-guardian-state/
+*.test
+*.prof
+
+# Next.js / Node
+/node_modules/
+/.next/
+/out/
+/.turbo/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+configs/config.yaml
+
+# AWS/deployment local artifacts
+/.aws-sam/
+/cdk.out/
+devops/**/*.parameters.json
+devops/**/*.local.json
+
+# Coverage and temporary files
+/coverage/
+/.nyc_output/
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

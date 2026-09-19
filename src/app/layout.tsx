@@ -1,0 +1,3 @@
+import Link from 'next/link';import './globals.css';
+export const metadata={title:'Guardian.US',description:'AI-powered infrastructure detection and response'};
+export default function Layout({children}:{children:React.ReactNode}){return <html lang="en"><body><div className="shell"><header className="top"><Link className="brand" href="/">GUARDIAN.US</Link><nav className="nav"><Link href="/servers">Servers</Link><Link href="/incidents">Incidents</Link><Link href="/users">Users</Link><Link href="/billing">Billing</Link><Link href="/settings">Settings</Link></nav></header>{children}</div></body></html>}

@@ -1,0 +1,2 @@
+import{NextRequest,NextResponse}from'next/server';import{agent,body,unauthorized}from'@/lib/http';import{store}from'@/lib/store';
+export async function POST(req:NextRequest){const id=agent(req);if(!id)return unauthorized();const v=await body(req) as {server_id:string;type:string;metadata?:Record<string,string>};store.putEvent({tenantId:id.tenantId,agentId:id.agentId,serverId:v.server_id,type:v.type,metadata:v.metadata,at:new Date().toISOString()});return NextResponse.json({status:'accepted'},{status:202})}

@@ -1,0 +1,16 @@
+.git
+.github
+.next
+node_modules
+bin
+dist
+coverage
+origin-guardian-state
+.env
+.env.*
+!.env.example
+*.log
+*.test
+*.prof
+devops/**/*.parameters.json
+devops/**/*.local.json

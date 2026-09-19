@@ -1,0 +1,19 @@
+[Unit]
+Description=Guardian.US infrastructure agent
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/guardian run --config /etc/guardian/config.yaml
+Restart=on-failure
+RestartSec=5s
+StateDirectory=guardian
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/guardian
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

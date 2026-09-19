@@ -1,0 +1,2 @@
+import{NextRequest,NextResponse}from'next/server';import{agent,body,unauthorized}from'@/lib/http';import{store}from'@/lib/store';
+export async function POST(req:NextRequest){const id=agent(req);if(!id)return unauthorized();const v=await body(req) as {server_id?:string};if(!v.server_id)return NextResponse.json({error:'server_id required'},{status:400});store.upsertServer({tenantId:id.tenantId,agentId:id.agentId,serverId:v.server_id,status:'healthy',lastHeartbeat:new Date().toISOString()});return NextResponse.json({status:'accepted'},{status:202})}

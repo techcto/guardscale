@@ -1,0 +1,45 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Guardian.US control plane - ECS Fargate, ALB, SQS, DynamoDB, S3, and CloudWatch
+Parameters:
+  VpcId: {Type: 'AWS::EC2::VPC::Id'}
+  PublicSubnets: {Type: 'List<AWS::EC2::Subnet::Id>'}
+  PrivateSubnets: {Type: 'List<AWS::EC2::Subnet::Id>'}
+  ImageBase: {Type: String, Description: ECR registry/repository prefix without service suffix}
+  ReleaseVersion: {Type: String, Default: latest, AllowedPattern: '[0-9A-Za-z.-]+'}
+  CertificateArn: {Type: String, Default: ''}
+  RootUsername: {Type: String, Default: root, MinLength: 3}
+  RootPassword: {Type: String, NoEcho: true, MinLength: 12}
+  SessionSecret: {Type: String, NoEcho: true, MinLength: 32}
+  AgentApiToken: {Type: String, NoEcho: true, MinLength: 16}
+Conditions: {UseTLS: {Fn::Not: [{Fn::Equals: [{Ref: CertificateArn}, '']}]}}
+Resources:
+  Cluster: {Type: 'AWS::ECS::Cluster', Properties: {ClusterName: {Fn::Sub: 'guardian-${AWS::StackName}'}, ClusterSettings: [{Name: containerInsights, Value: enabled}]}}
+  ALBSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties: {GroupDescription: Guardian public ingress, VpcId: {Ref: VpcId}, SecurityGroupIngress: [{IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0}, {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0}]}
+  ServiceSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties: {GroupDescription: Guardian services from ALB, VpcId: {Ref: VpcId}, SecurityGroupIngress: [{IpProtocol: tcp, FromPort: 3000, ToPort: 3001, SourceSecurityGroupId: {Ref: ALBSG}}]}
+  ALB: {Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer', Properties: {Subnets: {Ref: PublicSubnets}, SecurityGroups: [{Ref: ALBSG}]}}
+  WebTarget: {Type: 'AWS::ElasticLoadBalancingV2::TargetGroup', Properties: {VpcId: {Ref: VpcId}, Port: 3000, Protocol: HTTP, TargetType: ip, HealthCheckPath: /api/health}}
+  ApiTarget: {Type: 'AWS::ElasticLoadBalancingV2::TargetGroup', Properties: {VpcId: {Ref: VpcId}, Port: 3001, Protocol: HTTP, TargetType: ip, HealthCheckPath: /api/health}}
+  Listener: {Type: 'AWS::ElasticLoadBalancingV2::Listener', Properties: {LoadBalancerArn: {Ref: ALB}, Port: 80, Protocol: HTTP, DefaultActions: [{Type: forward, TargetGroupArn: {Ref: WebTarget}}]}}
+  ApiRule: {Type: 'AWS::ElasticLoadBalancingV2::ListenerRule', Properties: {ListenerArn: {Ref: Listener}, Priority: 10, Conditions: [{Field: path-pattern, Values: ['/api/*']}], Actions: [{Type: forward, TargetGroupArn: {Ref: ApiTarget}}]}}
+  Queue: {Type: 'AWS::SQS::Queue', Properties: {VisibilityTimeout: 120, MessageRetentionPeriod: 345600, RedrivePolicy: {deadLetterTargetArn: {Fn::GetAtt: [DeadLetterQueue, Arn]}, maxReceiveCount: 5}}}
+  DeadLetterQueue: {Type: 'AWS::SQS::Queue', Properties: {MessageRetentionPeriod: 1209600}}
+  GuardianTable: {Type: 'AWS::DynamoDB::Table', Properties: {BillingMode: PAY_PER_REQUEST, AttributeDefinitions: [{AttributeName: pk, AttributeType: S}, {AttributeName: sk, AttributeType: S}], KeySchema: [{AttributeName: pk, KeyType: HASH}, {AttributeName: sk, KeyType: RANGE}], PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: true}, SSESpecification: {SSEEnabled: true}}}
+  EvidenceBucket: {Type: 'AWS::S3::Bucket', Properties: {BucketEncryption: {ServerSideEncryptionConfiguration: [{ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}}]}, PublicAccessBlockConfiguration: {BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true}, LifecycleConfiguration: {Rules: [{Id: expire-evidence, Status: Enabled, ExpirationInDays: 30}]}}}
+  LogGroup: {Type: 'AWS::Logs::LogGroup', Properties: {RetentionInDays: 30}}
+  ExecutionRole: {Type: 'AWS::IAM::Role', Properties: {AssumeRolePolicyDocument: {Version: '2012-10-17', Statement: [{Effect: Allow, Principal: {Service: ecs-tasks.amazonaws.com}, Action: 'sts:AssumeRole'}]}, ManagedPolicyArns: ['arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy']}}
+  TaskRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument: {Version: '2012-10-17', Statement: [{Effect: Allow, Principal: {Service: ecs-tasks.amazonaws.com}, Action: 'sts:AssumeRole'}]}
+      Policies: [{PolicyName: guardian-data, PolicyDocument: {Version: '2012-10-17', Statement: [{Effect: Allow, Action: ['dynamodb:GetItem','dynamodb:PutItem','dynamodb:Query','dynamodb:UpdateItem'], Resource: {Fn::GetAtt: [GuardianTable, Arn]}}, {Effect: Allow, Action: ['sqs:SendMessage','sqs:ReceiveMessage','sqs:DeleteMessage','sqs:GetQueueAttributes'], Resource: {Fn::GetAtt: [Queue, Arn]}}, {Effect: Allow, Action: ['s3:GetObject','s3:PutObject'], Resource: {Fn::Sub: '${EvidenceBucket.Arn}/*'}}, {Effect: Allow, Action: ['ses:SendEmail','social-messaging:SendWhatsAppMessage'], Resource: '*'}]}}]
+  WebTask: {Type: 'AWS::ECS::TaskDefinition', Properties: {RequiresCompatibilities: [FARGATE], NetworkMode: awsvpc, Cpu: '256', Memory: '512', ExecutionRoleArn: {Fn::GetAtt: [ExecutionRole, Arn]}, TaskRoleArn: {Fn::GetAtt: [TaskRole, Arn]}, ContainerDefinitions: [{Name: web, Image: {Fn::Sub: '${ImageBase}-web:${ReleaseVersion}'}, PortMappings: [{ContainerPort: 3000}], Environment: [{Name: GUARDIAN_ROOT_USER, Value: {Ref: RootUsername}}, {Name: GUARDIAN_ROOT_PASSWORD, Value: {Ref: RootPassword}}, {Name: GUARDIAN_SESSION_SECRET, Value: {Ref: SessionSecret}}], LogConfiguration: {LogDriver: awslogs, Options: {awslogs-group: {Ref: LogGroup}, awslogs-region: {Ref: 'AWS::Region'}, awslogs-stream-prefix: web}}}]}}
+  ApiTask: {Type: 'AWS::ECS::TaskDefinition', Properties: {RequiresCompatibilities: [FARGATE], NetworkMode: awsvpc, Cpu: '256', Memory: '512', ExecutionRoleArn: {Fn::GetAtt: [ExecutionRole, Arn]}, TaskRoleArn: {Fn::GetAtt: [TaskRole, Arn]}, ContainerDefinitions: [{Name: api, Image: {Fn::Sub: '${ImageBase}-api:${ReleaseVersion}'}, PortMappings: [{ContainerPort: 3001}], Environment: [{Name: GUARDIAN_TABLE, Value: {Ref: GuardianTable}}, {Name: GUARDIAN_QUEUE_URL, Value: {Ref: Queue}}, {Name: GUARDIAN_EVIDENCE_BUCKET, Value: {Ref: EvidenceBucket}}, {Name: GUARDIAN_API_TOKEN, Value: {Ref: AgentApiToken}}, {Name: GUARDIAN_ROOT_USER, Value: {Ref: RootUsername}}, {Name: GUARDIAN_ROOT_PASSWORD, Value: {Ref: RootPassword}}, {Name: GUARDIAN_SESSION_SECRET, Value: {Ref: SessionSecret}}], LogConfiguration: {LogDriver: awslogs, Options: {awslogs-group: {Ref: LogGroup}, awslogs-region: {Ref: 'AWS::Region'}, awslogs-stream-prefix: api}}}]}}
+  WorkerTask: {Type: 'AWS::ECS::TaskDefinition', Properties: {RequiresCompatibilities: [FARGATE], NetworkMode: awsvpc, Cpu: '256', Memory: '512', ExecutionRoleArn: {Fn::GetAtt: [ExecutionRole, Arn]}, TaskRoleArn: {Fn::GetAtt: [TaskRole, Arn]}, ContainerDefinitions: [{Name: worker, Image: {Fn::Sub: '${ImageBase}-worker:${ReleaseVersion}'}, Environment: [{Name: GUARDIAN_QUEUE_URL, Value: {Ref: Queue}}], LogConfiguration: {LogDriver: awslogs, Options: {awslogs-group: {Ref: LogGroup}, awslogs-region: {Ref: 'AWS::Region'}, awslogs-stream-prefix: worker}}}]}}
+  WebService: {Type: 'AWS::ECS::Service', DependsOn: Listener, Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: WebTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}, LoadBalancers: [{ContainerName: web, ContainerPort: 3000, TargetGroupArn: {Ref: WebTarget}}]}}
+  ApiService: {Type: 'AWS::ECS::Service', DependsOn: ApiRule, Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: ApiTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}, LoadBalancers: [{ContainerName: api, ContainerPort: 3001, TargetGroupArn: {Ref: ApiTarget}}]}}
+  WorkerService: {Type: 'AWS::ECS::Service', Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: WorkerTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}}}
+Outputs: {URL: {Value: {Fn::Sub: 'http://${ALB.DNSName}'}}}

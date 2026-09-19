@@ -1,0 +1,1 @@
+import BillingConsole from'./billing-console';export default function Billing(){return <main><section className="hero"><div className="eyebrow">Plans & billing</div><h1>Scale protection with your fleet.</h1><p className="muted page-intro">Subscriptions are securely processed by Stripe. Guardian.US never receives or stores card details.</p></section><BillingConsole/></main>}

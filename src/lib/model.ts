@@ -1,0 +1,10 @@
+export type TenantRecord={tenantId:string};
+export type ServerRecord={tenantId:string;serverId:string;agentId:string;status:string;lastHeartbeat:string};
+export type IncidentRecord={tenantId:string;serverId:string;agentId:string;incidentId:string;state:string;startedAt:string;updatedAt:string;payload:unknown};
+export type GuardianEvent={tenantId:string;serverId:string;agentId:string;type:string;at:string;metadata?:Record<string,string>};
+export const normalizedEvents=['viewer.request','edge.cache.hit','edge.cache.miss','waf.allow','waf.block','origin.request','origin.response','origin.timeout','app.php.slow','app.php.max_children','host.cpu','host.memory','service.restart','monitor.down','protection.enabled','protection.expired'] as const;
+export type UserRole='admin'|'operator'|'viewer';
+export type GuardianUser={id:string;username:string;displayName:string;role:UserRole;status:'active'|'disabled';createdAt:string;updatedAt:string};
+export type ManagedServer={tenantId:string;agentId:string;serverId:string;displayName:string;status:'pending'|'healthy'|'stale'|'offline';createdAt:string;lastHeartbeat?:string};
+export type Product={id:string;name:string;description:string;stripePriceId:string;monthlyPrice:number;serverLimit:number;active:boolean};
+export type Subscription={id:string;userId:string;productId:string;stripeCustomerId:string;stripeSubscriptionId:string;status:'trialing'|'active'|'past_due'|'canceled'|'unpaid';currentPeriodEnd?:string;updatedAt:string};

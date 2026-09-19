@@ -1,0 +1,31 @@
+name: Guardian.US CI
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: gofmt -w . && git diff --exit-code
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: go build -trimpath -ldflags='-s -w' ./cmd/guardian
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+      - name: Reject secrets and identifiable fixture data
+        run: bash scripts/check-public-data.sh

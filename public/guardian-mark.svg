@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Guardian.US</title>
+  <path fill="#61dbca" d="M32 3 56 12v18c0 15-9 25-24 31C17 55 8 45 8 30V12L32 3Z"/>
+  <path fill="#07111e" d="M32 13 46 18v12c0 9-5 16-14 21-9-5-14-12-14-21V18l14-5Zm0 8a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z"/>
+</svg>

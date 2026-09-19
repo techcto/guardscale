@@ -1,0 +1,31 @@
+flowchart TB
+  subgraph Origin[Monitored Linux origin]
+    Agent[Guardian Go agent]
+    WebServer[Apache / nginx]
+    Runtime[PHP-FPM / runtime]
+    Recorder[Bounded local recorder]
+    Agent --- WebServer
+    Agent --- Runtime
+    Agent --- Recorder
+  end
+  Agent -->|Outbound HTTPS only| ALB[Application Load Balancer]
+  subgraph AWS[Guardian AWS control plane]
+    ALB --> Web[guardian-web\nECS Fargate]
+    ALB --> API[guardian-api\nECS Fargate]
+    API --> DDB[(DynamoDB)]
+    API --> S3[(S3 evidence)]
+    API --> Queue[SQS + DLQ]
+    Queue --> Worker[guardian-worker\nECS Fargate]
+    Worker --> Bedrock[Bedrock / AgentCore]
+    Worker --> WhatsApp[AWS End User Messaging Social\nWhatsApp]
+    Worker --> SES[Amazon SES]
+    Web --> DDB
+    Web --> S3
+    Logs[CloudWatch logs / metrics / alarms]
+    API --> Logs
+    Worker --> Logs
+    Web --> Logs
+  end
+  WhatsApp -->|Authenticated operator reply| Worker
+  Worker -->|Signed allowlisted command| API
+  API -->|Agent polls outbound| Agent

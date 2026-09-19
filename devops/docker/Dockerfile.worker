@@ -1,0 +1,15 @@
+FROM node:26-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci
+COPY tsconfig.json ./
+COPY src/worker ./src/worker
+COPY src/lib ./src/lib
+RUN npx tsc --outDir dist --noEmit false --module commonjs --moduleResolution node src/worker/index.ts src/lib/notifications.ts
+FROM node:26-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+USER node
+CMD ["node","dist/worker/index.js"]
