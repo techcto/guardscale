@@ -6,3 +6,4 @@ export type Session={id:string;username:string;role:'root'|'admin'|'operator'|'v
 export async function createSession(value:Session,secret:string){const body=b64(JSON.stringify(value));return `${body}.${await signature(body,secret)}`}
 export async function verifySession(token:string|undefined,secret:string){if(!token||!secret)return null;const [body,sig]=token.split('.');if(!body||!sig||await signature(body,secret)!==sig)return null;try{const value=JSON.parse(unb64(body)) as Session;return value.expiresAt>Date.now()?value:null}catch{return null}}
 export const sessionCookie='guardian_session';
+export function isSecureRequest(req:{nextUrl:{protocol:string};headers:{get(name:string):string|null}}){return req.nextUrl.protocol==='https:'||req.headers.get('x-forwarded-proto')==='https'}

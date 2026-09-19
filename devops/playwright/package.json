@@ -1,0 +1,13 @@
+{
+  "name": "guardian-playwright",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser-driven checks against a running Guardian.US stack",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node journeys/run-all.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}
