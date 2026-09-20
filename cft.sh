@@ -23,7 +23,7 @@ Deploy parameters:
   GUARDIAN_VPC_ID              VPC id
   GUARDIAN_PUBLIC_SUBNETS      Comma-separated public subnet ids
   GUARDIAN_PRIVATE_SUBNETS     Comma-separated private (ECS service) subnet ids
-  GUARDIAN_IMAGE_BASE          ECR registry/repository prefix without service suffix, e.g. 709825985650.dkr.ecr.us-east-1.amazonaws.com/solodev/guardian
+  GUARDIAN_IMAGE_BASE          ECR registry/repository prefix without service suffix, e.g. <account-id>.dkr.ecr.<region>.amazonaws.com/solodev/guardian
   GUARDIAN_RELEASE_VERSION     Image tag (default: latest)
   GUARDIAN_CERTIFICATE_ARN     Optional ACM certificate ARN for HTTPS
   GUARDIAN_ROOT_USER           Optional root username (default: root)
