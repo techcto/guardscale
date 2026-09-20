@@ -1,5 +1,5 @@
 'use client';
-import{useEffect,useState}from'react';import Link from'next/link';import {useSearchParams} from'next/navigation';import type{Node,Settings}from'@/lib/model';import AddNode from'./add-node';
+import{useEffect,useState}from'react';import Link from'next/link';import {useRouter,useSearchParams} from'next/navigation';import type{Node,Settings}from'@/lib/model';import AddNode from'./add-node';
 
 function statusLabel(n:Node,staleAfterMs:number){
   if(n.status!=='healthy')return n.status;
@@ -41,8 +41,9 @@ export default function NodesConsole(){
 }
 
 function NodeTable({nodes,staleAfterMs,empty}:{nodes:Node[];staleAfterMs:number;empty?:boolean}){
+  const router=useRouter();
   return <div className="table-wrap"><table><thead><tr><th>Node</th><th>Tags</th><th>Health</th><th>Last heartbeat</th></tr></thead><tbody>
-    {nodes.length?nodes.map(n=><tr key={n.serverId}><td><Link href={`/nodes/${n.serverId}`}><strong>{n.displayName}</strong></Link><br/><span className="muted">{n.platform??'unknown platform'}</span></td><td>{(n.tags??[]).map(t=><span className="tag-pill" key={t}>{t}</span>)}</td><td><span className={`status${statusLabel(n,staleAfterMs)==='healthy'?'':' neutral'}`}>{statusLabel(n,staleAfterMs)}</span></td><td>{new Date(n.lastHeartbeat).toLocaleString()}</td></tr>)
+    {nodes.length?nodes.map(n=><tr key={n.serverId} className="row-link" onClick={()=>router.push(`/nodes/${n.serverId}`)}><td><Link href={`/nodes/${n.serverId}`}><strong>{n.displayName}</strong></Link><br/><span className="muted">{n.platform??'unknown platform'}</span></td><td>{(n.tags??[]).map(t=><span className="tag-pill" key={t}>{t}</span>)}</td><td><span className={`status${statusLabel(n,staleAfterMs)==='healthy'?'':' neutral'}`}>{statusLabel(n,staleAfterMs)}</span></td><td>{new Date(n.lastHeartbeat).toLocaleString()}</td></tr>)
     :empty&&<tr><td colSpan={4} className="empty-state"><strong>No agents connected yet.</strong><span>Choose Add node to generate an installation guide.</span></td></tr>}
   </tbody></table></div>;
 }

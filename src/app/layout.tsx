@@ -17,11 +17,10 @@ export default async function Layout({children}:{children:React.ReactNode}){
         <Link href="/incidents">Incidents</Link>
         <Link href="/users">Users</Link>
         {saas&&<Link href="/billing">Billing</Link>}
-        <Link href="/settings">Settings</Link>
       </nav>
     </aside>
     <div className="position-fixed top-0 end-0 m-3 z-3">
-      <UserMenu displayName={session.username} role={session.role}/>
+      <UserMenu id={session.id} displayName={session.username} role={session.role}/>
     </div>
     <main className="content-area">{children}</main>
   </div></body></html>;

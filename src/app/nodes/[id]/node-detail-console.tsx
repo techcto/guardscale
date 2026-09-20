@@ -1,9 +1,10 @@
 'use client';
-import{useEffect,useState}from'react';import Link from'next/link';import type{GuardianEvent,IncidentRecord,Node}from'@/lib/model';
+import{useEffect,useState}from'react';import Link from'next/link';import {useRouter} from'next/navigation';import type{GuardianEvent,IncidentRecord,Node}from'@/lib/model';
 
 type Detail={node:Node;events:GuardianEvent[];incidents:IncidentRecord[]};
 
 export default function NodeDetailConsole({serverId}:{serverId:string}){
+  const router=useRouter();
   const[detail,setDetail]=useState<Detail|null>(null),[error,setError]=useState('');
   useEffect(()=>{
     let active=true;
@@ -23,7 +24,7 @@ export default function NodeDetailConsole({serverId}:{serverId:string}){
     <section className="g-card" style={{marginBottom:16}}>
       <div className="section-heading"><div><h2>Incidents</h2><p className="muted">Correlated detections reported by this node.</p></div></div>
       <div className="table-wrap"><table><thead><tr><th>Incident</th><th>State</th><th>Started</th><th>Updated</th></tr></thead><tbody>
-        {incidents.length?incidents.map(i=><tr key={i.incidentId}><td>{i.incidentId}</td><td><span className="status">{i.state}</span></td><td>{new Date(i.startedAt).toLocaleString()}</td><td>{new Date(i.updatedAt).toLocaleString()}</td></tr>)
+        {incidents.length?incidents.map(i=><tr key={i.incidentId} className="row-link" onClick={()=>router.push(`/incidents/${i.incidentId}`)}><td><Link href={`/incidents/${i.incidentId}`}>{i.incidentId}</Link></td><td><span className="status">{i.state}</span></td><td>{new Date(i.startedAt).toLocaleString()}</td><td>{new Date(i.updatedAt).toLocaleString()}</td></tr>)
         :<tr><td colSpan={4} className="empty-state"><strong>No incidents.</strong><span>This node has not reported a correlated incident.</span></td></tr>}
       </tbody></table></div>
     </section>
