@@ -1,11 +1,14 @@
-export type Organization={id:string;name:string;enrollmentToken:string;createdAt:string};
+export type OrgType='personal'|'business';
+export type Organization={id:string;name:string;slug:string;ownerId:string;orgType:OrgType;enrollmentToken:string;createdAt:string};
+export type MembershipRole='admin'|'operator'|'viewer';
+export type OrgMembership={id:string;orgId:string;userId:string;role:MembershipRole;status:'active'|'disabled';invitedByUserId?:string;createdAt:string;updatedAt:string};
 export type NodeStatus='pending'|'healthy'|'stale'|'offline';
 export type Node={tenantId:string;serverId:string;agentId:string;displayName:string;platform?:string;tags:string[];status:NodeStatus;createdAt:string;lastHeartbeat:string};
 export type IncidentRecord={tenantId:string;serverId:string;agentId:string;incidentId:string;state:string;startedAt:string;updatedAt:string;payload:unknown};
 export type GuardianEvent={tenantId:string;serverId:string;agentId:string;type:string;at:string;metadata?:Record<string,string>};
 export const normalizedEvents=['viewer.request','edge.cache.hit','edge.cache.miss','waf.allow','waf.block','origin.request','origin.response','origin.timeout','app.php.slow','app.php.max_children','host.cpu','host.memory','service.restart','monitor.down','protection.enabled','protection.expired'] as const;
 export type UserRole='root'|'admin'|'operator'|'viewer';
-export type GuardianUser={id:string;tenantId:string;username:string;displayName:string;role:UserRole;status:'active'|'disabled';createdAt:string;updatedAt:string};
+export type GuardianUser={id:string;username:string;displayName:string;status:'active'|'disabled';createdAt:string;updatedAt:string};
 export type Settings={
   tenantId:string;
   detection:{warningPercent:number;criticalPercent:number;emergencyPercent:number;trafficMultiplier:number;distributedCrawlerCorrelation:boolean;applicationFailureDetection:boolean;heartbeatStaleSeconds:number};

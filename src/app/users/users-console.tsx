@@ -1,8 +1,9 @@
 'use client';
-import{FormEvent,useEffect,useState}from'react';import Link from'next/link';import {useRouter} from'next/navigation';import type{GuardianUser}from'@/lib/model';import Drawer,{DrawerBackdrop}from'@/app/drawer';
+import{FormEvent,useEffect,useState}from'react';import Link from'next/link';import {useRouter} from'next/navigation';import type{MembershipRole}from'@/lib/model';import Drawer,{DrawerBackdrop}from'@/app/drawer';
+type OrgMember={id:string;username:string;displayName:string;role:MembershipRole;status:'active'|'disabled'};
 export default function UsersConsole(){
  const router=useRouter();
- const[users,setUsers]=useState<GuardianUser[]>([]),[open,setOpen]=useState(false),[error,setError]=useState('');
+ const[users,setUsers]=useState<OrgMember[]>([]),[open,setOpen]=useState(false),[error,setError]=useState('');
  async function load(){const r=await fetch('/api/v1/users');if(r.ok)setUsers(await r.json())}
  useEffect(()=>{let active=true;fetch('/api/v1/users').then(r=>r.ok?r.json():[]).then(data=>{if(active)setUsers(data)});return()=>{active=false}},[]);
  async function add(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget),r=await fetch('/api/v1/users',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:f.get('username'),displayName:f.get('displayName'),password:f.get('password'),role:f.get('role')})});if(!r.ok){setError((await r.json()).error);return}setOpen(false);setError('');void load()}

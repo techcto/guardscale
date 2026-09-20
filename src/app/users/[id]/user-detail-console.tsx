@@ -1,12 +1,14 @@
 'use client';
-import{useEffect,useState}from'react';import {useRouter} from'next/navigation';import Link from'next/link';import type{GuardianUser,UserRole}from'@/lib/model';
+import{useEffect,useState}from'react';import {useRouter} from'next/navigation';import Link from'next/link';import type{MembershipRole}from'@/lib/model';
+
+type OrgMember={id:string;username:string;displayName:string;role:MembershipRole;status:'active'|'disabled';createdAt:string};
 
 export default function UserDetailConsole({userId}:{userId:string}){
   const router=useRouter();
-  const[user,setUser]=useState<GuardianUser|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[saved,setSaved]=useState(false);
+  const[user,setUser]=useState<OrgMember|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[saved,setSaved]=useState(false);
   function load(){return fetch(`/api/v1/users/${userId}`).then(r=>r.ok?r.json().then(setUser):Promise.resolve(setError('This user was not found.')))}
   useEffect(()=>{void load()},[userId]);
-  async function patch(patch:Partial<{role:UserRole;status:'active'|'disabled'}>){
+  async function patch(patch:Partial<{role:MembershipRole;status:'active'|'disabled'}>){
     setBusy(true);setError('');
     const r=await fetch(`/api/v1/users/${userId}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(patch)});
     setBusy(false);
@@ -32,7 +34,7 @@ export default function UserDetailConsole({userId}:{userId:string}){
       <div className="section-heading"><div><h2>Role and access</h2><p className="muted">Changing role or status takes effect on this user&apos;s next request.</p></div></div>
       {error&&<p className="form-error">{error}</p>}
       <div className="form-grid">
-        <label>Role<select value={user.role} disabled={busy||user.role==='root'} onChange={e=>patch({role:e.target.value as UserRole})}>
+        <label>Role<select value={user.role} disabled={busy} onChange={e=>patch({role:e.target.value as MembershipRole})}>
           <option value="admin">Admin</option>
           <option value="operator">Operator</option>
           <option value="viewer">Viewer</option>
