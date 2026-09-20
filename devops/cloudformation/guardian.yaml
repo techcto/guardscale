@@ -5,7 +5,7 @@ Parameters:
   PublicSubnets: {Type: 'List<AWS::EC2::Subnet::Id>'}
   PrivateSubnets: {Type: 'List<AWS::EC2::Subnet::Id>'}
   ImageBase: {Type: String, Description: ECR registry/repository prefix without service suffix}
-  ReleaseVersion: {Type: String, Default: latest, AllowedPattern: '[0-9A-Za-z.-]+'}
+  ReleaseVersion: {Type: String, Description: 'Published image tag, e.g. 0.0.4 -- immutable Marketplace repositories never publish a latest tag', AllowedPattern: '[0-9A-Za-z.-]+'}
   CertificateArn: {Type: String, Default: ''}
   RootUsername: {Type: String, Default: root, MinLength: 3}
   RootPassword: {Type: String, NoEcho: true, MinLength: 12}

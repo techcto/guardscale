@@ -56,7 +56,6 @@ jobs:
             aws ecr describe-repositories --repository-names "$repository" >/dev/null 2>&1 || aws ecr create-repository --repository-name "$repository" --image-scanning-configuration scanOnPush=true >/dev/null
             image="$MP_AWS_ECR/$repository:$VERSION"
             docker buildx build --platform linux/amd64 --provenance=false --sbom=false --push -f "devops/docker/Dockerfile.$service" -t "$image" .
-            docker buildx imagetools create -t "$MP_AWS_ECR/$repository:latest" "$image"
           done
       - name: Publish agent and CloudFormation artifacts
         env: {VERSION: '${{ steps.version.outputs.value }}'}
