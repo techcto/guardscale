@@ -1,9 +1,10 @@
 'use client';
+import Link from 'next/link';
 import {useEffect, useRef, useState} from 'react';
 
 type OrgSummary={id:string;name:string;orgType:'personal'|'business';role:string};
 
-export default function OrgPicker({activeOrgId,activeOrgName}:{activeOrgId:string;activeOrgName:string}){
+export default function OrgPicker({activeOrgId,activeOrgName,isRoot}:{activeOrgId:string;activeOrgName:string;isRoot:boolean}){
   const [open,setOpen]=useState(false);
   const [orgs,setOrgs]=useState<OrgSummary[]|null>(null);
   const [busy,setBusy]=useState(false);
@@ -31,6 +32,7 @@ export default function OrgPicker({activeOrgId,activeOrgName}:{activeOrgId:strin
       {orgs?.map(o=><button key={o.id} type="button" className={`org-picker-item${o.id===activeOrgId?' active':''}`} role="menuitem" disabled={busy} onClick={()=>switchTo(o.id)}>
         <span>{o.name}</span><span className="muted small">{o.orgType}</span>
       </button>)}
+      {isRoot&&<Link className="org-picker-item" href="/settings?tab=Organizations" role="menuitem" onClick={()=>setOpen(false)}>+ Add organization</Link>}
     </div>}
   </div>;
 }

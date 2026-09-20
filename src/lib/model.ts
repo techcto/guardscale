@@ -1,5 +1,5 @@
 export type OrgType='personal'|'business';
-export type Organization={id:string;name:string;slug:string;ownerId:string;orgType:OrgType;enrollmentToken:string;createdAt:string};
+export type Organization={id:string;name:string;slug:string;ownerId:string;orgType:OrgType;contactEmail?:string;contactPhone?:string;enrollmentToken:string;createdAt:string};
 export type MembershipRole='admin'|'operator'|'viewer';
 export type OrgMembership={id:string;orgId:string;userId:string;role:MembershipRole;status:'active'|'disabled';invitedByUserId?:string;createdAt:string;updatedAt:string};
 export type NodeStatus='pending'|'healthy'|'stale'|'offline';

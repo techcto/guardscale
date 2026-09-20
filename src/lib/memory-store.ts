@@ -10,8 +10,8 @@ const membershipKey=(orgId:string,userId:string)=>`${orgId}\0${userId}`;
 const MAX_EVENTS_PER_NODE=200;
 function slugify(name:string){return name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')||randomUUID().slice(0,8)}
 export const memoryStore={
-  async createOrganization(v:{name:string;ownerId:string;orgType:OrgType}):Promise<Organization>{
-    const org:Organization={id:randomUUID(),name:v.name,slug:`${slugify(v.name)}-${randomUUID().slice(0,6)}`,ownerId:v.ownerId,orgType:v.orgType,enrollmentToken:randomUUID(),createdAt:new Date().toISOString()};
+  async createOrganization(v:{name:string;ownerId:string;orgType:OrgType;contactEmail?:string;contactPhone?:string}):Promise<Organization>{
+    const org:Organization={id:randomUUID(),name:v.name,slug:`${slugify(v.name)}-${randomUUID().slice(0,6)}`,ownerId:v.ownerId,orgType:v.orgType,contactEmail:v.contactEmail,contactPhone:v.contactPhone,enrollmentToken:randomUUID(),createdAt:new Date().toISOString()};
     state.orgs.set(org.id,org);
     return org;
   },
@@ -51,7 +51,7 @@ export const memoryStore={
   async deleteUser(id:string){state.passwords.delete(id);return state.users.delete(id)},
   async settings(tenant:string){return state.settings.get(tenant)??defaultSettings(tenant)},
   async putSettings(tenant:string,v:Settings){state.settings.set(tenant,v)},
-  async products():Promise<Product[]>{return[{id:'starter',name:'Starter',description:'Detection and alerting for a small server fleet.',stripePriceId:process.env.STRIPE_STARTER_PRICE_ID??'',monthlyPrice:49,serverLimit:5,active:true},{id:'scale',name:'Scale',description:'Response automation and expanded infrastructure coverage.',stripePriceId:process.env.STRIPE_SCALE_PRICE_ID??'',monthlyPrice:199,serverLimit:50,active:true}]},
+  async products():Promise<Product[]>{return[{id:'dev',name:'Dev',description:'Free tier for a single personal workspace.',stripePriceId:'',monthlyPrice:0,serverLimit:1,active:true},{id:'starter',name:'Starter',description:'Detection and alerting for a small server fleet.',stripePriceId:process.env.STRIPE_STARTER_PRICE_ID??'',monthlyPrice:49,serverLimit:5,active:true},{id:'scale',name:'Scale',description:'Response automation and expanded infrastructure coverage.',stripePriceId:process.env.STRIPE_SCALE_PRICE_ID??'',monthlyPrice:199,serverLimit:50,active:true}]},
   async subscriptions(userId:string){return[...state.subscriptions.values()].filter(x=>x.userId===userId)},
   async putSubscription(v:Subscription){state.subscriptions.set(v.id,v)},
 };

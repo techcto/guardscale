@@ -13,14 +13,12 @@ export default async function Layout({children}:{children:React.ReactNode}){
   return <html lang="en"><body><div className="shell-with-nav">
     <aside className="side-nav">
       <Link className="brand" href="/"><img src="/guardian-mark.svg" alt="" width={22} height={22}/>GUARDIAN.US</Link>
-      {saas&&<OrgPicker activeOrgId={session.orgId} activeOrgName={activeOrg?.name??'Select organization'}/>}
+      {saas&&<OrgPicker activeOrgId={session.orgId} activeOrgName={activeOrg?.name??'Select organization'} isRoot={session.role==='root'}/>}
       <nav className="nav nav-vertical">
         <Link href="/">Dashboard</Link>
         <Link href="/nodes">Nodes</Link>
         <Link href="/incidents">Incidents</Link>
         {activeOrg?.orgType!=='personal'&&<Link href="/users">Users</Link>}
-        {saas&&session.role==='root'&&<Link href="/organizations">Organizations</Link>}
-        {saas&&<Link href="/billing">Billing</Link>}
       </nav>
     </aside>
     <div className="position-fixed top-0 end-0 m-3 z-3">

@@ -29,9 +29,9 @@ function slugify(name:string){return name.toLowerCase().replace(/[^a-z0-9]+/g,'-
 const SINGLETON_PK='SINGLETON',SINGLETON_SK='SINGLETON';
 
 export const dynamoStore={
-  async createOrganization(v:{name:string;ownerId:string;orgType:OrgType}):Promise<Organization>{
+  async createOrganization(v:{name:string;ownerId:string;orgType:OrgType;contactEmail?:string;contactPhone?:string}):Promise<Organization>{
     await ensureTable();
-    const org:Organization={id:randomUUID(),name:v.name,slug:`${slugify(v.name)}-${randomUUID().slice(0,6)}`,ownerId:v.ownerId,orgType:v.orgType,enrollmentToken:randomUUID(),createdAt:new Date().toISOString()};
+    const org:Organization={id:randomUUID(),name:v.name,slug:`${slugify(v.name)}-${randomUUID().slice(0,6)}`,ownerId:v.ownerId,orgType:v.orgType,contactEmail:v.contactEmail,contactPhone:v.contactPhone,enrollmentToken:randomUUID(),createdAt:new Date().toISOString()};
     await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${org.id}`,sk:`ORG#${org.id}`,gsi1pk:'ORG',gsi1sk:`${org.createdAt}#${org.id}`,...org}}));
     return org;
   },
@@ -164,7 +164,7 @@ export const dynamoStore={
     await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${tenant}`,sk:'SETTINGS',...v}}));
   },
   async products():Promise<Product[]>{
-    return[{id:'starter',name:'Starter',description:'Detection and alerting for a small server fleet.',stripePriceId:process.env.STRIPE_STARTER_PRICE_ID??'',monthlyPrice:49,serverLimit:5,active:true},{id:'scale',name:'Scale',description:'Response automation and expanded infrastructure coverage.',stripePriceId:process.env.STRIPE_SCALE_PRICE_ID??'',monthlyPrice:199,serverLimit:50,active:true}];
+    return[{id:'dev',name:'Dev',description:'Free tier for a single personal workspace.',stripePriceId:'',monthlyPrice:0,serverLimit:1,active:true},{id:'starter',name:'Starter',description:'Detection and alerting for a small server fleet.',stripePriceId:process.env.STRIPE_STARTER_PRICE_ID??'',monthlyPrice:49,serverLimit:5,active:true},{id:'scale',name:'Scale',description:'Response automation and expanded infrastructure coverage.',stripePriceId:process.env.STRIPE_SCALE_PRICE_ID??'',monthlyPrice:199,serverLimit:50,active:true}];
   },
   async subscriptions(userId:string):Promise<Subscription[]>{
     await ensureTable();

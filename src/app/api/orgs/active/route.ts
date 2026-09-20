@@ -6,9 +6,9 @@ export async function POST(req:NextRequest){
   if(!orgId)return NextResponse.json({error:'orgId is required'},{status:400});
   const org=await store.organizationById(orgId);
   if(!org)return NextResponse.json({error:'not found'},{status:404});
-  let role:'root'|'admin'|'operator'|'viewer';
-  if(session.role==='root'){role='root'}
-  else{const membership=await store.membership(orgId,session.id);if(!membership||membership.status!=='active')return NextResponse.json({error:'forbidden'},{status:403});role=membership.role}
+  const membership=await store.membership(orgId,session.id);
+  if(!membership||membership.status!=='active')return NextResponse.json({error:'forbidden'},{status:403});
+  const role:'root'|'admin'|'operator'|'viewer'=session.role==='root'?'root':membership.role;
   const secret=process.env.GUARDIAN_SESSION_SECRET??'';
   const token=await createSession({id:session.id,username:session.username,role,orgId,expiresAt:Date.now()+28800000},secret);
   const res=NextResponse.json({orgId,role});

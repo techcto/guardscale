@@ -13,7 +13,7 @@ export default function OrganizationsConsole(){
   async function add(e:FormEvent<HTMLFormElement>){
     e.preventDefault();
     const f=new FormData(e.currentTarget);
-    const r=await fetch('/api/orgs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:f.get('name'),orgType:f.get('orgType')})});
+    const r=await fetch('/api/orgs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:f.get('name'),contactEmail:f.get('contactEmail'),contactPhone:f.get('contactPhone')})});
     if(!r.ok){setError((await r.json()).error??'Unable to create organization');return}
     const org=await r.json();
     setError('');setCreated(org);load();
@@ -23,7 +23,7 @@ export default function OrganizationsConsole(){
     if(r.ok)window.location.assign('/');
   }
   function closeDrawer(){setOpen(false);setCreated(null);setError('')}
-  return <section className="g-card">
+  return <>
     <div className="section-heading"><div><h2>Organizations</h2><p className="muted">Each organization has its own nodes, incidents, and enrollment token.</p></div><button className="button primary" onClick={()=>setOpen(true)}>Add organization</button></div>
     <div className="table-wrap"><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody>
       {orgs.length?orgs.map(o=><tr key={o.id} className="row-link" onClick={()=>switchTo(o.id)}><td><strong>{o.name}</strong></td><td className="muted">{o.orgType}</td></tr>)
@@ -37,10 +37,11 @@ export default function OrganizationsConsole(){
         <button className="button primary" onClick={async()=>{await navigator.clipboard.writeText(created.enrollmentToken);setCopied(true);setTimeout(()=>setCopied(false),1600)}}>{copied?'Copied':'Copy token'}</button>
       </>:<form className="drawer-form" onSubmit={add}>
         <label>Organization name<input name="name" required autoFocus/></label>
-        <label>Type<select name="orgType"><option value="business">Business</option><option value="personal">Personal</option></select></label>
+        <label>Contact email<input name="contactEmail" type="email"/></label>
+        <label>Contact phone<input name="contactPhone" type="tel"/></label>
         {error&&<p className="form-error" role="alert">{error}</p>}
         <button className="button primary" type="submit">Create</button>
       </form>}
     </Drawer>
-  </section>;
+  </>;
 }

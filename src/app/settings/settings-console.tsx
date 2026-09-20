@@ -1,13 +1,17 @@
 'use client';
 import {useEffect, useState} from 'react';
+import {useSearchParams} from 'next/navigation';
 import type {Settings} from '@/lib/model';
+import BillingConsole from '@/app/billing/billing-console';
+import OrganizationsConsole from '@/app/organizations/organizations-console';
 
 const UNSAVED=new Date(0).toISOString();
 
-export default function SettingsConsole(){
- const [settings,setSettings]=useState<Settings|null>(null),[saved,setSaved]=useState(false),[error,setError]=useState(''),[tab,setTab]=useState('Detection');
+export default function SettingsConsole({saas,isRoot}:{saas:boolean;isRoot:boolean}){
+ const initialTab=useSearchParams().get('tab');
+ const [settings,setSettings]=useState<Settings|null>(null),[saved,setSaved]=useState(false),[error,setError]=useState(''),[tab,setTab]=useState(initialTab??'Detection');
  const [testWhatsapp,setTestWhatsapp]=useState(''),[testEmail,setTestEmail]=useState(''),[testStatus,setTestStatus]=useState<Record<string,string>>({});
- const tabs=['Detection','Notifications','Response','Data'];
+ const tabs=['Detection','Notifications','Response','Data',...(saas?['Billing']:[]),...(saas&&isRoot?['Organizations']:[])];
  useEffect(()=>{let active=true;fetch('/api/v1/settings').then(r=>r.ok?r.json():null).then(data=>{if(active&&data)setSettings(data)});return()=>{active=false}},[]);
  async function save(){if(!settings)return;setError('');const r=await fetch('/api/v1/settings',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(settings)});if(!r.ok){setError((await r.json()).error??'Unable to save settings');return}setSettings(await r.json());setSaved(true);setTimeout(()=>setSaved(false),1800)}
  async function sendTest(channel:'whatsapp'|'email',destination:string,originationId?:string){
@@ -54,7 +58,9 @@ export default function SettingsConsole(){
   <div className="form-grid"><NumberField label="Evidence retention (days)" value={settings.privacy.evidenceRetentionDays} onChange={v=>set('privacy',{evidenceRetentionDays:v})}/><NumberField label="Maximum evidence lines" value={settings.privacy.maxEvidenceLines} onChange={v=>set('privacy',{maxEvidenceLines:v})}/></div>
   <Toggle title="Remove query values" text="Retain parameter names while discarding values." checked={settings.privacy.removeQueryValues} onChange={v=>set('privacy',{removeQueryValues:v})}/>
   <Toggle title="Fingerprint user agents" text="Store a stable fingerprint instead of raw user-agent strings." checked={settings.privacy.fingerprintUserAgents} onChange={v=>set('privacy',{fingerprintUserAgents:v})}/></>}
-  <div className="settings-footer">{error?<span className="form-error">{error}</span>:<span className="muted small">Settings are saved to your organization and take effect immediately.</span>}<button className="button primary" onClick={save}>{saved?'Saved':'Save settings'}</button></div>
+  {tab==='Billing'&&<BillingConsole/>}
+  {tab==='Organizations'&&<OrganizationsConsole/>}
+  {tab!=='Billing'&&tab!=='Organizations'&&<div className="settings-footer">{error?<span className="form-error">{error}</span>:<span className="muted small">Settings are saved to your organization and take effect immediately.</span>}<button className="button primary" onClick={save}>{saved?'Saved':'Save settings'}</button></div>}
  </div></section>;
 }
 function Heading({title,text}:{title:string;text:string}){return <div className="setting-heading"><h2>{title}</h2><p className="muted">{text}</p></div>}
