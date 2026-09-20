@@ -2,7 +2,7 @@
 
 Built as a fresh, independent open-source SaaS application.
 
-Guardian.US is an AI-powered infrastructure guardian that detects attacks and application failures, alerts teams via WhatsApp and email, and lets operators safely respond in real time. It is an independent open-source project; no license has yet been selected.
+Guardian.US is an AI-powered infrastructure guardian that detects attacks and application failures, alerts teams via WhatsApp and email, and lets operators safely respond in real time. It is source-available under AGPL-3.0-or-later (see `LICENSE`); a separate commercial license is available for embedding, redistribution, or operation without AGPL obligations (see `COMMERCIAL-LICENSE.md`).
 
 ## Why Guardian.US exists
 
@@ -40,4 +40,4 @@ Incident bundles are bounded by `storage.max_evidence_lines`. Query values and r
 
 Install the binary at `/usr/local/bin/guardian`, configuration at `/etc/guardian/config.yaml`, then install `systemd/guardian.service`. Its hardening permits only the state directory; future opt-in protection will require separately documented privileges.
 
-See [architecture](docs/architecture.md), [security model](docs/security-model.md), and [contributing](CONTRIBUTING.md).
+See [architecture](docs/architecture.md), [security model](docs/security-model.md), [contributing](CONTRIBUTING.md), and [commercial licensing](COMMERCIAL-LICENSE.md).
