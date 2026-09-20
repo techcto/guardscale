@@ -22,8 +22,16 @@ Resources:
   ALB: {Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer', Properties: {Subnets: {Ref: PublicSubnets}, SecurityGroups: [{Ref: ALBSG}]}}
   WebTarget: {Type: 'AWS::ElasticLoadBalancingV2::TargetGroup', Properties: {VpcId: {Ref: VpcId}, Port: 3000, Protocol: HTTP, TargetType: ip, HealthCheckPath: /api/health}}
   ApiTarget: {Type: 'AWS::ElasticLoadBalancingV2::TargetGroup', Properties: {VpcId: {Ref: VpcId}, Port: 3001, Protocol: HTTP, TargetType: ip, HealthCheckPath: /api/health}}
-  Listener: {Type: 'AWS::ElasticLoadBalancingV2::Listener', Properties: {LoadBalancerArn: {Ref: ALB}, Port: 80, Protocol: HTTP, DefaultActions: [{Type: forward, TargetGroupArn: {Ref: WebTarget}}]}}
-  ApiRule: {Type: 'AWS::ElasticLoadBalancingV2::ListenerRule', Properties: {ListenerArn: {Ref: Listener}, Priority: 10, Conditions: [{Field: path-pattern, Values: ['/api/*']}], Actions: [{Type: forward, TargetGroupArn: {Ref: ApiTarget}}]}}
+  Listener: {Type: 'AWS::ElasticLoadBalancingV2::Listener', Properties: {LoadBalancerArn: {Ref: ALB}, Port: 80, Protocol: HTTP, DefaultActions: [{Fn::If: [UseTLS, {Type: redirect, RedirectConfig: {Protocol: HTTPS, Port: '443', StatusCode: HTTP_301}}, {Type: forward, TargetGroupArn: {Ref: WebTarget}}]}]}}
+  ApiRule: {Type: 'AWS::ElasticLoadBalancingV2::ListenerRule', Properties: {ListenerArn: {Ref: Listener}, Priority: 10, Conditions: [{Field: path-pattern, Values: ['/api/*']}], Actions: [{Fn::If: [UseTLS, {Type: redirect, RedirectConfig: {Protocol: HTTPS, Port: '443', StatusCode: HTTP_301}}, {Type: forward, TargetGroupArn: {Ref: ApiTarget}}]}]}}
+  HttpsListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Condition: UseTLS
+    Properties: {LoadBalancerArn: {Ref: ALB}, Port: 443, Protocol: HTTPS, Certificates: [{CertificateArn: {Ref: CertificateArn}}], DefaultActions: [{Type: forward, TargetGroupArn: {Ref: WebTarget}}]}
+  HttpsApiRule:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Condition: UseTLS
+    Properties: {ListenerArn: {Ref: HttpsListener}, Priority: 10, Conditions: [{Field: path-pattern, Values: ['/api/*']}], Actions: [{Type: forward, TargetGroupArn: {Ref: ApiTarget}}]}
   Queue: {Type: 'AWS::SQS::Queue', Properties: {VisibilityTimeout: 120, MessageRetentionPeriod: 345600, RedrivePolicy: {deadLetterTargetArn: {Fn::GetAtt: [DeadLetterQueue, Arn]}, maxReceiveCount: 5}}}
   DeadLetterQueue: {Type: 'AWS::SQS::Queue', Properties: {MessageRetentionPeriod: 1209600}}
   GuardianTable: {Type: 'AWS::DynamoDB::Table', Properties: {BillingMode: PAY_PER_REQUEST, AttributeDefinitions: [{AttributeName: pk, AttributeType: S}, {AttributeName: sk, AttributeType: S}, {AttributeName: gsi1pk, AttributeType: S}, {AttributeName: gsi1sk, AttributeType: S}], KeySchema: [{AttributeName: pk, KeyType: HASH}, {AttributeName: sk, KeyType: RANGE}], GlobalSecondaryIndexes: [{IndexName: GSI1, KeySchema: [{AttributeName: gsi1pk, KeyType: HASH}, {AttributeName: gsi1sk, KeyType: RANGE}], Projection: {ProjectionType: ALL}}], TimeToLiveSpecification: {AttributeName: ttl, Enabled: true}, PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: true}, SSESpecification: {SSEEnabled: true}}}
@@ -41,4 +49,6 @@ Resources:
   WebService: {Type: 'AWS::ECS::Service', DependsOn: Listener, Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: WebTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}, LoadBalancers: [{ContainerName: web, ContainerPort: 3000, TargetGroupArn: {Ref: WebTarget}}]}}
   ApiService: {Type: 'AWS::ECS::Service', DependsOn: ApiRule, Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: ApiTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}, LoadBalancers: [{ContainerName: api, ContainerPort: 3001, TargetGroupArn: {Ref: ApiTarget}}]}}
   WorkerService: {Type: 'AWS::ECS::Service', Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: WorkerTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}}}
-Outputs: {URL: {Value: {Fn::Sub: 'http://${ALB.DNSName}'}}}
+Outputs:
+  URL: {Value: {Fn::If: [UseTLS, {Fn::Sub: 'https://${ALB.DNSName}'}, {Fn::Sub: 'http://${ALB.DNSName}'}]}}
+  RootUsername: {Value: {Ref: RootUsername}}
