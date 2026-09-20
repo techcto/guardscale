@@ -6,7 +6,7 @@ export default async function Layout({children}:{children:React.ReactNode}){
   const saas=process.env.GUARDIAN_DEPLOYMENT_MODE==='saas';
   const jar=await cookies();
   const session=await verifySession(jar.get(sessionCookie)?.value,process.env.GUARDIAN_SESSION_SECRET??'');
-  if(!session)return <html lang="en"><body><main className="content-area">{children}</main></body></html>;
+  if(!session)return <html lang="en"><body>{children}</body></html>;
   return <html lang="en"><body><div className="shell-with-nav">
     <aside className="side-nav">
       <Link className="brand" href="/"><img src="/guardian-mark.svg" alt="" width={22} height={22}/>GUARDIAN.US</Link>
@@ -19,8 +19,10 @@ export default async function Layout({children}:{children:React.ReactNode}){
         {saas&&<Link href="/billing">Billing</Link>}
         <Link href="/settings">Settings</Link>
       </nav>
-      <UserMenu displayName={session.username} role={session.role}/>
     </aside>
+    <div className="position-fixed top-0 end-0 m-3 z-3">
+      <UserMenu displayName={session.username} role={session.role}/>
+    </div>
     <main className="content-area">{children}</main>
   </div></body></html>;
 }

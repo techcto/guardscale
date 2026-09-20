@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import {useEffect, useRef, useState} from 'react';
 
 export default function UserMenu({displayName,role}:{displayName:string;role:string}){
@@ -10,15 +11,15 @@ export default function UserMenu({displayName,role}:{displayName:string;role:str
     return ()=>document.removeEventListener('mousedown',onClick);
   },[]);
   async function logout(){await fetch('/api/auth/logout',{method:'POST'});window.location.href='/login'}
-  return <div className="user-menu" ref={ref}>
-    {open&&<div className="user-menu-popover">
-      <div className="user-menu-name">{displayName}</div>
-      <div className="muted small">{role}</div>
-      <button className="user-menu-logout" onClick={logout}>Log out</button>
-    </div>}
-    <button className="user-menu-button" type="button" onClick={()=>setOpen(o=>!o)}>
+  return <div className="user-menu position-relative" ref={ref}>
+    <button className="user-menu-button" type="button" onClick={()=>setOpen(o=>!o)} aria-haspopup="menu" aria-expanded={open}>
       <span className="user-menu-avatar">{displayName.slice(0,1).toUpperCase()}</span>
-      <span className="user-menu-label"><strong>{displayName}</strong><span className="muted small">{role}</span></span>
     </button>
+    {open&&<div className="user-menu-popover" role="menu">
+      <div className="user-menu-name">{displayName}</div>
+      <div className="muted small mb-2">{role}</div>
+      <Link className="user-menu-item" href="/settings" role="menuitem" onClick={()=>setOpen(false)}>Settings</Link>
+      <button className="user-menu-item user-menu-logout" role="menuitem" onClick={logout}>Log out</button>
+    </div>}
   </div>;
 }
