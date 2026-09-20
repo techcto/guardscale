@@ -10,8 +10,6 @@
       ],
       "Resource": "*"
     },
-    { "Effect": "Allow", "Action": ["s3:CreateBucket", "s3:DeleteBucket", "s3:PutBucketPolicy", "s3:PutEncryptionConfiguration", "s3:PutBucketPublicAccessBlock", "s3:PutLifecycleConfiguration", "s3:GetBucketLocation"], "Resource": "arn:aws:s3:::guardian-*" },
-    { "Effect": "Allow", "Action": "s3:GetBucketLocation", "Resource": "arn:aws:s3:::gaurdian-net" },
-    { "Effect": "Allow", "Action": ["s3:PutObject", "s3:AbortMultipartUpload"], "Resource": "arn:aws:s3:::gaurdian-net/cloudformation/*" }
+    { "Effect": "Allow", "Action": ["s3:CreateBucket", "s3:DeleteBucket", "s3:PutBucketPolicy", "s3:PutEncryptionConfiguration", "s3:PutBucketPublicAccessBlock", "s3:PutLifecycleConfiguration", "s3:GetBucketLocation"], "Resource": "arn:aws:s3:::guardian-*" }
   ]
 }

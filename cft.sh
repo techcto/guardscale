@@ -107,7 +107,6 @@ publish() {
 }
 
 deploy() {
-  publish
   validate
 
   : "${GUARDIAN_VPC_ID:?Set GUARDIAN_VPC_ID before deploying.}"
