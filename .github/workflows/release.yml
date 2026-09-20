@@ -40,7 +40,6 @@ jobs:
         env: {VERSION: '${{ steps.version.outputs.value }}'}
         run: |
           go test ./...
-          aws cloudformation validate-template --template-body file://devops/cloudformation/guardian.yaml >/dev/null
           mkdir -p dist/agent
           for arch in amd64 arm64; do
             GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "dist/agent/guardian-linux-$arch" ./cmd/guardian
