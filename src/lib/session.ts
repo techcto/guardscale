@@ -9,6 +9,7 @@ export const createSession=(value:Session,secret:string)=>signToken(value,secret
 export const verifySession=(token:string|undefined,secret:string)=>verifyToken<Session>(token,secret);
 export const sessionCookie='guardian_session';
 export function isSecureRequest(req:{nextUrl:{protocol:string};headers:{get(name:string):string|null}}){return req.nextUrl.protocol==='https:'||req.headers.get('x-forwarded-proto')==='https'}
+export function requestOrigin(req:{nextUrl:{protocol:string};headers:{get(name:string):string|null}}){const host=req.headers.get('x-forwarded-host')??req.headers.get('host');const protocol=isSecureRequest(req)?'https:':'http:';return `${protocol}//${host}`}
 export type ResetToken={purpose:'password-reset';userId:string;expiresAt:number};
 export const createResetToken=(userId:string,secret:string)=>signToken<ResetToken>({purpose:'password-reset',userId,expiresAt:Date.now()+900000},secret);
 export const verifyResetToken=(token:string|undefined,secret:string)=>verifyToken<ResetToken>(token,secret);

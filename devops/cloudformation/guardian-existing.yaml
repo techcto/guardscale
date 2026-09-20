@@ -1,0 +1,527 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Guardian.US control plane, attached to an existing ECS cluster and ALB (host-header routed).
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Network prerequisites
+        Parameters:
+          - VpcId
+          - ServiceSubnets
+          - HostHeader
+      - Label:
+          default: Existing ECS and ALB resources
+        Parameters:
+          - Cluster
+          - LoadBalancerSecurityGroup
+          - ListenerArn
+          - ApiListenerPriority
+          - WebListenerPriority
+      - Label:
+          default: Guardian.US settings
+        Parameters:
+          - EnvironmentName
+          - RootUsername
+          - RootPassword
+          - SessionSecret
+          - DeploymentMode
+          - WhatsappOriginationId
+          - NotificationRecipients
+          - SesFrom
+          - StripeSecretKey
+          - StripeWebhookSecret
+          - StripeStarterPriceId
+          - StripeScalePriceId
+      - Label:
+          default: Published images
+        Parameters:
+          - WebImage
+          - ApiImage
+          - WorkerImage
+          - DesiredCount
+          - AssignPublicIp
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: guardian
+    Description: Prefix used for Guardian.US task, service, log, and target group names.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Existing application VPC.
+  Cluster:
+    Type: String
+    Description: Existing ECS cluster name or ARN.
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group attached to the existing public ALB.
+  ListenerArn:
+    Type: String
+    Description: Existing HTTP or HTTPS listener ARN.
+  ServiceSubnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Existing private ECS service subnets with NAT access for image pulls.
+  HostHeader:
+    Type: String
+    Description: Dedicated hostname for Guardian.US, for example guardian.us.
+    AllowedPattern: '[A-Za-z0-9][A-Za-z0-9.-]*[A-Za-z0-9]'
+  ApiListenerPriority:
+    Type: Number
+    Default: 100
+    MinValue: 1
+    MaxValue: 49999
+    Description: Unused priority on the shared listener for the host+/api/* rule. Must sort before WebListenerPriority so /api/* is matched before the catch-all web rule.
+  WebListenerPriority:
+    Type: Number
+    Default: 101
+    MinValue: 1
+    MaxValue: 49999
+    Description: Unused priority on the shared listener for the host-only catch-all rule.
+  RootUsername:
+    Type: String
+    Default: root
+    MinLength: 3
+  RootPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 12
+  SessionSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+  DeploymentMode:
+    Type: String
+    Default: on-premise
+    AllowedValues: ['on-premise', 'saas']
+  WhatsappOriginationId:
+    Type: String
+    Default: ''
+  NotificationRecipients:
+    Type: String
+    Default: ''
+  SesFrom:
+    Type: String
+    Default: ''
+  StripeSecretKey:
+    Type: String
+    Default: ''
+    NoEcho: true
+  StripeWebhookSecret:
+    Type: String
+    Default: ''
+    NoEcho: true
+  StripeStarterPriceId:
+    Type: String
+    Default: ''
+  StripeScalePriceId:
+    Type: String
+    Default: ''
+  WebImage:
+    Type: String
+    Description: Published ECR image URI for the Guardian.US web container.
+  ApiImage:
+    Type: String
+    Description: Published ECR image URI for the Guardian.US api container.
+  WorkerImage:
+    Type: String
+    Description: Published ECR image URI for the Guardian.US worker container.
+  DesiredCount:
+    Type: Number
+    Default: 1
+    MinValue: 1
+  AssignPublicIp:
+    Type: String
+    Default: DISABLED
+    AllowedValues: [ENABLED, DISABLED]
+
+Resources:
+  ServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Guardian.US ECS task traffic from the existing ALB.
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-services'
+
+  WebIngressFromAlb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ServiceSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3000
+      ToPort: 3000
+      SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+
+  ApiIngressFromAlb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ServiceSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3001
+      ToPort: 3001
+      SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+
+  Queue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 345600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+
+  GuardianTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${EnvironmentName}-table'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: gsi1pk
+          AttributeType: S
+        - AttributeName: gsi1sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: gsi1pk
+              KeyType: HASH
+            - AttributeName: gsi1sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  EvidenceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-evidence
+            Status: Enabled
+            ExpirationInDays: 30
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: guardian-data
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:UpdateItem
+                Resource:
+                  - !GetAtt GuardianTable.Arn
+                  - !Sub '${GuardianTable.Arn}/index/*'
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt Queue.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub '${EvidenceBucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - social-messaging:SendWhatsAppMessage
+                Resource: '*'
+
+  WebLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${EnvironmentName}/web'
+      RetentionInDays: 30
+
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${EnvironmentName}/api'
+      RetentionInDays: 30
+
+  WorkerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${EnvironmentName}/worker'
+      RetentionInDays: 30
+
+  WebTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvironmentName}-web'
+      Port: 3000
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      HealthCheckPath: /api/health
+
+  ApiTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvironmentName}-api'
+      Port: 3001
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      HealthCheckPath: /api/health
+
+  WebTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${EnvironmentName}-web'
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: web
+          Image: !Ref WebImage
+          Essential: true
+          PortMappings:
+            - ContainerPort: 3000
+          Environment:
+            - {Name: NODE_ENV, Value: production}
+            - {Name: PORT, Value: '3000'}
+            - {Name: GUARDIAN_DEPLOYMENT_MODE, Value: !Ref DeploymentMode}
+            - {Name: GUARDIAN_ROOT_USER, Value: !Ref RootUsername}
+            - {Name: GUARDIAN_ROOT_PASSWORD, Value: !Ref RootPassword}
+            - {Name: GUARDIAN_SESSION_SECRET, Value: !Ref SessionSecret}
+            - {Name: GUARDIAN_TABLE, Value: !Ref GuardianTable}
+            - {Name: GUARDIAN_QUEUE_URL, Value: !Ref Queue}
+            - {Name: GUARDIAN_EVIDENCE_BUCKET, Value: !Ref EvidenceBucket}
+            - {Name: GUARDIAN_WHATSAPP_ORIGINATION_ID, Value: !Ref WhatsappOriginationId}
+            - {Name: GUARDIAN_NOTIFICATION_RECIPIENTS, Value: !Ref NotificationRecipients}
+            - {Name: GUARDIAN_SES_FROM, Value: !Ref SesFrom}
+            - {Name: STRIPE_SECRET_KEY, Value: !Ref StripeSecretKey}
+            - {Name: STRIPE_WEBHOOK_SECRET, Value: !Ref StripeWebhookSecret}
+            - {Name: STRIPE_STARTER_PRICE_ID, Value: !Ref StripeStarterPriceId}
+            - {Name: STRIPE_SCALE_PRICE_ID, Value: !Ref StripeScalePriceId}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref WebLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: web
+
+  ApiTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${EnvironmentName}-api'
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: api
+          Image: !Ref ApiImage
+          Essential: true
+          PortMappings:
+            - ContainerPort: 3001
+          Environment:
+            - {Name: NODE_ENV, Value: production}
+            - {Name: PORT, Value: '3001'}
+            - {Name: GUARDIAN_TABLE, Value: !Ref GuardianTable}
+            - {Name: GUARDIAN_QUEUE_URL, Value: !Ref Queue}
+            - {Name: GUARDIAN_EVIDENCE_BUCKET, Value: !Ref EvidenceBucket}
+            - {Name: GUARDIAN_ROOT_USER, Value: !Ref RootUsername}
+            - {Name: GUARDIAN_ROOT_PASSWORD, Value: !Ref RootPassword}
+            - {Name: GUARDIAN_SESSION_SECRET, Value: !Ref SessionSecret}
+            - {Name: STRIPE_SECRET_KEY, Value: !Ref StripeSecretKey}
+            - {Name: STRIPE_WEBHOOK_SECRET, Value: !Ref StripeWebhookSecret}
+            - {Name: STRIPE_STARTER_PRICE_ID, Value: !Ref StripeStarterPriceId}
+            - {Name: STRIPE_SCALE_PRICE_ID, Value: !Ref StripeScalePriceId}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ApiLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: api
+
+  WorkerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${EnvironmentName}-worker'
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: worker
+          Image: !Ref WorkerImage
+          Essential: true
+          Environment:
+            - {Name: NODE_ENV, Value: production}
+            - {Name: GUARDIAN_TABLE, Value: !Ref GuardianTable}
+            - {Name: GUARDIAN_QUEUE_URL, Value: !Ref Queue}
+            - {Name: GUARDIAN_EVIDENCE_BUCKET, Value: !Ref EvidenceBucket}
+            - {Name: GUARDIAN_WHATSAPP_ORIGINATION_ID, Value: !Ref WhatsappOriginationId}
+            - {Name: GUARDIAN_NOTIFICATION_RECIPIENTS, Value: !Ref NotificationRecipients}
+            - {Name: GUARDIAN_SES_FROM, Value: !Ref SesFrom}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref WorkerLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: worker
+
+  WebService:
+    Type: AWS::ECS::Service
+    DependsOn: WebListenerRule
+    Properties:
+      ServiceName: !Sub '${EnvironmentName}-web'
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref WebTaskDefinition
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: !Ref AssignPublicIp
+          SecurityGroups: [!Ref ServiceSecurityGroup]
+          Subnets: !Ref ServiceSubnets
+      LoadBalancers:
+        - ContainerName: web
+          ContainerPort: 3000
+          TargetGroupArn: !Ref WebTargetGroup
+
+  ApiService:
+    Type: AWS::ECS::Service
+    DependsOn: ApiListenerRule
+    Properties:
+      ServiceName: !Sub '${EnvironmentName}-api'
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref ApiTaskDefinition
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: !Ref AssignPublicIp
+          SecurityGroups: [!Ref ServiceSecurityGroup]
+          Subnets: !Ref ServiceSubnets
+      LoadBalancers:
+        - ContainerName: api
+          ContainerPort: 3001
+          TargetGroupArn: !Ref ApiTargetGroup
+
+  WorkerService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub '${EnvironmentName}-worker'
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref WorkerTaskDefinition
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: !Ref AssignPublicIp
+          SecurityGroups: [!Ref ServiceSecurityGroup]
+          Subnets: !Ref ServiceSubnets
+
+  ApiListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref ListenerArn
+      Priority: !Ref ApiListenerPriority
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values: [!Ref HostHeader]
+        - Field: path-pattern
+          PathPatternConfig:
+            Values: [/api/*]
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref ApiTargetGroup
+
+  WebListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref ListenerArn
+      Priority: !Ref WebListenerPriority
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values: [!Ref HostHeader]
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref WebTargetGroup
+
+Outputs:
+  WebsiteUrl:
+    Description: Guardian.US hostname routed through the existing ALB.
+    Value: !Sub 'https://${HostHeader}'
+  WebServiceName:
+    Value: !Ref WebService
+  ApiServiceName:
+    Value: !Ref ApiService
+  WorkerServiceName:
+    Value: !Ref WorkerService
+  GuardianTableName:
+    Value: !Ref GuardianTable
+  EvidenceBucketName:
+    Value: !Ref EvidenceBucket

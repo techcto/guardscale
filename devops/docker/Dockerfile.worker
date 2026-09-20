@@ -5,7 +5,7 @@ RUN npm ci
 COPY tsconfig.json ./
 COPY src/worker ./src/worker
 COPY src/lib ./src/lib
-RUN npx tsc --outDir dist --noEmit false --module commonjs --moduleResolution node src/worker/index.ts src/lib/notifications.ts
+RUN npx tsc --outDir dist --noEmit false --module commonjs --moduleResolution node --target es2022 src/worker/index.ts src/lib/notifications.ts
 FROM node:26-alpine
 WORKDIR /app
 ENV NODE_ENV=production

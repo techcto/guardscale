@@ -53,7 +53,7 @@ jobs:
         env: {VERSION: '${{ steps.version.outputs.value }}'}
         run: |
           for service in web api worker agent; do
-            repository="${{ vars.GUARDIAN_REPOSITORY_PREFIX || 'guardian-us' }}-$service"
+            repository="${{ vars.GUARDIAN_REPOSITORY_PREFIX || 'solodev/guardian' }}-$service"
             aws ecr describe-repositories --repository-names "$repository" >/dev/null 2>&1 || aws ecr create-repository --repository-name "$repository" --image-scanning-configuration scanOnPush=true >/dev/null
             image="$MP_AWS_ECR/$repository:$VERSION"
             docker buildx build --platform linux/amd64 --provenance=false --sbom=false --push -f "devops/docker/Dockerfile.$service" -t "$image" .
@@ -66,3 +66,12 @@ jobs:
           aws s3 cp dist/agent/ "s3://$GUARDIAN_CFT_BUCKET/agent/latest/" --recursive --cache-control no-cache --no-progress
           aws s3 cp devops/cloudformation/guardian.yaml "s3://$GUARDIAN_CFT_BUCKET/cloudformation/guardian-$VERSION.yaml" --content-type text/yaml --cache-control no-cache --no-progress
           aws s3 cp devops/cloudformation/guardian.yaml "s3://$GUARDIAN_CFT_BUCKET/cloudformation/guardian.yaml" --content-type text/yaml --cache-control no-cache --no-progress
+          aws s3 cp devops/cloudformation/guardian-existing.yaml "s3://$GUARDIAN_CFT_BUCKET/cloudformation/guardian-existing-$VERSION.yaml" --content-type text/yaml --cache-control no-cache --no-progress
+          aws s3 cp devops/cloudformation/guardian-existing.yaml "s3://$GUARDIAN_CFT_BUCKET/cloudformation/guardian-existing.yaml" --content-type text/yaml --cache-control no-cache --no-progress
+      - name: Submit AWS Marketplace changeset
+        if: ${{ vars.MP_AWS_MARKETPLACE_PRODUCT_ID != '' }}
+        env:
+          MP_AWS_MARKETPLACE_PRODUCT_ID: ${{ vars.MP_AWS_MARKETPLACE_PRODUCT_ID }}
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+          GUARDIAN_REPOSITORY_PREFIX: ${{ vars.GUARDIAN_REPOSITORY_PREFIX || 'solodev/guardian' }}
+        run: bash devops/changeset.sh

@@ -68,6 +68,11 @@ export const dynamoStore={
     await ensureTable();
     await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${v.tenantId}`,sk:`INCIDENT#${v.incidentId}`,...v}}));
   },
+  async incident(tenant:string,incidentId:string):Promise<IncidentRecord|null>{
+    await ensureTable();
+    const r=await client.send(new GetCommand({TableName:tableName,Key:{pk:`ORG#${tenant}`,sk:`INCIDENT#${incidentId}`}}));
+    return (r.Item as IncidentRecord)??null;
+  },
   async incidents(tenant:string):Promise<IncidentRecord[]>{
     await ensureTable();
     const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',ExpressionAttributeValues:{':pk':`ORG#${tenant}`,':prefix':'INCIDENT#'}}));

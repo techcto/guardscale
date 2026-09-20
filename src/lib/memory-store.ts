@@ -14,6 +14,7 @@ export const memoryStore={
   async nodes(tenant:string){return[...state.nodes.values()].filter(x=>x.tenantId===tenant)},
   async node(tenant:string,serverId:string){return state.nodes.get(key(tenant,serverId))??null},
   async putIncident(v:IncidentRecord){state.incidents.set(key(v.tenantId,v.incidentId),v)},
+  async incident(tenant:string,incidentId:string){return state.incidents.get(key(tenant,incidentId))??null},
   async incidents(tenant:string){return[...state.incidents.values()].filter(x=>x.tenantId===tenant)},
   async incidentsForNode(tenant:string,serverId:string){return[...state.incidents.values()].filter(x=>x.tenantId===tenant&&x.serverId===serverId)},
   async putEvent(v:GuardianEvent){const k=key(v.tenantId,v.serverId),list=state.events.get(k)??[];list.push(v);if(list.length>MAX_EVENTS_PER_NODE)list.shift();state.events.set(k,list)},
