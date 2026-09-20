@@ -22,7 +22,7 @@ export default function AddNode({onAdded}:{onAdded:()=>void}){
     const agent=clean(agentId)||'<agent-id>',server=clean(serverId)||'<node-id>';
     const tags=tagsInput.split(',').map(t=>clean(t)).filter(Boolean);
     const tagsJson=tags.length?`,"tags":[${tags.map(t=>`"${t}"`).join(',')}]`:'';
-    const base='https://gaurdian-us.s3.us-east-1.amazonaws.com/agent/latest';
+    const base='https://gaurdian-net.s3.us-east-1.amazonaws.com/agent/latest';
     const tenant=enrollment?.tenantId??'<tenant-id>',token=enrollment?.enrollmentToken??'<enrollment-token-from-your-deployment-secret>';
     return {
       install:`curl -fsSLo guardian '${base}/guardian-linux-${platform}'\nsudo install -m 0755 guardian /usr/local/bin/guardian\nsudo install -d -m 0750 /etc/guardian /var/lib/guardian\ncurl -fsSLo /tmp/guardian.service '${base}/guardian.service'\nsudo install -m 0644 /tmp/guardian.service /etc/systemd/system/guardian.service\ncurl -fsSLo /etc/guardian/config.example.yaml '${base}/config.example.yaml'`,

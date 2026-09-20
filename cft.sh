@@ -6,7 +6,7 @@ TEMPLATE="${GUARDIAN_CFT_TEMPLATE:-$ROOT_DIR/devops/cloudformation/guardian.yaml
 STACK_NAME="${GUARDIAN_STACK_NAME:-guardian}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 AWS_PROFILE="${AWS_PROFILE:-}"
-CFT_BUCKET="${GUARDIAN_CFT_BUCKET:-gaurdian-us}"
+CFT_BUCKET="${GUARDIAN_CFT_BUCKET:-gaurdian-net}"
 
 usage() {
   cat <<'EOF'
@@ -29,7 +29,7 @@ Deploy parameters:
   GUARDIAN_ROOT_USER           Optional root username (default: root)
   GUARDIAN_ROOT_PASSWORD       Root operator password (>=12 chars)
   GUARDIAN_SESSION_SECRET      Session signing secret (>=32 chars)
-  GUARDIAN_CFT_BUCKET          S3 bucket for CFT uploads (default: gaurdian-us)
+  GUARDIAN_CFT_BUCKET          S3 bucket for CFT uploads (default: gaurdian-net)
   AWS_PROFILE                  Optional AWS CLI profile
 EOF
 }
