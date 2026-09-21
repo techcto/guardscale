@@ -52,7 +52,8 @@ export const memoryStore={
   async settings(tenant:string){return state.settings.get(tenant)??defaultSettings(tenant)},
   async putSettings(tenant:string,v:Settings){state.settings.set(tenant,v)},
   async products():Promise<Product[]>{return[{id:'dev',name:'Dev',description:'Free tier for a single personal workspace.',stripePriceId:'',monthlyPrice:0,serverLimit:1,active:true},{id:'starter',name:'Starter',description:'Detection and alerting for a small server fleet.',stripePriceId:process.env.STRIPE_STARTER_PRICE_ID??'',monthlyPrice:49,serverLimit:5,active:true},{id:'scale',name:'Scale',description:'Response automation and expanded infrastructure coverage.',stripePriceId:process.env.STRIPE_SCALE_PRICE_ID??'',monthlyPrice:199,serverLimit:50,active:true}]},
-  async subscriptions(userId:string){return[...state.subscriptions.values()].filter(x=>x.userId===userId)},
+  async subscriptions(orgId:string){return[...state.subscriptions.values()].filter(x=>x.orgId===orgId)},
+  async activeSubscriptionForOrg(orgId:string){const rows=[...state.subscriptions.values()].filter(x=>x.orgId===orgId&&(x.status==='active'||x.status==='trialing'));return rows.sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0]??null},
   async putSubscription(v:Subscription){state.subscriptions.set(v.id,v)},
 };
 export type Store=typeof memoryStore;

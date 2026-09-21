@@ -18,7 +18,7 @@ export type Settings={
   updatedAt:string;
 };
 export type Product={id:string;name:string;description:string;stripePriceId:string;monthlyPrice:number;serverLimit:number;active:boolean};
-export type Subscription={id:string;userId:string;productId:string;stripeCustomerId:string;stripeSubscriptionId:string;status:'trialing'|'active'|'past_due'|'canceled'|'unpaid';currentPeriodEnd?:string;updatedAt:string};
+export type Subscription={id:string;orgId:string;productId:string;stripeCustomerId?:string;stripeSubscriptionId?:string;status:'trialing'|'active'|'past_due'|'canceled'|'unpaid';currentPeriodEnd?:string;updatedAt:string};
 export function defaultSettings(tenantId:string):Settings{return{
   tenantId,
   detection:{warningPercent:2,criticalPercent:10,emergencyPercent:30,trafficMultiplier:5,distributedCrawlerCorrelation:true,applicationFailureDetection:true,heartbeatStaleSeconds:180},

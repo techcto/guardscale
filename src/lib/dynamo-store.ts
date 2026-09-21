@@ -166,13 +166,18 @@ export const dynamoStore={
   async products():Promise<Product[]>{
     return[{id:'dev',name:'Dev',description:'Free tier for a single personal workspace.',stripePriceId:'',monthlyPrice:0,serverLimit:1,active:true},{id:'starter',name:'Starter',description:'Detection and alerting for a small server fleet.',stripePriceId:process.env.STRIPE_STARTER_PRICE_ID??'',monthlyPrice:49,serverLimit:5,active:true},{id:'scale',name:'Scale',description:'Response automation and expanded infrastructure coverage.',stripePriceId:process.env.STRIPE_SCALE_PRICE_ID??'',monthlyPrice:199,serverLimit:50,active:true}];
   },
-  async subscriptions(userId:string):Promise<Subscription[]>{
+  async subscriptions(orgId:string):Promise<Subscription[]>{
     await ensureTable();
-    const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',ExpressionAttributeValues:{':pk':`USER#${userId}`,':prefix':'SUBSCRIPTION#'}}));
+    const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',ExpressionAttributeValues:{':pk':`ORG#${orgId}`,':prefix':'SUBSCRIPTION#'}}));
     return (r.Items??[]) as Subscription[];
+  },
+  async activeSubscriptionForOrg(orgId:string):Promise<Subscription|null>{
+    const rows=await dynamoStore.subscriptions(orgId);
+    const active=rows.filter(x=>x.status==='active'||x.status==='trialing');
+    return active.sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0]??null;
   },
   async putSubscription(v:Subscription){
     await ensureTable();
-    await client.send(new PutCommand({TableName:tableName,Item:{pk:`USER#${v.userId}`,sk:`SUBSCRIPTION#${v.id}`,...v}}));
+    await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${v.orgId}`,sk:`SUBSCRIPTION#${v.id}`,...v}}));
   },
 };

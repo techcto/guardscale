@@ -2,6 +2,7 @@ import{NextRequest,NextResponse}from'next/server';import{randomUUID}from'node:cr
 export async function GET(req:NextRequest){
   const session=await operator(req);
   if(!session)return NextResponse.json({error:'unauthorized'},{status:401});
+  if(session.role==='root'){const orgs=await store.organizations();return NextResponse.json(orgs.map(o=>({id:o.id,name:o.name,slug:o.slug,orgType:o.orgType,role:'root'})))}
   const memberships=await store.orgsForUser(session.id);
   return NextResponse.json(memberships.map(m=>({id:m.org.id,name:m.org.name,slug:m.org.slug,orgType:m.org.orgType,role:m.membership.role})));
 }
