@@ -40,7 +40,7 @@ export default function AddNode({nodeCount,onAdded}:{nodeCount:number;onAdded:()
     <header className="g-modal-header"><div><div className="eyebrow">Agent onboarding</div><h2 id="add-node-title">Add a node</h2></div><button className="icon-button" aria-label="Close" onClick={close}>×</button></header>
     {atLimit?<>
       <div className="notice"><strong>Node limit reached</strong><span>Your current plan includes up to {serverLimit} node{serverLimit===1?'':'s'}. Upgrade for a higher limit.</span></div>
-      <a className="button primary" href="/settings?tab=Billing">Upgrade plan</a>
+      <a className="button primary" href="/settings/billing">Upgrade plan</a>
     </>:<>
     {error&&<div className="notice"><strong>Enrollment unavailable</strong><span>{error}</span></div>}
     <div className="notice"><strong>Outbound-only enrollment</strong><span>This enrollment credential is scoped to your organization. Keep it in a secret manager or root-only environment. Never paste it into source control or screenshots.</span></div>
