@@ -7,9 +7,9 @@ export async function POST(req:NextRequest){
   if(!product)return NextResponse.json({error:'Unknown plan'},{status:400});
   if(!product.stripePriceId){
     await store.putSubscription({id:randomUUID(),orgId:session.orgId,productId:product.id,status:'active',updatedAt:new Date().toISOString()});
-    return NextResponse.json({url:'/settings?tab=Billing&checkout=local'});
+    return NextResponse.json({url:'/settings/billing?checkout=local'});
   }
   const origin=requestOrigin(req);
-  const checkout=await stripe().checkout.sessions.create({mode:'subscription',line_items:[{price:product.stripePriceId,quantity:1}],client_reference_id:session.orgId,metadata:{orgId:session.orgId,productId:product.id},success_url:`${origin}/settings?tab=Billing&checkout=success`,cancel_url:`${origin}/settings?tab=Billing&checkout=canceled`});
+  const checkout=await stripe().checkout.sessions.create({mode:'subscription',line_items:[{price:product.stripePriceId,quantity:1}],client_reference_id:session.orgId,metadata:{orgId:session.orgId,productId:product.id},success_url:`${origin}/settings/billing?checkout=success`,cancel_url:`${origin}/settings/billing?checkout=canceled`});
   return NextResponse.json({url:checkout.url});
 }

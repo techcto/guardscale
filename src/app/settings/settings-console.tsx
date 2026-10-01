@@ -1,15 +1,15 @@
 'use client';
 import {useEffect, useState} from 'react';
-import {useSearchParams} from 'next/navigation';
+import {useRouter,useSearchParams} from 'next/navigation';
 import type {Settings} from '@/lib/model';
 import BillingConsole from '@/app/billing/billing-console';
 import OrganizationsConsole from '@/app/organizations/organizations-console';
 
 const UNSAVED=new Date(0).toISOString();
 
-export default function SettingsConsole({saas,isRoot}:{saas:boolean;isRoot:boolean}){
- const initialTab=useSearchParams().get('tab');
- const [settings,setSettings]=useState<Settings|null>(null),[saved,setSaved]=useState(false),[error,setError]=useState(''),[tab,setTab]=useState(initialTab??'Detection');
+export default function SettingsConsole({saas,isRoot,initialTab}:{saas:boolean;isRoot:boolean;initialTab?:string}){
+ const router=useRouter(),queryTab=useSearchParams().get('tab');
+ const [settings,setSettings]=useState<Settings|null>(null),[saved,setSaved]=useState(false),[error,setError]=useState(''),[tab,setTab]=useState(initialTab??queryTab??'Detection');
  const [testWhatsapp,setTestWhatsapp]=useState(''),[testEmail,setTestEmail]=useState(''),[testStatus,setTestStatus]=useState<Record<string,string>>({});
  const tabs=['Detection','Notifications','Response','Data',...(saas?['Billing']:[]),...(saas&&isRoot?['Organizations']:[])];
  useEffect(()=>{let active=true;fetch('/api/v1/settings').then(r=>r.ok?r.json():null).then(data=>{if(active&&data)setSettings(data)});return()=>{active=false}},[]);
@@ -23,7 +23,8 @@ export default function SettingsConsole({saas,isRoot}:{saas:boolean;isRoot:boole
  }
  if(!settings)return <div className="settings-layout"><aside className="settings-tabs">{tabs.map(x=><button key={x} disabled>{x}</button>)}</aside><div className="g-card settings-panel"><p className="muted">Loading settings…</p></div></div>;
  const set=<K extends keyof Settings>(group:K,patch:Partial<Settings[K]>)=>setSettings(s=>s&&({...s,[group]:{...(s[group] as object),...patch}}));
- return <section className="settings-layout"><aside className="settings-tabs">{tabs.map(x=><button className={tab===x?'active':''} onClick={()=>setTab(x)} key={x}>{x}</button>)}</aside><div className="g-card settings-panel">
+ function selectTab(next:string){setTab(next);router.replace(next==='Billing'?'/settings/billing':`/settings?tab=${encodeURIComponent(next)}`)}
+ return <section className="settings-layout"><aside className="settings-tabs">{tabs.map(x=><button className={tab===x?'active':''} onClick={()=>selectTab(x)} key={x}>{x}</button>)}</aside><div className="g-card settings-panel">
   {tab==='Detection'&&<><Heading title="Detection thresholds" text="Tune when coordinated traffic and application failures become an incident."/><div className="form-grid">
     <NumberField label="Warning HTTP 504 rate (%)" value={settings.detection.warningPercent} onChange={v=>set('detection',{warningPercent:v})}/>
     <NumberField label="Critical HTTP 504 rate (%)" value={settings.detection.criticalPercent} onChange={v=>set('detection',{criticalPercent:v})}/>
