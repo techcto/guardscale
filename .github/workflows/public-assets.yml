@@ -1,0 +1,26 @@
+name: Publish GuardScale public assets
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/public-assets.yml'
+      - 'devops/public-assets.sh'
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish-policy:
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      GUARDSCALE_CFT_BUCKET: ${{ vars.GUARDSCALE_CFT_BUCKET || 'guardscale' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ vars.MP_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.MP_AWS_SECRET_ACCESS_KEY }}
+      - name: Allow public reads of release assets
+        run: bash devops/public-assets.sh
