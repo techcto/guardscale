@@ -225,12 +225,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      LifecycleConfiguration:
-        Rules:
-          - Id: expire-evidence
-            Status: Enabled
-            ExpirationInDays: 30
-
   ExecutionRole:
     Type: AWS::IAM::Role
     Properties:
