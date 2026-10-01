@@ -60,6 +60,7 @@ jobs:
       - name: Publish agent and CloudFormation artifacts
         env: {VERSION: '${{ steps.version.outputs.value }}'}
         run: |
+          bash devops/public-assets.sh
           aws s3 cp dist/agent/ "s3://$GUARDSCALE_CFT_BUCKET/agent/$VERSION/" --recursive --cache-control "public,max-age=31536000,immutable" --no-progress
           aws s3 cp dist/agent/ "s3://$GUARDSCALE_CFT_BUCKET/agent/latest/" --recursive --cache-control no-cache --no-progress
           aws s3 cp devops/cloudformation/guardscale.yaml "s3://$GUARDSCALE_CFT_BUCKET/cloudformation/guardscale-$VERSION.yaml" --content-type text/yaml --cache-control no-cache --no-progress
