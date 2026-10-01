@@ -1,4 +1,4 @@
-name: Guardian.US CI
+name: GuardScale CI
 on:
   pull_request:
   push:
@@ -18,7 +18,7 @@ jobs:
       - run: gofmt -w . && git diff --exit-code
       - run: go vet ./...
       - run: go test -race ./...
-      - run: go build -trimpath -ldflags='-s -w' ./cmd/guardian
+      - run: go build -trimpath -ldflags='-s -w' ./cmd/guardscale
       - uses: actions/setup-node@v4
         with:
           node-version: 26

@@ -1,8 +1,8 @@
 {
-  "name": "guardian-playwright",
+  "name": "guardscale-playwright",
   "version": "1.0.0",
   "private": true,
-  "description": "Browser-driven checks against a running Guardian.US stack",
+  "description": "Browser-driven checks against a running GuardScale stack",
   "type": "commonjs",
   "scripts": {
     "test": "node journeys/run-all.mjs"

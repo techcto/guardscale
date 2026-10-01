@@ -10,7 +10,7 @@ export async function defaultActiveOrgForUser(userId:string):Promise<{orgId:stri
 }
 
 export async function defaultActiveOrgForRoot():Promise<string>{
-  if(process.env.GUARDIAN_DEPLOYMENT_MODE!=='saas')return (await store.ensureSingleDeploymentOrg()).id;
+  if(process.env.GUARDSCALE_DEPLOYMENT_MODE!=='saas')return (await store.ensureSingleDeploymentOrg()).id;
   const orgs=await store.organizations();
   return orgs[0]?.id??'';
 }

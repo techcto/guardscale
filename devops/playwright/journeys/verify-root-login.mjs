@@ -17,8 +17,8 @@ import { BASE_URL, ROOT_USERNAME, ROOT_PASSWORD, login } from '../lib/helpers.mj
   assert.ok(!new URL(page.url()).pathname.startsWith('/login'), 'login did not leave the login page');
 
   const cookies = await context.cookies(BASE_URL);
-  const session = cookies.find((c) => c.name === 'guardian_session');
-  assert.ok(session, 'guardian_session cookie was not set after login');
+  const session = cookies.find((c) => c.name === 'guardscale_session');
+  assert.ok(session, 'guardscale_session cookie was not set after login');
   assert.equal(session.httpOnly, true, 'session cookie must be HttpOnly');
   if (!BASE_URL.startsWith('https:')) {
     assert.equal(session.secure, false, 'session cookie must not be Secure on a plain-http origin, or browsers drop it');

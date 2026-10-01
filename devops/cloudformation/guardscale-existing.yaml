@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Guardian.US control plane, attached to an existing ECS cluster and ALB (host-header routed).
+Description: GuardScale control plane, attached to an existing ECS cluster and ALB (host-header routed).
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -19,7 +19,7 @@ Metadata:
           - ApiListenerPriority
           - WebListenerPriority
       - Label:
-          default: Guardian.US settings
+          default: GuardScale settings
         Parameters:
           - EnvironmentName
           - RootUsername
@@ -45,8 +45,8 @@ Metadata:
 Parameters:
   EnvironmentName:
     Type: String
-    Default: guardian
-    Description: Prefix used for Guardian.US task, service, log, and target group names.
+    Default: guardscale
+    Description: Prefix used for GuardScale task, service, log, and target group names.
   VpcId:
     Type: AWS::EC2::VPC::Id
     Description: Existing application VPC.
@@ -64,7 +64,7 @@ Parameters:
     Description: Existing private ECS service subnets with NAT access for image pulls.
   HostHeader:
     Type: String
-    Description: Dedicated hostname for Guardian.US, for example guardian.us.
+    Description: Dedicated hostname for GuardScale, for example guardscale.org.
     AllowedPattern: '[A-Za-z0-9][A-Za-z0-9.-]*[A-Za-z0-9]'
   ApiListenerPriority:
     Type: Number
@@ -119,13 +119,13 @@ Parameters:
     Default: ''
   WebImage:
     Type: String
-    Description: Published ECR image URI for the Guardian.US web container.
+    Description: Published ECR image URI for the GuardScale web container.
   ApiImage:
     Type: String
-    Description: Published ECR image URI for the Guardian.US api container.
+    Description: Published ECR image URI for the GuardScale api container.
   WorkerImage:
     Type: String
-    Description: Published ECR image URI for the Guardian.US worker container.
+    Description: Published ECR image URI for the GuardScale worker container.
   DesiredCount:
     Type: Number
     Default: 1
@@ -139,7 +139,7 @@ Resources:
   ServiceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Guardian.US ECS task traffic from the existing ALB.
+      GroupDescription: GuardScale ECS task traffic from the existing ALB.
       VpcId: !Ref VpcId
       Tags:
         - Key: Name
@@ -177,7 +177,7 @@ Resources:
     Properties:
       MessageRetentionPeriod: 1209600
 
-  GuardianTable:
+  GuardScaleTable:
     Type: AWS::DynamoDB::Table
     Properties:
       TableName: !Sub '${EnvironmentName}-table'
@@ -255,7 +255,7 @@ Resources:
               Service: ecs-tasks.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: guardian-data
+        - PolicyName: guardscale-data
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -267,8 +267,8 @@ Resources:
                   - dynamodb:Query
                   - dynamodb:UpdateItem
                 Resource:
-                  - !GetAtt GuardianTable.Arn
-                  - !Sub '${GuardianTable.Arn}/index/*'
+                  - !GetAtt GuardScaleTable.Arn
+                  - !Sub '${GuardScaleTable.Arn}/index/*'
               - Effect: Allow
                 Action:
                   - sqs:SendMessage
@@ -344,16 +344,16 @@ Resources:
           Environment:
             - {Name: NODE_ENV, Value: production}
             - {Name: PORT, Value: '3000'}
-            - {Name: GUARDIAN_DEPLOYMENT_MODE, Value: !Ref DeploymentMode}
-            - {Name: GUARDIAN_ROOT_USER, Value: !Ref RootUsername}
-            - {Name: GUARDIAN_ROOT_PASSWORD, Value: !Ref RootPassword}
-            - {Name: GUARDIAN_SESSION_SECRET, Value: !Ref SessionSecret}
-            - {Name: GUARDIAN_TABLE, Value: !Ref GuardianTable}
-            - {Name: GUARDIAN_QUEUE_URL, Value: !Ref Queue}
-            - {Name: GUARDIAN_EVIDENCE_BUCKET, Value: !Ref EvidenceBucket}
-            - {Name: GUARDIAN_WHATSAPP_ORIGINATION_ID, Value: !Ref WhatsappOriginationId}
-            - {Name: GUARDIAN_NOTIFICATION_RECIPIENTS, Value: !Ref NotificationRecipients}
-            - {Name: GUARDIAN_SES_FROM, Value: !Ref SesFrom}
+            - {Name: GUARDSCALE_DEPLOYMENT_MODE, Value: !Ref DeploymentMode}
+            - {Name: GUARDSCALE_ROOT_USER, Value: !Ref RootUsername}
+            - {Name: GUARDSCALE_ROOT_PASSWORD, Value: !Ref RootPassword}
+            - {Name: GUARDSCALE_SESSION_SECRET, Value: !Ref SessionSecret}
+            - {Name: GUARDSCALE_TABLE, Value: !Ref GuardScaleTable}
+            - {Name: GUARDSCALE_QUEUE_URL, Value: !Ref Queue}
+            - {Name: GUARDSCALE_EVIDENCE_BUCKET, Value: !Ref EvidenceBucket}
+            - {Name: GUARDSCALE_WHATSAPP_ORIGINATION_ID, Value: !Ref WhatsappOriginationId}
+            - {Name: GUARDSCALE_NOTIFICATION_RECIPIENTS, Value: !Ref NotificationRecipients}
+            - {Name: GUARDSCALE_SES_FROM, Value: !Ref SesFrom}
             - {Name: STRIPE_SECRET_KEY, Value: !Ref StripeSecretKey}
             - {Name: STRIPE_WEBHOOK_SECRET, Value: !Ref StripeWebhookSecret}
             - {Name: STRIPE_STARTER_PRICE_ID, Value: !Ref StripeStarterPriceId}
@@ -384,12 +384,12 @@ Resources:
           Environment:
             - {Name: NODE_ENV, Value: production}
             - {Name: PORT, Value: '3001'}
-            - {Name: GUARDIAN_TABLE, Value: !Ref GuardianTable}
-            - {Name: GUARDIAN_QUEUE_URL, Value: !Ref Queue}
-            - {Name: GUARDIAN_EVIDENCE_BUCKET, Value: !Ref EvidenceBucket}
-            - {Name: GUARDIAN_ROOT_USER, Value: !Ref RootUsername}
-            - {Name: GUARDIAN_ROOT_PASSWORD, Value: !Ref RootPassword}
-            - {Name: GUARDIAN_SESSION_SECRET, Value: !Ref SessionSecret}
+            - {Name: GUARDSCALE_TABLE, Value: !Ref GuardScaleTable}
+            - {Name: GUARDSCALE_QUEUE_URL, Value: !Ref Queue}
+            - {Name: GUARDSCALE_EVIDENCE_BUCKET, Value: !Ref EvidenceBucket}
+            - {Name: GUARDSCALE_ROOT_USER, Value: !Ref RootUsername}
+            - {Name: GUARDSCALE_ROOT_PASSWORD, Value: !Ref RootPassword}
+            - {Name: GUARDSCALE_SESSION_SECRET, Value: !Ref SessionSecret}
             - {Name: STRIPE_SECRET_KEY, Value: !Ref StripeSecretKey}
             - {Name: STRIPE_WEBHOOK_SECRET, Value: !Ref StripeWebhookSecret}
             - {Name: STRIPE_STARTER_PRICE_ID, Value: !Ref StripeStarterPriceId}
@@ -417,12 +417,12 @@ Resources:
           Essential: true
           Environment:
             - {Name: NODE_ENV, Value: production}
-            - {Name: GUARDIAN_TABLE, Value: !Ref GuardianTable}
-            - {Name: GUARDIAN_QUEUE_URL, Value: !Ref Queue}
-            - {Name: GUARDIAN_EVIDENCE_BUCKET, Value: !Ref EvidenceBucket}
-            - {Name: GUARDIAN_WHATSAPP_ORIGINATION_ID, Value: !Ref WhatsappOriginationId}
-            - {Name: GUARDIAN_NOTIFICATION_RECIPIENTS, Value: !Ref NotificationRecipients}
-            - {Name: GUARDIAN_SES_FROM, Value: !Ref SesFrom}
+            - {Name: GUARDSCALE_TABLE, Value: !Ref GuardScaleTable}
+            - {Name: GUARDSCALE_QUEUE_URL, Value: !Ref Queue}
+            - {Name: GUARDSCALE_EVIDENCE_BUCKET, Value: !Ref EvidenceBucket}
+            - {Name: GUARDSCALE_WHATSAPP_ORIGINATION_ID, Value: !Ref WhatsappOriginationId}
+            - {Name: GUARDSCALE_NOTIFICATION_RECIPIENTS, Value: !Ref NotificationRecipients}
+            - {Name: GUARDSCALE_SES_FROM, Value: !Ref SesFrom}
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -513,7 +513,7 @@ Resources:
 
 Outputs:
   WebsiteUrl:
-    Description: Guardian.US hostname routed through the existing ALB.
+    Description: GuardScale hostname routed through the existing ALB.
     Value: !Sub 'https://${HostHeader}'
   WebServiceName:
     Value: !Ref WebService
@@ -521,7 +521,7 @@ Outputs:
     Value: !Ref ApiService
   WorkerServiceName:
     Value: !Ref WorkerService
-  GuardianTableName:
-    Value: !Ref GuardianTable
+  GuardScaleTableName:
+    Value: !Ref GuardScaleTable
   EvidenceBucketName:
     Value: !Ref EvidenceBucket

@@ -33,7 +33,7 @@ export default function SettingsConsole({saas,isRoot}:{saas:boolean;isRoot:boole
   </div>
   <Toggle title="Distributed crawler correlation" text="Correlate identity spread, unique paths, and traversal patterns." checked={settings.detection.distributedCrawlerCorrelation} onChange={v=>set('detection',{distributedCrawlerCorrelation:v})}/>
   <Toggle title="Application failure detection" text="Watch PHP saturation, slow stacks, and availability degradation." checked={settings.detection.applicationFailureDetection} onChange={v=>set('detection',{applicationFailureDetection:v})}/></>}
-  {tab==='Notifications'&&<><Heading title="Notification channels" text="Choose where Guardian.US sends incident alerts and recovery updates."/>
+  {tab==='Notifications'&&<><Heading title="Notification channels" text="Choose where GuardScale sends incident alerts and recovery updates."/>
   {settings.updatedAt===UNSAVED&&<div className="notice"><strong>Showing deployment defaults</strong><span>These values come from environment configuration (e.g. Docker/CloudFormation) and haven&apos;t been saved to this organization yet. Save once to make them explicit and editable independently of the deployment.</span></div>}
   <Toggle title="WhatsApp alerts" text="Two-way response through AWS End User Messaging Social." checked={settings.notifications.whatsappEnabled} onChange={v=>set('notifications',{whatsappEnabled:v})}/>
   <TextField label="WhatsApp sender ID" value={settings.notifications.whatsappSenderId} placeholder="+15550100000 — test number, replace with your production sender ID" onChange={v=>set('notifications',{whatsappSenderId:v})}/>

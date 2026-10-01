@@ -8,7 +8,7 @@ export default function Drawer({open,title,onClose,children}:{open:boolean;title
     window.addEventListener('keydown',onKey);
     return ()=>window.removeEventListener('keydown',onKey);
   },[open,onClose]);
-  return <div className={`offcanvas offcanvas-end guardian-drawer${open?' show':''}`} tabIndex={-1} aria-hidden={!open} style={{visibility:open?'visible':'hidden'}}>
+  return <div className={`offcanvas offcanvas-end guardscale-drawer${open?' show':''}`} tabIndex={-1} aria-hidden={!open} style={{visibility:open?'visible':'hidden'}}>
     <div className="offcanvas-header">
       <h5 className="offcanvas-title">{title}</h5>
       <button type="button" className="btn-close" aria-label="Close" onClick={onClose}/>

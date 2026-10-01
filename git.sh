@@ -22,7 +22,7 @@ die() {
 
 repo() {
   git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
-    die "Run this script inside the Guardian.US repository."
+    die "Run this script inside the GuardScale repository."
 }
 
 status() {
@@ -69,7 +69,7 @@ tag() {
   git -C "$ROOT_DIR" rev-parse --verify --quiet "refs/tags/v${version}" >/dev/null &&
     die "Tag v${version} already exists."
   audit
-  git -C "$ROOT_DIR" tag -a "v${version}" -m "Guardian.US ${version}"
+  git -C "$ROOT_DIR" tag -a "v${version}" -m "GuardScale ${version}"
   git -C "$ROOT_DIR" push "$REMOTE" "refs/tags/v${version}"
 }
 

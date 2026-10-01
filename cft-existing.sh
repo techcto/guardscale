@@ -2,11 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TEMPLATE="${GUARDIAN_EXISTING_CFT_TEMPLATE:-$ROOT_DIR/devops/cloudformation/guardian-existing.yaml}"
-STACK_NAME="${GUARDIAN_EXISTING_STACK_NAME:-guardian-existing-addon}"
+TEMPLATE="${GUARDSCALE_EXISTING_CFT_TEMPLATE:-$ROOT_DIR/devops/cloudformation/guardscale-existing.yaml}"
+STACK_NAME="${GUARDSCALE_EXISTING_STACK_NAME:-guardscale-existing-addon}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 AWS_PROFILE="${AWS_PROFILE:-}"
-VERSION="${GUARDIAN_VERSION:-latest}"
+VERSION="${GUARDSCALE_VERSION:-latest}"
 
 usage() {
   cat <<'EOF'
@@ -14,41 +14,41 @@ Usage:
   ./cft-existing.sh test       Run offline template checks
   ./cft-existing.sh validate   Validate with AWS CloudFormation
   ./cft-existing.sh publish    Build and push web/api/worker images to ECR
-  ./cft-existing.sh deploy     Deploy Guardian.US onto the existing cluster/ALB
+  ./cft-existing.sh deploy     Deploy GuardScale onto the existing cluster/ALB
   ./cft-existing.sh events     Show recent add-on stack events
   ./cft-existing.sh outputs    Show add-on stack outputs
 
 Required deployment values:
-  GUARDIAN_EXISTING_VPC_ID
-  GUARDIAN_EXISTING_CLUSTER        Existing ECS cluster name or ARN
-  GUARDIAN_EXISTING_ALB_SG         Existing ALB security group ID
-  GUARDIAN_EXISTING_LISTENER_ARN   Existing HTTP or HTTPS listener ARN
-  GUARDIAN_EXISTING_SUBNETS        Comma-separated ECS service subnet IDs
-  GUARDIAN_HOST_HEADER             Dedicated hostname, for example guardian.us
-  GUARDIAN_WEB_IMAGE               Published web image URI
-  GUARDIAN_API_IMAGE               Published api image URI
-  GUARDIAN_WORKER_IMAGE            Published worker image URI
-  GUARDIAN_ROOT_PASSWORD           Root operator password (>=12 chars)
-  GUARDIAN_SESSION_SECRET          Session signing secret (>=32 chars)
+  GUARDSCALE_EXISTING_VPC_ID
+  GUARDSCALE_EXISTING_CLUSTER        Existing ECS cluster name or ARN
+  GUARDSCALE_EXISTING_ALB_SG         Existing ALB security group ID
+  GUARDSCALE_EXISTING_LISTENER_ARN   Existing HTTP or HTTPS listener ARN
+  GUARDSCALE_EXISTING_SUBNETS        Comma-separated ECS service subnet IDs
+  GUARDSCALE_HOST_HEADER             Dedicated hostname, for example guardscale.org
+  GUARDSCALE_WEB_IMAGE               Published web image URI
+  GUARDSCALE_API_IMAGE               Published api image URI
+  GUARDSCALE_WORKER_IMAGE            Published worker image URI
+  GUARDSCALE_ROOT_PASSWORD           Root operator password (>=12 chars)
+  GUARDSCALE_SESSION_SECRET          Session signing secret (>=32 chars)
 
 Required for publish:
   MP_AWS_ECR                       ECR registry to push to (account.dkr.ecr.region.amazonaws.com)
 
 Optional values:
-  GUARDIAN_DESIRED_COUNT
-  GUARDIAN_ASSIGN_PUBLIC_IP        ENABLED or DISABLED
-  GUARDIAN_ROOT_USER
-  GUARDIAN_DEPLOYMENT_MODE         on-premise (default) or saas
-  GUARDIAN_WHATSAPP_ORIGINATION_ID
-  GUARDIAN_NOTIFICATION_RECIPIENTS
-  GUARDIAN_SES_FROM
+  GUARDSCALE_DESIRED_COUNT
+  GUARDSCALE_ASSIGN_PUBLIC_IP        ENABLED or DISABLED
+  GUARDSCALE_ROOT_USER
+  GUARDSCALE_DEPLOYMENT_MODE         on-premise (default) or saas
+  GUARDSCALE_WHATSAPP_ORIGINATION_ID
+  GUARDSCALE_NOTIFICATION_RECIPIENTS
+  GUARDSCALE_SES_FROM
   STRIPE_SECRET_KEY
   STRIPE_WEBHOOK_SECRET
   STRIPE_STARTER_PRICE_ID
   STRIPE_SCALE_PRICE_ID
-  GUARDIAN_API_LISTENER_PRIORITY
-  GUARDIAN_WEB_LISTENER_PRIORITY
-  GUARDIAN_VERSION                 Image tag to publish/deploy (default: latest)
+  GUARDSCALE_API_LISTENER_PRIORITY
+  GUARDSCALE_WEB_LISTENER_PRIORITY
+  GUARDSCALE_VERSION                 Image tag to publish/deploy (default: latest)
   AWS_PROFILE                      Optional AWS CLI profile
 EOF
 }
@@ -78,7 +78,7 @@ offline_test() {
     'WebImage' \
     'ApiImage' \
     'WorkerImage' \
-    'GuardianTable'; do
+    'GuardScaleTable'; do
     grep -q "$required" "$TEMPLATE" || die "Template check failed: missing $required"
   done
 
@@ -102,7 +102,7 @@ validate() {
 
 publish() {
   : "${MP_AWS_ECR:?Set MP_AWS_ECR before publishing.}"
-  local repo_prefix="${GUARDIAN_REPOSITORY_PREFIX:-solodev/guardian}"
+  local repo_prefix="${GUARDSCALE_REPOSITORY_PREFIX:-solodev/guardian}"
   local service
   for service in web api worker; do
     local repository="${repo_prefix}-${service}"
@@ -119,45 +119,45 @@ publish() {
 deploy() {
   validate
 
-  : "${GUARDIAN_EXISTING_VPC_ID:?Set GUARDIAN_EXISTING_VPC_ID before deploying.}"
-  : "${GUARDIAN_EXISTING_CLUSTER:?Set GUARDIAN_EXISTING_CLUSTER before deploying.}"
-  : "${GUARDIAN_EXISTING_ALB_SG:?Set GUARDIAN_EXISTING_ALB_SG before deploying.}"
-  : "${GUARDIAN_EXISTING_LISTENER_ARN:?Set GUARDIAN_EXISTING_LISTENER_ARN before deploying.}"
-  : "${GUARDIAN_EXISTING_SUBNETS:?Set GUARDIAN_EXISTING_SUBNETS before deploying.}"
-  : "${GUARDIAN_HOST_HEADER:?Set GUARDIAN_HOST_HEADER before deploying.}"
-  : "${GUARDIAN_WEB_IMAGE:?Set GUARDIAN_WEB_IMAGE before deploying.}"
-  : "${GUARDIAN_API_IMAGE:?Set GUARDIAN_API_IMAGE before deploying.}"
-  : "${GUARDIAN_WORKER_IMAGE:?Set GUARDIAN_WORKER_IMAGE before deploying.}"
-  : "${GUARDIAN_ROOT_PASSWORD:?Set GUARDIAN_ROOT_PASSWORD before deploying.}"
-  : "${GUARDIAN_SESSION_SECRET:?Set GUARDIAN_SESSION_SECRET before deploying.}"
+  : "${GUARDSCALE_EXISTING_VPC_ID:?Set GUARDSCALE_EXISTING_VPC_ID before deploying.}"
+  : "${GUARDSCALE_EXISTING_CLUSTER:?Set GUARDSCALE_EXISTING_CLUSTER before deploying.}"
+  : "${GUARDSCALE_EXISTING_ALB_SG:?Set GUARDSCALE_EXISTING_ALB_SG before deploying.}"
+  : "${GUARDSCALE_EXISTING_LISTENER_ARN:?Set GUARDSCALE_EXISTING_LISTENER_ARN before deploying.}"
+  : "${GUARDSCALE_EXISTING_SUBNETS:?Set GUARDSCALE_EXISTING_SUBNETS before deploying.}"
+  : "${GUARDSCALE_HOST_HEADER:?Set GUARDSCALE_HOST_HEADER before deploying.}"
+  : "${GUARDSCALE_WEB_IMAGE:?Set GUARDSCALE_WEB_IMAGE before deploying.}"
+  : "${GUARDSCALE_API_IMAGE:?Set GUARDSCALE_API_IMAGE before deploying.}"
+  : "${GUARDSCALE_WORKER_IMAGE:?Set GUARDSCALE_WORKER_IMAGE before deploying.}"
+  : "${GUARDSCALE_ROOT_PASSWORD:?Set GUARDSCALE_ROOT_PASSWORD before deploying.}"
+  : "${GUARDSCALE_SESSION_SECRET:?Set GUARDSCALE_SESSION_SECRET before deploying.}"
 
   local parameters=(
-    "VpcId=$GUARDIAN_EXISTING_VPC_ID"
-    "Cluster=$GUARDIAN_EXISTING_CLUSTER"
-    "LoadBalancerSecurityGroup=$GUARDIAN_EXISTING_ALB_SG"
-    "ListenerArn=$GUARDIAN_EXISTING_LISTENER_ARN"
-    "ServiceSubnets=$GUARDIAN_EXISTING_SUBNETS"
-    "HostHeader=$GUARDIAN_HOST_HEADER"
-    "WebImage=$GUARDIAN_WEB_IMAGE"
-    "ApiImage=$GUARDIAN_API_IMAGE"
-    "WorkerImage=$GUARDIAN_WORKER_IMAGE"
-    "RootPassword=$GUARDIAN_ROOT_PASSWORD"
-    "SessionSecret=$GUARDIAN_SESSION_SECRET"
+    "VpcId=$GUARDSCALE_EXISTING_VPC_ID"
+    "Cluster=$GUARDSCALE_EXISTING_CLUSTER"
+    "LoadBalancerSecurityGroup=$GUARDSCALE_EXISTING_ALB_SG"
+    "ListenerArn=$GUARDSCALE_EXISTING_LISTENER_ARN"
+    "ServiceSubnets=$GUARDSCALE_EXISTING_SUBNETS"
+    "HostHeader=$GUARDSCALE_HOST_HEADER"
+    "WebImage=$GUARDSCALE_WEB_IMAGE"
+    "ApiImage=$GUARDSCALE_API_IMAGE"
+    "WorkerImage=$GUARDSCALE_WORKER_IMAGE"
+    "RootPassword=$GUARDSCALE_ROOT_PASSWORD"
+    "SessionSecret=$GUARDSCALE_SESSION_SECRET"
   )
 
-  [[ -n "${GUARDIAN_ROOT_USER:-}" ]] && parameters+=("RootUsername=$GUARDIAN_ROOT_USER")
-  [[ -n "${GUARDIAN_DEPLOYMENT_MODE:-}" ]] && parameters+=("DeploymentMode=$GUARDIAN_DEPLOYMENT_MODE")
-  [[ -n "${GUARDIAN_DESIRED_COUNT:-}" ]] && parameters+=("DesiredCount=$GUARDIAN_DESIRED_COUNT")
-  [[ -n "${GUARDIAN_ASSIGN_PUBLIC_IP:-}" ]] && parameters+=("AssignPublicIp=$GUARDIAN_ASSIGN_PUBLIC_IP")
-  [[ -n "${GUARDIAN_WHATSAPP_ORIGINATION_ID:-}" ]] && parameters+=("WhatsappOriginationId=$GUARDIAN_WHATSAPP_ORIGINATION_ID")
-  [[ -n "${GUARDIAN_NOTIFICATION_RECIPIENTS:-}" ]] && parameters+=("NotificationRecipients=$GUARDIAN_NOTIFICATION_RECIPIENTS")
-  [[ -n "${GUARDIAN_SES_FROM:-}" ]] && parameters+=("SesFrom=$GUARDIAN_SES_FROM")
+  [[ -n "${GUARDSCALE_ROOT_USER:-}" ]] && parameters+=("RootUsername=$GUARDSCALE_ROOT_USER")
+  [[ -n "${GUARDSCALE_DEPLOYMENT_MODE:-}" ]] && parameters+=("DeploymentMode=$GUARDSCALE_DEPLOYMENT_MODE")
+  [[ -n "${GUARDSCALE_DESIRED_COUNT:-}" ]] && parameters+=("DesiredCount=$GUARDSCALE_DESIRED_COUNT")
+  [[ -n "${GUARDSCALE_ASSIGN_PUBLIC_IP:-}" ]] && parameters+=("AssignPublicIp=$GUARDSCALE_ASSIGN_PUBLIC_IP")
+  [[ -n "${GUARDSCALE_WHATSAPP_ORIGINATION_ID:-}" ]] && parameters+=("WhatsappOriginationId=$GUARDSCALE_WHATSAPP_ORIGINATION_ID")
+  [[ -n "${GUARDSCALE_NOTIFICATION_RECIPIENTS:-}" ]] && parameters+=("NotificationRecipients=$GUARDSCALE_NOTIFICATION_RECIPIENTS")
+  [[ -n "${GUARDSCALE_SES_FROM:-}" ]] && parameters+=("SesFrom=$GUARDSCALE_SES_FROM")
   [[ -n "${STRIPE_SECRET_KEY:-}" ]] && parameters+=("StripeSecretKey=$STRIPE_SECRET_KEY")
   [[ -n "${STRIPE_WEBHOOK_SECRET:-}" ]] && parameters+=("StripeWebhookSecret=$STRIPE_WEBHOOK_SECRET")
   [[ -n "${STRIPE_STARTER_PRICE_ID:-}" ]] && parameters+=("StripeStarterPriceId=$STRIPE_STARTER_PRICE_ID")
   [[ -n "${STRIPE_SCALE_PRICE_ID:-}" ]] && parameters+=("StripeScalePriceId=$STRIPE_SCALE_PRICE_ID")
-  [[ -n "${GUARDIAN_API_LISTENER_PRIORITY:-}" ]] && parameters+=("ApiListenerPriority=$GUARDIAN_API_LISTENER_PRIORITY")
-  [[ -n "${GUARDIAN_WEB_LISTENER_PRIORITY:-}" ]] && parameters+=("WebListenerPriority=$GUARDIAN_WEB_LISTENER_PRIORITY")
+  [[ -n "${GUARDSCALE_API_LISTENER_PRIORITY:-}" ]] && parameters+=("ApiListenerPriority=$GUARDSCALE_API_LISTENER_PRIORITY")
+  [[ -n "${GUARDSCALE_WEB_LISTENER_PRIORITY:-}" ]] && parameters+=("WebListenerPriority=$GUARDSCALE_WEB_LISTENER_PRIORITY")
 
   aws_cli cloudformation deploy \
     --template-file "$TEMPLATE" \

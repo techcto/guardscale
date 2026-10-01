@@ -1,9 +1,9 @@
 import path from 'node:path';
 import fs from 'node:fs';
 
-export const BASE_URL = process.env.GUARDIAN_BASE_URL || 'http://127.0.0.1';
-export const ROOT_USERNAME = process.env.GUARDIAN_ROOT_USER || 'root';
-export const ROOT_PASSWORD = process.env.GUARDIAN_ROOT_PASSWORD || 'guardian-local-change-me';
+export const BASE_URL = process.env.GUARDSCALE_BASE_URL || 'http://127.0.0.1';
+export const ROOT_USERNAME = process.env.GUARDSCALE_ROOT_USER || 'root';
+export const ROOT_PASSWORD = process.env.GUARDSCALE_ROOT_PASSWORD || 'guardscale-local-change-me';
 
 export function makeShot(outDir) {
   fs.mkdirSync(outDir, { recursive: true });

@@ -6,6 +6,6 @@ check:
 	npm run typecheck
 	npm run lint
 build:
-	CGO_ENABLED=0 go build -trimpath -o bin/guardian ./cmd/guardian
+	CGO_ENABLED=0 go build -trimpath -o bin/guardscale ./cmd/guardscale
 web-build:
 	npm run build

@@ -1,18 +1,18 @@
 [Unit]
-Description=Guardian.US infrastructure agent
+Description=GuardScale infrastructure agent
 After=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/guardian run --config /etc/guardian/config.yaml
+ExecStart=/usr/local/bin/guardscale run --config /etc/guardscale/config.yaml
 Restart=on-failure
 RestartSec=5s
-StateDirectory=guardian
+StateDirectory=guardscale
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/guardian
+ReadWritePaths=/var/lib/guardscale
 LimitNOFILE=65536
 
 [Install]

@@ -6,7 +6,7 @@ export async function POST(req:NextRequest){
   if(channel!=='email'&&channel!=='whatsapp')return NextResponse.json({error:'channel must be email or whatsapp'},{status:400});
   if(!destination)return NextResponse.json({error:'A destination is required to send a test notification'},{status:400});
   try{
-    const id=await notifier().send({channel,destination,originationId,subject:'Guardian.US test notification',text:`This is a test notification from Guardian.US, sent by ${session.username}.`});
+    const id=await notifier().send({channel,destination,originationId,subject:'GuardScale test notification',text:`This is a test notification from GuardScale, sent by ${session.username}.`});
     return NextResponse.json({status:'sent',id});
   }catch(error){
     return NextResponse.json({error:error instanceof Error?error.message:'Unable to send test notification'},{status:502});

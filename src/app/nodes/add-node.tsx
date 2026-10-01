@@ -26,12 +26,12 @@ export default function AddNode({nodeCount,onAdded}:{nodeCount:number;onAdded:()
     const agent=clean(agentId)||'<agent-id>',server=clean(serverId)||'<node-id>';
     const tags=tagsInput.split(',').map(t=>clean(t)).filter(Boolean);
     const tagsJson=tags.length?`,"tags":[${tags.map(t=>`"${t}"`).join(',')}]`:'';
-    const base='https://gaurdian-net.s3.us-east-1.amazonaws.com/agent/latest';
+    const base='https://guardscale.s3.us-east-1.amazonaws.com/agent/latest';
     const tenant=enrollment?.tenantId??'<tenant-id>',token=enrollment?.enrollmentToken??'<enrollment-token-from-your-deployment-secret>';
     return {
-      install:`curl -fsSLo guardian '${base}/guardian-linux-${platform}'\nsudo install -m 0755 guardian /usr/local/bin/guardian\nsudo install -d -m 0750 /etc/guardian /var/lib/guardian\ncurl -fsSLo /tmp/guardian.service '${base}/guardian.service'\nsudo install -m 0644 /tmp/guardian.service /etc/systemd/system/guardian.service\ncurl -fsSLo /etc/guardian/config.example.yaml '${base}/config.example.yaml'`,
-      config:`sudo cp /etc/guardian/config.example.yaml /etc/guardian/config.yaml\n# Edit /etc/guardian/config.yaml and set:\n# server.id: ${server}\n# server.tenant: ${tenant}\n# logs.apache_access: your Apache access-log path\nsudo guardian test-config --config /etc/guardian/config.yaml`,
-      enroll:`curl --fail-with-body -X POST "${typeof window==='undefined'?'http://localhost':window.location.origin}/api/v1/agents/heartbeat" \\\n  -H "Authorization: Bearer ${tenant}.${agent}.${token}" \\\n  -H 'Content-Type: application/json' \\\n  --data '{"server_id":"${server}"${tagsJson}}'\nsudo systemctl daemon-reload\nsudo systemctl enable --now guardian`,
+      install:`curl -fsSLo guardscale '${base}/guardscale-linux-${platform}'\nsudo install -m 0755 guardscale /usr/local/bin/guardscale\nsudo install -d -m 0750 /etc/guardscale /var/lib/guardscale\ncurl -fsSLo /tmp/guardscale.service '${base}/guardscale.service'\nsudo install -m 0644 /tmp/guardscale.service /etc/systemd/system/guardscale.service\ncurl -fsSLo /etc/guardscale/config.example.yaml '${base}/config.example.yaml'`,
+      config:`sudo cp /etc/guardscale/config.example.yaml /etc/guardscale/config.yaml\n# Edit /etc/guardscale/config.yaml and set:\n# server.id: ${server}\n# server.tenant: ${tenant}\n# logs.apache_access: your Apache access-log path\nsudo guardscale test-config --config /etc/guardscale/config.yaml`,
+      enroll:`curl --fail-with-body -X POST "${typeof window==='undefined'?'http://localhost':window.location.origin}/api/v1/agents/heartbeat" \\\n  -H "Authorization: Bearer ${tenant}.${agent}.${token}" \\\n  -H 'Content-Type: application/json' \\\n  --data '{"server_id":"${server}"${tagsJson}}'\nsudo systemctl daemon-reload\nsudo systemctl enable --now guardscale`,
     };
   },[agentId,serverId,tagsInput,platform,enrollment]);
   async function copy(name:string,value:string){await navigator.clipboard.writeText(value);setCopied(name);setTimeout(()=>setCopied(''),1600)}
@@ -46,7 +46,7 @@ export default function AddNode({nodeCount,onAdded}:{nodeCount:number;onAdded:()
     <div className="notice"><strong>Outbound-only enrollment</strong><span>This enrollment credential is scoped to your organization. Keep it in a secret manager or root-only environment. Never paste it into source control or screenshots.</span></div>
     <div className="form-grid"><Field label="Node ID" value={serverId} set={setServerId}/><Field label="Agent ID" value={agentId} set={setAgentId}/><label>Tags (optional, comma-separated)<input value={tagsInput} placeholder="web-tier, prod, us-east-1" onChange={e=>setTagsInput(e.target.value)}/></label><label>Linux architecture<select value={platform} onChange={e=>setPlatform(e.target.value as 'amd64'|'arm64')}><option value="amd64">x86_64 / amd64</option><option value="arm64">ARM64</option></select></label></div>
     <ol className="steps"><Step number="1" title="Download and install" command={commands.install} copied={copied==='install'} onCopy={()=>copy('install',commands.install)}/><Step number="2" title="Configure log access" command={commands.config} copied={copied==='config'} onCopy={()=>copy('config',commands.config)}/><Step number="3" title="Send the first heartbeat" command={commands.enroll} copied={copied==='enroll'} onCopy={()=>copy('enroll',commands.enroll)}/></ol>
-    <p className="muted small">Confirm the configured log paths are readable, then use <code>journalctl -u guardian</code> to inspect startup. The node appears in the list below after its first heartbeat.</p>
+    <p className="muted small">Confirm the configured log paths are readable, then use <code>journalctl -u guardscale</code> to inspect startup. The node appears in the list below after its first heartbeat.</p>
     </>}
   </section></div>}</>
 }

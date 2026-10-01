@@ -5,7 +5,7 @@ node_modules
 bin
 dist
 coverage
-origin-guardian-state
+guardscale-state
 .env
 .env.*
 !.env.example

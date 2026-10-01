@@ -1,3 +1,3 @@
-module github.com/guardian-us/guardian
+module github.com/techcto/guardscale
 
 go 1.23

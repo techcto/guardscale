@@ -9,7 +9,7 @@ export async function POST(req:NextRequest){
   let role:'root'|'admin'|'operator'|'viewer';
   if(session.role==='root'){role='root'}
   else{const membership=await store.membership(orgId,session.id);if(!membership||membership.status!=='active')return NextResponse.json({error:'forbidden'},{status:403});role=membership.role}
-  const secret=process.env.GUARDIAN_SESSION_SECRET??'';
+  const secret=process.env.GUARDSCALE_SESSION_SECRET??'';
   const token=await createSession({id:session.id,username:session.username,role,orgId,expiresAt:Date.now()+28800000},secret);
   const res=NextResponse.json({orgId,role});
   res.cookies.set(sessionCookie,token,{httpOnly:true,sameSite:'strict',secure:isSecureRequest(req),path:'/',maxAge:28800});

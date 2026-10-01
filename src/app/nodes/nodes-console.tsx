@@ -22,7 +22,7 @@ export default function NodesConsole(){
   for(const n of visible){const tags=n.tags??[];if(tags.length)for(const tag of tags){const list=byTag.get(tag)??[];list.push(n);byTag.set(tag,list)}else standalone.push(n)}
   return <main>
     <section className="hero compact-hero">
-      <div><div className="eyebrow">Fleet</div><h1>Nodes</h1><p className="muted page-intro">Install a lightweight Guardian agent on each node. Agents connect outbound to Guardian.US; no inbound port is required.</p></div>
+      <div><div className="eyebrow">Fleet</div><h1>Nodes</h1><p className="muted page-intro">Install a lightweight GuardScale agent on each node. Agents connect outbound to GuardScale; no inbound port is required.</p></div>
       <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:12}}>
         <span className="status neutral">{visible.length} of {nodes.length} node{nodes.length===1?'':'s'}{statusFilter?` (${statusFilter})`:''}</span>
         <AddNode nodeCount={nodes.length} onAdded={load}/>

@@ -3,9 +3,9 @@ package incidents
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/guardian-us/guardian/internal/apache"
-	"github.com/guardian-us/guardian/internal/detection"
-	"github.com/guardian-us/guardian/internal/phpfpm"
+	"github.com/techcto/guardscale/internal/apache"
+	"github.com/techcto/guardscale/internal/detection"
+	"github.com/techcto/guardscale/internal/phpfpm"
 	"os"
 	"path/filepath"
 	"sort"
