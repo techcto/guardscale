@@ -1,7 +1,7 @@
 'use client';
-import{useEffect,useState}from'react';import Link from'next/link';import {useRouter} from'next/navigation';import type{GuardianEvent,IncidentRecord,Node}from'@/lib/model';
+import{useEffect,useState}from'react';import Link from'next/link';import {useRouter} from'next/navigation';import type{GuardScaleEvent,IncidentRecord,Node}from'@/lib/model';
 
-type Detail={node:Node;events:GuardianEvent[];incidents:IncidentRecord[]};
+type Detail={node:Node;events:GuardScaleEvent[];incidents:IncidentRecord[]};
 
 export default function NodeDetailConsole({serverId}:{serverId:string}){
   const router=useRouter();

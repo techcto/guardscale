@@ -2,17 +2,17 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TEMPLATE="${GUARDIAN_CFT_TEMPLATE:-$ROOT_DIR/devops/cloudformation/guardian.yaml}"
-STACK_NAME="${GUARDIAN_STACK_NAME:-guardian}"
+TEMPLATE="${GUARDSCALE_CFT_TEMPLATE:-$ROOT_DIR/devops/cloudformation/guardscale.yaml}"
+STACK_NAME="${GUARDSCALE_STACK_NAME:-guardscale}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 AWS_PROFILE="${AWS_PROFILE:-}"
-CFT_BUCKET="${GUARDIAN_CFT_BUCKET:-gaurdian-net}"
+CFT_BUCKET="${GUARDSCALE_CFT_BUCKET:-guardscale}"
 
 usage() {
   cat <<'EOF'
 Usage:
   ./cft.sh test       Run standalone CFT checks and cfn-lint when installed
-  ./cft.sh publish    Upload guardian.yaml and guardian-existing.yaml to S3
+  ./cft.sh publish    Upload guardscale.yaml and guardscale-existing.yaml to S3
   ./cft.sh validate   Validate with AWS CloudFormation
   ./cft.sh deploy     Create a new standalone ECS cluster and ALB
   ./cft.sh events     Show recent stack events
@@ -20,16 +20,17 @@ Usage:
   ./cft.sh destroy    Delete the stack and wait for completion
 
 Deploy parameters:
-  GUARDIAN_VPC_ID              VPC id
-  GUARDIAN_PUBLIC_SUBNETS      Comma-separated public subnet ids
-  GUARDIAN_PRIVATE_SUBNETS     Comma-separated private (ECS service) subnet ids
-  GUARDIAN_IMAGE_BASE          ECR registry/repository prefix without service suffix, e.g. <account-id>.dkr.ecr.<region>.amazonaws.com/solodev/guardian
-  GUARDIAN_RELEASE_VERSION     Image tag (default: latest)
-  GUARDIAN_CERTIFICATE_ARN     Optional ACM certificate ARN for HTTPS
-  GUARDIAN_ROOT_USER           Optional root username (default: root)
-  GUARDIAN_ROOT_PASSWORD       Root operator password (>=12 chars)
-  GUARDIAN_SESSION_SECRET      Session signing secret (>=32 chars)
-  GUARDIAN_CFT_BUCKET          S3 bucket for CFT uploads (default: gaurdian-net)
+  GUARDSCALE_VPC_ID              VPC id
+  GUARDSCALE_PUBLIC_SUBNETS      Comma-separated public subnet ids
+  GUARDSCALE_PRIVATE_SUBNETS     Comma-separated private (ECS service) subnet ids
+  GUARDSCALE_IMAGE_BASE          Existing ECR registry/repository prefix without service suffix, e.g. <account-id>.dkr.ecr.<region>.amazonaws.com/solodev/guardian
+  GUARDSCALE_RELEASE_VERSION     Image tag (default: latest)
+  GUARDSCALE_CERTIFICATE_ARN     Optional ACM certificate ARN for HTTPS
+  GUARDSCALE_DEPLOYMENT_MODE     on-premise (default) or saas
+  GUARDSCALE_ROOT_USER           Optional root username (default: root)
+  GUARDSCALE_ROOT_PASSWORD       Root operator password (>=12 chars)
+  GUARDSCALE_SESSION_SECRET      Session signing secret (>=32 chars)
+  GUARDSCALE_CFT_BUCKET          S3 bucket for CFT uploads (default: guardscale)
   AWS_PROFILE                  Optional AWS CLI profile
 EOF
 }
@@ -61,7 +62,7 @@ offline_test() {
     'AWS::ElasticLoadBalancingV2::LoadBalancer' \
     'AWS::ElasticLoadBalancingV2::Listener' \
     'ImageBase' \
-    'GuardianTable'; do
+    'GuardScaleTable'; do
     grep -q "$required" "$TEMPLATE" || die "Template check failed: missing $required"
   done
 
@@ -93,41 +94,42 @@ validate() {
 
 publish() {
   require_template
-  : "${CFT_BUCKET:?Set GUARDIAN_CFT_BUCKET before publishing CFT files.}"
+  : "${CFT_BUCKET:?Set GUARDSCALE_CFT_BUCKET before publishing CFT files.}"
 
-  aws_cli s3 cp "$ROOT_DIR/devops/cloudformation/guardian.yaml" \
-    "s3://${CFT_BUCKET}/cloudformation/guardian.yaml" \
+  aws_cli s3 cp "$ROOT_DIR/devops/cloudformation/guardscale.yaml" \
+    "s3://${CFT_BUCKET}/cloudformation/guardscale.yaml" \
     --content-type text/yaml --cache-control no-cache \
     --region "$AWS_REGION" --no-progress
-  aws_cli s3 cp "$ROOT_DIR/devops/cloudformation/guardian-existing.yaml" \
-    "s3://${CFT_BUCKET}/cloudformation/guardian-existing.yaml" \
+  aws_cli s3 cp "$ROOT_DIR/devops/cloudformation/guardscale-existing.yaml" \
+    "s3://${CFT_BUCKET}/cloudformation/guardscale-existing.yaml" \
     --content-type text/yaml --cache-control no-cache \
     --region "$AWS_REGION" --no-progress
-  printf 'Published Guardian.US CFT files to s3://%s/\n' "$CFT_BUCKET"
+  printf 'Published GuardScale CFT files to s3://%s/\n' "$CFT_BUCKET"
 }
 
 deploy() {
   validate
 
-  : "${GUARDIAN_VPC_ID:?Set GUARDIAN_VPC_ID before deploying.}"
-  : "${GUARDIAN_PUBLIC_SUBNETS:?Set GUARDIAN_PUBLIC_SUBNETS before deploying.}"
-  : "${GUARDIAN_PRIVATE_SUBNETS:?Set GUARDIAN_PRIVATE_SUBNETS before deploying.}"
-  : "${GUARDIAN_IMAGE_BASE:?Set GUARDIAN_IMAGE_BASE before deploying.}"
-  : "${GUARDIAN_ROOT_PASSWORD:?Set GUARDIAN_ROOT_PASSWORD before deploying.}"
-  : "${GUARDIAN_SESSION_SECRET:?Set GUARDIAN_SESSION_SECRET before deploying.}"
+  : "${GUARDSCALE_VPC_ID:?Set GUARDSCALE_VPC_ID before deploying.}"
+  : "${GUARDSCALE_PUBLIC_SUBNETS:?Set GUARDSCALE_PUBLIC_SUBNETS before deploying.}"
+  : "${GUARDSCALE_PRIVATE_SUBNETS:?Set GUARDSCALE_PRIVATE_SUBNETS before deploying.}"
+  : "${GUARDSCALE_IMAGE_BASE:?Set GUARDSCALE_IMAGE_BASE before deploying.}"
+  : "${GUARDSCALE_ROOT_PASSWORD:?Set GUARDSCALE_ROOT_PASSWORD before deploying.}"
+  : "${GUARDSCALE_SESSION_SECRET:?Set GUARDSCALE_SESSION_SECRET before deploying.}"
 
   local parameters=(
-    "VpcId=$GUARDIAN_VPC_ID"
-    "PublicSubnets=$GUARDIAN_PUBLIC_SUBNETS"
-    "PrivateSubnets=$GUARDIAN_PRIVATE_SUBNETS"
-    "ImageBase=$GUARDIAN_IMAGE_BASE"
-    "RootPassword=$GUARDIAN_ROOT_PASSWORD"
-    "SessionSecret=$GUARDIAN_SESSION_SECRET"
+    "VpcId=$GUARDSCALE_VPC_ID"
+    "PublicSubnets=$GUARDSCALE_PUBLIC_SUBNETS"
+    "PrivateSubnets=$GUARDSCALE_PRIVATE_SUBNETS"
+    "ImageBase=$GUARDSCALE_IMAGE_BASE"
+    "RootPassword=$GUARDSCALE_ROOT_PASSWORD"
+    "SessionSecret=$GUARDSCALE_SESSION_SECRET"
   )
 
-  [[ -n "${GUARDIAN_RELEASE_VERSION:-}" ]] && parameters+=("ReleaseVersion=$GUARDIAN_RELEASE_VERSION")
-  [[ -n "${GUARDIAN_CERTIFICATE_ARN:-}" ]] && parameters+=("CertificateArn=$GUARDIAN_CERTIFICATE_ARN")
-  [[ -n "${GUARDIAN_ROOT_USER:-}" ]] && parameters+=("RootUsername=$GUARDIAN_ROOT_USER")
+  [[ -n "${GUARDSCALE_RELEASE_VERSION:-}" ]] && parameters+=("ReleaseVersion=$GUARDSCALE_RELEASE_VERSION")
+  [[ -n "${GUARDSCALE_CERTIFICATE_ARN:-}" ]] && parameters+=("CertificateArn=$GUARDSCALE_CERTIFICATE_ARN")
+  [[ -n "${GUARDSCALE_DEPLOYMENT_MODE:-}" ]] && parameters+=("DeploymentMode=$GUARDSCALE_DEPLOYMENT_MODE")
+  [[ -n "${GUARDSCALE_ROOT_USER:-}" ]] && parameters+=("RootUsername=$GUARDSCALE_ROOT_USER")
 
   aws_cli cloudformation deploy \
     --template-file "$TEMPLATE" \

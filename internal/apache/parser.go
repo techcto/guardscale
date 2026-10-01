@@ -49,12 +49,12 @@ func (p *Parser) trustedPeer(s string) bool {
 	return false
 }
 
-// ParseGuardian parses tab-separated Guardian format: RFC3339, XFF, peer, host,
+// ParseGuardScale parses tab-separated GuardScale format: RFC3339, XFF, peer, host,
 // method, URI, status, bytes, duration_ms, referer, UA, verification-valid.
-func (p *Parser) ParseGuardian(line string) (Request, error) {
+func (p *Parser) ParseGuardScale(line string) (Request, error) {
 	f := strings.Split(line, "\t")
 	if len(f) != 12 {
-		return Request{}, fmt.Errorf("guardian format: got %d fields, want 12", len(f))
+		return Request{}, fmt.Errorf("guardscale format: got %d fields, want 12", len(f))
 	}
 	t, e := time.Parse(time.RFC3339Nano, f[0])
 	if e != nil {

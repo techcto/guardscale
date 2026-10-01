@@ -2,9 +2,9 @@ package detection
 
 import (
 	"fmt"
-	"github.com/guardian-us/guardian/internal/apache"
-	"github.com/guardian-us/guardian/internal/config"
-	"github.com/guardian-us/guardian/internal/phpfpm"
+	"github.com/techcto/guardscale/internal/apache"
+	"github.com/techcto/guardscale/internal/config"
+	"github.com/techcto/guardscale/internal/phpfpm"
 	"net/url"
 	"sort"
 	"strconv"

@@ -1,6 +1,6 @@
 flowchart TB
   subgraph Origin[Monitored Linux origin]
-    Agent[Guardian Go agent]
+    Agent[GuardScale Go agent]
     WebServer[Apache / nginx]
     Runtime[PHP-FPM / runtime]
     Recorder[Bounded local recorder]
@@ -9,13 +9,13 @@ flowchart TB
     Agent --- Recorder
   end
   Agent -->|Outbound HTTPS only| ALB[Application Load Balancer]
-  subgraph AWS[Guardian AWS control plane]
-    ALB --> Web[guardian-web\nECS Fargate]
-    ALB --> API[guardian-api\nECS Fargate]
+  subgraph AWS[GuardScale AWS control plane]
+    ALB --> Web[guardscale-web\nECS Fargate]
+    ALB --> API[guardscale-api\nECS Fargate]
     API --> DDB[(DynamoDB)]
     API --> S3[(S3 evidence)]
     API --> Queue[SQS + DLQ]
-    Queue --> Worker[guardian-worker\nECS Fargate]
+    Queue --> Worker[guardscale-worker\nECS Fargate]
     Worker --> Bedrock[Bedrock / AgentCore]
     Worker --> WhatsApp[AWS End User Messaging Social\nWhatsApp]
     Worker --> SES[Amazon SES]

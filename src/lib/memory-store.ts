@@ -1,10 +1,10 @@
 import{randomUUID}from'node:crypto';
-import type{GuardianEvent,GuardianUser,IncidentRecord,Node,OrgMembership,Organization,OrgType,Product,Settings,Subscription}from'./model';
+import type{GuardScaleEvent,GuardScaleUser,IncidentRecord,Node,OrgMembership,Organization,OrgType,Product,Settings,Subscription}from'./model';
 import{defaultSettings}from'./model';
-type State={orgs:Map<string,Organization>;singletonOrgId?:string;memberships:Map<string,OrgMembership>;nodes:Map<string,Node>;incidents:Map<string,IncidentRecord>;events:Map<string,GuardianEvent[]>;users:Map<string,GuardianUser>;passwords:Map<string,string>;subscriptions:Map<string,Subscription>;settings:Map<string,Settings>};
-const g=globalThis as typeof globalThis&{guardianState?:State};
-export const state:State=g.guardianState??={orgs:new Map(),memberships:new Map(),nodes:new Map(),incidents:new Map(),events:new Map(),users:new Map(),passwords:new Map(),subscriptions:new Map(),settings:new Map()};
-g.guardianState=state;
+type State={orgs:Map<string,Organization>;singletonOrgId?:string;memberships:Map<string,OrgMembership>;nodes:Map<string,Node>;incidents:Map<string,IncidentRecord>;events:Map<string,GuardScaleEvent[]>;users:Map<string,GuardScaleUser>;passwords:Map<string,string>;subscriptions:Map<string,Subscription>;settings:Map<string,Settings>};
+const g=globalThis as typeof globalThis&{guardscaleState?:State};
+export const state:State=g.guardscaleState??={orgs:new Map(),memberships:new Map(),nodes:new Map(),incidents:new Map(),events:new Map(),users:new Map(),passwords:new Map(),subscriptions:new Map(),settings:new Map()};
+g.guardscaleState=state;
 const key=(tenant:string,id:string)=>`${tenant}\0${id}`;
 const membershipKey=(orgId:string,userId:string)=>`${orgId}\0${userId}`;
 const MAX_EVENTS_PER_NODE=200;
@@ -17,7 +17,7 @@ export const memoryStore={
   },
   async ensureSingleDeploymentOrg():Promise<Organization>{
     if(state.singletonOrgId){const org=state.orgs.get(state.singletonOrgId);if(org)return org}
-    const org:Organization={id:randomUUID(),name:'Guardian.US',slug:'guardian-us',ownerId:'',orgType:'business',enrollmentToken:randomUUID(),createdAt:new Date().toISOString()};
+    const org:Organization={id:randomUUID(),name:'GuardScale',slug:'guardscale',ownerId:'',orgType:'business',enrollmentToken:randomUUID(),createdAt:new Date().toISOString()};
     state.orgs.set(org.id,org);
     state.singletonOrgId=org.id;
     return org;
@@ -28,7 +28,7 @@ export const memoryStore={
   async membership(orgId:string,userId:string){return state.memberships.get(membershipKey(orgId,userId))??null},
   async membersOfOrg(orgId:string){
     const rows=[...state.memberships.values()].filter(m=>m.orgId===orgId);
-    return rows.map(membership=>({membership,user:state.users.get(membership.userId)})).filter((r):r is{membership:OrgMembership;user:GuardianUser}=>!!r.user);
+    return rows.map(membership=>({membership,user:state.users.get(membership.userId)})).filter((r):r is{membership:OrgMembership;user:GuardScaleUser}=>!!r.user);
   },
   async orgsForUser(userId:string){
     const rows=[...state.memberships.values()].filter(m=>m.userId===userId);
@@ -42,11 +42,11 @@ export const memoryStore={
   async incident(tenant:string,incidentId:string){return state.incidents.get(key(tenant,incidentId))??null},
   async incidents(tenant:string){return[...state.incidents.values()].filter(x=>x.tenantId===tenant)},
   async incidentsForNode(tenant:string,serverId:string){return[...state.incidents.values()].filter(x=>x.tenantId===tenant&&x.serverId===serverId)},
-  async putEvent(v:GuardianEvent){const k=key(v.tenantId,v.serverId),list=state.events.get(k)??[];list.push(v);if(list.length>MAX_EVENTS_PER_NODE)list.shift();state.events.set(k,list)},
+  async putEvent(v:GuardScaleEvent){const k=key(v.tenantId,v.serverId),list=state.events.get(k)??[];list.push(v);if(list.length>MAX_EVENTS_PER_NODE)list.shift();state.events.set(k,list)},
   async eventsForNode(tenant:string,serverId:string,limit=200){return(state.events.get(key(tenant,serverId))??[]).slice(-limit).reverse()},
   async userByName(username:string){return[...state.users.values()].find(x=>x.username.toLowerCase()===username.toLowerCase())??null},
   async userById(id:string){return state.users.get(id)??null},
-  async putUser(v:GuardianUser,passwordHash?:string){state.users.set(v.id,v);if(passwordHash)state.passwords.set(v.id,passwordHash)},
+  async putUser(v:GuardScaleUser,passwordHash?:string){state.users.set(v.id,v);if(passwordHash)state.passwords.set(v.id,passwordHash)},
   async password(id:string){return state.passwords.get(id)??null},
   async deleteUser(id:string){state.passwords.delete(id);return state.users.delete(id)},
   async settings(tenant:string){return state.settings.get(tenant)??defaultSettings(tenant)},

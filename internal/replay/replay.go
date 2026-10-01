@@ -2,10 +2,10 @@ package replay
 
 import (
 	"bufio"
-	"github.com/guardian-us/guardian/internal/apache"
-	"github.com/guardian-us/guardian/internal/config"
-	"github.com/guardian-us/guardian/internal/detection"
-	"github.com/guardian-us/guardian/internal/phpfpm"
+	"github.com/techcto/guardscale/internal/apache"
+	"github.com/techcto/guardscale/internal/config"
+	"github.com/techcto/guardscale/internal/detection"
+	"github.com/techcto/guardscale/internal/phpfpm"
 	"os"
 	"time"
 )
@@ -28,7 +28,7 @@ func Run(access, slow string, c config.Config) (Result, error) {
 	}
 	s := bufio.NewScanner(f)
 	for s.Scan() {
-		q, e := p.ParseGuardian(s.Text())
+		q, e := p.ParseGuardScale(s.Text())
 		if e != nil {
 			q, e = p.ParseCombined(s.Text())
 		}

@@ -1,7 +1,7 @@
 import{NextRequest,NextResponse}from'next/server';import{verifyResetToken}from'@/lib/session';import{hashPassword}from'@/lib/password';import{store}from'@/lib/store';
 export async function POST(req:NextRequest){
   const {token,password}=await req.json() as {token?:string;password?:string};
-  const secret=process.env.GUARDIAN_SESSION_SECRET;
+  const secret=process.env.GUARDSCALE_SESSION_SECRET;
   if(!secret)return NextResponse.json({error:'Sessions are not configured'},{status:503});
   if(!password||password.length<12)return NextResponse.json({error:'Use a password of at least 12 characters'},{status:400});
   const claim=await verifyResetToken(token,secret);

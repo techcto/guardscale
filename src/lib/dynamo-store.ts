@@ -1,15 +1,15 @@
 import{randomUUID}from'node:crypto';
 import{DynamoDBClient,CreateTableCommand,UpdateTimeToLiveCommand}from'@aws-sdk/client-dynamodb';
 import{DynamoDBDocumentClient,GetCommand,PutCommand,QueryCommand,DeleteCommand}from'@aws-sdk/lib-dynamodb';
-import type{GuardianEvent,GuardianUser,IncidentRecord,Node,OrgMembership,Organization,OrgType,Product,Settings,Subscription}from'./model';
+import type{GuardScaleEvent,GuardScaleUser,IncidentRecord,Node,OrgMembership,Organization,OrgType,Product,Settings,Subscription}from'./model';
 import{defaultSettings}from'./model';
 
-const tableName=process.env.GUARDIAN_TABLE??'guardian-local';
-const client=DynamoDBDocumentClient.from(new DynamoDBClient({endpoint:process.env.GUARDIAN_DYNAMODB_ENDPOINT}),{marshallOptions:{removeUndefinedValues:true}});
+const tableName=process.env.GUARDSCALE_TABLE??'guardscale-local';
+const client=DynamoDBDocumentClient.from(new DynamoDBClient({endpoint:process.env.GUARDSCALE_DYNAMODB_ENDPOINT}),{marshallOptions:{removeUndefinedValues:true}});
 
 let tableReady:Promise<void>|null=null;
 function ensureTable(){
-  if(!process.env.GUARDIAN_DYNAMODB_ENDPOINT)return Promise.resolve();
+  if(!process.env.GUARDSCALE_DYNAMODB_ENDPOINT)return Promise.resolve();
   if(!tableReady)tableReady=(async()=>{
     try{
       await client.send(new CreateTableCommand({
@@ -39,7 +39,7 @@ export const dynamoStore={
     await ensureTable();
     const pointer=await client.send(new GetCommand({TableName:tableName,Key:{pk:SINGLETON_PK,sk:SINGLETON_SK}}));
     if(pointer.Item?.orgId){const org=await dynamoStore.organizationById(pointer.Item.orgId as string);if(org)return org}
-    const org=await dynamoStore.createOrganization({name:'Guardian.US',ownerId:'',orgType:'business'});
+    const org=await dynamoStore.createOrganization({name:'GuardScale',ownerId:'',orgType:'business'});
     await client.send(new PutCommand({TableName:tableName,Item:{pk:SINGLETON_PK,sk:SINGLETON_SK,orgId:org.id},ConditionExpression:'attribute_not_exists(pk)'})).catch(async(error)=>{if(!(error instanceof Error&&error.name==='ConditionalCheckFailedException'))throw error});
     const final=await client.send(new GetCommand({TableName:tableName,Key:{pk:SINGLETON_PK,sk:SINGLETON_SK}}));
     const finalOrg=await dynamoStore.organizationById(final.Item?.orgId as string);
@@ -64,12 +64,12 @@ export const dynamoStore={
     const r=await client.send(new GetCommand({TableName:tableName,Key:{pk:`ORG#${orgId}`,sk:`MEMBER#${userId}`}}));
     return (r.Item as OrgMembership)??null;
   },
-  async membersOfOrg(orgId:string):Promise<{membership:OrgMembership;user:GuardianUser}[]>{
+  async membersOfOrg(orgId:string):Promise<{membership:OrgMembership;user:GuardScaleUser}[]>{
     await ensureTable();
     const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',ExpressionAttributeValues:{':pk':`ORG#${orgId}`,':prefix':'MEMBER#'}}));
     const memberships=(r.Items??[]) as OrgMembership[];
     const users=await Promise.all(memberships.map(m=>dynamoStore.userById(m.userId)));
-    return memberships.map((membership,i)=>({membership,user:users[i]})).filter((x):x is{membership:OrgMembership;user:GuardianUser}=>!!x.user);
+    return memberships.map((membership,i)=>({membership,user:users[i]})).filter((x):x is{membership:OrgMembership;user:GuardScaleUser}=>!!x.user);
   },
   async orgsForUser(userId:string):Promise<{membership:OrgMembership;org:Organization}[]>{
     await ensureTable();
@@ -116,27 +116,27 @@ export const dynamoStore={
     const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',FilterExpression:'serverId=:sid',ExpressionAttributeValues:{':pk':`ORG#${tenant}`,':prefix':'INCIDENT#',':sid':serverId}}));
     return (r.Items??[]) as IncidentRecord[];
   },
-  async putEvent(v:GuardianEvent){
+  async putEvent(v:GuardScaleEvent){
     await ensureTable();
     const ttl=Math.floor(Date.now()/1000)+7*24*60*60;
     await client.send(new PutCommand({TableName:tableName,Item:{pk:`NODE#${v.serverId}`,sk:`EVENT#${v.at}#${randomUUID()}`,ttl,...v}}));
   },
-  async eventsForNode(_tenant:string,serverId:string,limit=200):Promise<GuardianEvent[]>{
+  async eventsForNode(_tenant:string,serverId:string,limit=200):Promise<GuardScaleEvent[]>{
     await ensureTable();
     const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',ExpressionAttributeValues:{':pk':`NODE#${serverId}`,':prefix':'EVENT#'},ScanIndexForward:false,Limit:limit}));
-    return (r.Items??[]) as GuardianEvent[];
+    return (r.Items??[]) as GuardScaleEvent[];
   },
-  async userByName(username:string):Promise<GuardianUser|null>{
+  async userByName(username:string):Promise<GuardScaleUser|null>{
     await ensureTable();
     const r=await client.send(new QueryCommand({TableName:tableName,IndexName:'GSI1',KeyConditionExpression:'gsi1pk=:pk',ExpressionAttributeValues:{':pk':`USERNAME#${username.toLowerCase()}`}}));
-    return (r.Items?.[0] as GuardianUser)??null;
+    return (r.Items?.[0] as GuardScaleUser)??null;
   },
-  async userById(id:string):Promise<GuardianUser|null>{
+  async userById(id:string):Promise<GuardScaleUser|null>{
     await ensureTable();
     const r=await client.send(new GetCommand({TableName:tableName,Key:{pk:`USER#${id}`,sk:`USER#${id}`}}));
-    return (r.Item as GuardianUser)??null;
+    return (r.Item as GuardScaleUser)??null;
   },
-  async putUser(v:GuardianUser,passwordHash?:string){
+  async putUser(v:GuardScaleUser,passwordHash?:string){
     await ensureTable();
     await client.send(new PutCommand({TableName:tableName,Item:{pk:`USER#${v.id}`,sk:`USER#${v.id}`,gsi1pk:`USERNAME#${v.username.toLowerCase()}`,gsi1sk:`USERNAME#${v.username.toLowerCase()}`,...v}}));
     if(passwordHash)await client.send(new PutCommand({TableName:tableName,Item:{pk:`USER#${v.id}`,sk:'PASSWORD',hash:passwordHash}}));

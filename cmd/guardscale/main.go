@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/guardian-us/guardian/internal/config"
-	"github.com/guardian-us/guardian/internal/incidents"
-	"github.com/guardian-us/guardian/internal/replay"
+	"github.com/techcto/guardscale/internal/config"
+	"github.com/techcto/guardscale/internal/incidents"
+	"github.com/techcto/guardscale/internal/replay"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -25,7 +25,7 @@ func main() {
 	case "test-config":
 		withConfig(os.Args[2:], func(c config.Config) { fmt.Println("configuration valid") })
 	case "health":
-		fmt.Println(`{"status":"ok","component":"guardian"}`)
+		fmt.Println(`{"status":"ok","component":"guardscale"}`)
 	case "status":
 		withConfig(os.Args[2:], status)
 	case "incidents":
@@ -44,7 +44,7 @@ func main() {
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "guardian run|status|health|test-config|incidents|diagnostics|replay <apache-log>")
+	fmt.Fprintln(os.Stderr, "guardscale run|status|health|test-config|incidents|diagnostics|replay <apache-log>")
 }
 func withConfig(a []string, fn func(config.Config)) {
 	f := flag.NewFlagSet("config", flag.ExitOnError)
@@ -118,12 +118,12 @@ func run(a []string) {
 	withConfig(a, func(c config.Config) {
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
-		slog.Info("guardian started", "server_id", c.Server.ID)
+		slog.Info("guardscale started", "server_id", c.Server.ID)
 		<-ctx.Done()
-		slog.Info("guardian stopped")
+		slog.Info("guardscale stopped")
 	})
 }
-func fatal(e error) { fmt.Fprintln(os.Stderr, "guardian:", e); os.Exit(1) }
+func fatal(e error) { fmt.Fprintln(os.Stderr, "guardscale:", e); os.Exit(1) }
 
 var _ = context.Background
 var _ = filepath.Join

@@ -1,4 +1,4 @@
-// Package config loads and strictly validates Guardian's dependency-free YAML subset.
+// Package config loads and strictly validates GuardScale's dependency-free YAML subset.
 package config
 
 import (
@@ -50,7 +50,7 @@ func Default() Config {
 	return Config{
 		Detection:  Detection{Warning504Percent: 2, Critical504Percent: 10, Emergency504Percent: 30, TrafficMultiplierWarning: 5, ExpensiveQueryParameters: []string{"table_filter"}},
 		Protection: Protection{DryRun: true, DefaultTTLSeconds: 300},
-		Storage:    Storage{StateDir: "./guardian-state", MaxEvidenceLines: 500, MaxIncidents: 20},
+		Storage:    Storage{StateDir: "./guardscale-state", MaxEvidenceLines: 500, MaxIncidents: 20},
 	}
 }
 
