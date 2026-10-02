@@ -5,17 +5,61 @@ GUARDSCALE_URL="${GUARDSCALE_URL:-https://guardscale.org}"
 GUARDSCALE_ASSET_BASE="${GUARDSCALE_ASSET_BASE:-https://guardscale.s3.us-east-1.amazonaws.com/agent/latest}"
 INSTALL_ONLY="${INSTALL_ONLY:-0}"
 
+usage() {
+  cat <<'EOF'
+Usage: sudo env GUARDSCALE_ENROLLMENT_KEY='<tenant>.<token>' bash install-agent.sh
+
+Optional overrides: GUARDSCALE_NODE_ID, GUARDSCALE_AGENT_ID, GUARDSCALE_URL,
+GUARDSCALE_ASSET_BASE. EC2 instance identity is detected automatically.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --enrollment-key) GUARDSCALE_ENROLLMENT_KEY="${2:-}"; shift 2 ;;
+    --help|-h) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
 case "$(uname -m)" in
   x86_64) agent_arch=amd64 ;;
   aarch64|arm64) agent_arch=arm64 ;;
   *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
 esac
 
+instance_id() {
+  local imds_token value
+  imds_token="$(curl -fsS --connect-timeout 1 --max-time 2 -X PUT \
+    -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' \
+    http://169.254.169.254/latest/api/token 2>/dev/null || true)"
+  if [ -n "$imds_token" ]; then
+    value="$(curl -fsS --connect-timeout 1 --max-time 2 \
+      -H "X-aws-ec2-metadata-token: $imds_token" \
+      http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null || true)"
+    if [ -n "$value" ]; then printf '%s' "$value"; return; fi
+  fi
+  if [ -s /etc/machine-id ]; then
+    printf 'machine-%s' "$(sha256sum /etc/machine-id | cut -c1-16)"
+  else
+    printf 'host-%s' "$(hostname | sha256sum | cut -c1-16)"
+  fi
+}
+
 if [ "$INSTALL_ONLY" != "1" ]; then
-  : "${GUARDSCALE_TENANT_ID:?Set GUARDSCALE_TENANT_ID from Nodes > Add node.}"
-  : "${GUARDSCALE_AGENT_ID:?Set GUARDSCALE_AGENT_ID from Nodes > Add node.}"
-  : "${GUARDSCALE_NODE_ID:?Set GUARDSCALE_NODE_ID from Nodes > Add node.}"
-  : "${GUARDSCALE_ENROLLMENT_TOKEN:?Set GUARDSCALE_ENROLLMENT_TOKEN from Nodes > Add node.}"
+  if [ -n "${GUARDSCALE_ENROLLMENT_KEY:-}" ]; then
+    case "$GUARDSCALE_ENROLLMENT_KEY" in
+      *.*) GUARDSCALE_TENANT_ID="${GUARDSCALE_ENROLLMENT_KEY%%.*}"; GUARDSCALE_ENROLLMENT_TOKEN="${GUARDSCALE_ENROLLMENT_KEY#*.}" ;;
+      *) echo "GUARDSCALE_ENROLLMENT_KEY is invalid." >&2; exit 2 ;;
+    esac
+  fi
+  : "${GUARDSCALE_TENANT_ID:?Set the enrollment key shown in Nodes > Add node.}"
+  : "${GUARDSCALE_ENROLLMENT_TOKEN:?Set the enrollment key shown in Nodes > Add node.}"
+  GUARDSCALE_NODE_ID="${GUARDSCALE_NODE_ID:-$(instance_id)}"
+  GUARDSCALE_AGENT_ID="${GUARDSCALE_AGENT_ID:-agent-${GUARDSCALE_NODE_ID}}"
+  case "$GUARDSCALE_TENANT_ID:$GUARDSCALE_NODE_ID:$GUARDSCALE_AGENT_ID" in
+    *[!a-zA-Z0-9._:-]*) echo "Derived identity contains unsupported characters." >&2; exit 2 ;;
+  esac
 fi
 
 work_dir="$(mktemp -d)"
@@ -52,3 +96,4 @@ printf '%s' "$GUARDSCALE_ENROLLMENT_TOKEN" > /etc/guardscale/enrollment.token
 systemctl daemon-reload
 systemctl enable --now guardscale
 systemctl --no-pager --full status guardscale
+echo "GuardScale enrolled node $GUARDSCALE_NODE_ID with agent $GUARDSCALE_AGENT_ID."
