@@ -46,9 +46,9 @@ For an existing Linux EC2 instance, open **Nodes → Add node** and use the gene
 
 ```sh
 curl -fsSLo /tmp/install-guardscale.sh https://guardscale.s3.us-east-1.amazonaws.com/agent/latest/install-agent.sh
-sudo env GUARDSCALE_TENANT_ID='<tenant-id>' GUARDSCALE_AGENT_ID='<agent-id>' GUARDSCALE_NODE_ID='<node-id>' GUARDSCALE_ENROLLMENT_TOKEN='<enrollment-token>' bash /tmp/install-guardscale.sh
+sudo bash /tmp/install-guardscale.sh --enrollment-key '<tenant-id>.<enrollment-token>'
 ```
 
-The running agent sends a heartbeat every 30 seconds and at most one sanitized request signal per second. Raw log lines, query values, client IPs, referers, and user-agent strings stay on the monitored node.
+The command is reusable across a fleet. On EC2, the installer uses IMDSv2 to derive a stable node ID from the instance ID and creates the agent ID automatically; non-EC2 Linux hosts use a one-way machine identity. Architecture is detected automatically. The running agent sends a heartbeat every 30 seconds and at most one sanitized request signal per second. Raw log lines, query values, client IPs, referers, and user-agent strings stay on the monitored node.
 
 See [architecture](docs/architecture.md), [security model](docs/security-model.md), [contributing](CONTRIBUTING.md), and [commercial licensing](COMMERCIAL-LICENSE.md).

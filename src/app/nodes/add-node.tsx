@@ -2,20 +2,14 @@
 
 import {useEffect,useMemo,useState} from 'react';
 
-const safeId=(prefix:string)=>`${prefix}-${crypto.randomUUID().slice(0,8)}`;
-const clean=(value:string)=>value.replace(/[^a-zA-Z0-9._-]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,64);
-
 export default function AddNode({nodeCount,onAdded}:{nodeCount:number;onAdded:()=>void}){
-  const [open,setOpen]=useState(false),[agentId,setAgentId]=useState(''),[serverId,setServerId]=useState(''),[tagsInput,setTagsInput]=useState('');
-  const [platform,setPlatform]=useState<'amd64'|'arm64'>('amd64'),[copied,setCopied]=useState('');
+  const [open,setOpen]=useState(false),[copied,setCopied]=useState('');
   const [enrollment,setEnrollment]=useState<{tenantId:string;enrollmentToken:string}|null>(null),[error,setError]=useState('');
   const [serverLimit,setServerLimit]=useState<number|null>(null);
   useEffect(()=>{let active=true;fetch('/api/v1/billing/plan').then(r=>r.ok?r.json():null).then(data=>{if(active&&data)setServerLimit(data.serverLimit)});return()=>{active=false}},[]);
   const atLimit=serverLimit!==null&&nodeCount>=serverLimit;
   async function begin(){
     if(atLimit){setOpen(true);return}
-    if(!agentId)setAgentId(safeId('agent'));
-    if(!serverId)setServerId(safeId('node'));
     setError('');
     const r=await fetch('/api/v1/nodes/enrollment');
     if(!r.ok){setError('Unable to issue an enrollment credential for this account.');setOpen(true);return}
@@ -23,18 +17,14 @@ export default function AddNode({nodeCount,onAdded}:{nodeCount:number;onAdded:()
     setOpen(true);
   }
   const commands=useMemo(()=>{
-    const agent=clean(agentId)||'<agent-id>',server=clean(serverId)||'<node-id>';
-    const tags=tagsInput.split(',').map(t=>clean(t)).filter(Boolean);
-    const tagsJson=tags.length?`,"tags":[${tags.map(t=>`"${t}"`).join(',')}]`:'';
     const base='https://guardscale.s3.us-east-1.amazonaws.com/agent/latest';
     const tenant=enrollment?.tenantId??'<tenant-id>',token=enrollment?.enrollmentToken??'<enrollment-token-from-your-deployment-secret>';
     return {
-      install:`curl -fsSLo guardscale '${base}/guardscale-linux-${platform}'\nsudo install -m 0755 guardscale /usr/local/bin/guardscale\nsudo install -d -m 0750 /etc/guardscale /var/lib/guardscale\ncurl -fsSLo /tmp/guardscale.service '${base}/guardscale.service'\nsudo install -m 0644 /tmp/guardscale.service /etc/systemd/system/guardscale.service\ncurl -fsSLo /etc/guardscale/config.example.yaml '${base}/config.example.yaml'`,
-      config:`sudo cp /etc/guardscale/config.example.yaml /etc/guardscale/config.yaml\nsudo sed -i -e 's/server-example-1/${server}/' -e 's/tenant-example/${tenant}/' -e 's/agent-example-1/${agent}/' /etc/guardscale/config.yaml\n# Confirm logs.apache_access matches this host (Amazon Linux: /var/log/httpd/access_log).\nsudo guardscale test-config --config /etc/guardscale/config.yaml`,
-      credential:`sudo install -m 0600 /dev/null /etc/guardscale/enrollment.token\nprintf '%s' '${token}' | sudo tee /etc/guardscale/enrollment.token >/dev/null`,
-      enroll:`curl --fail-with-body -X POST "${typeof window==='undefined'?'http://localhost':window.location.origin}/api/v1/agents/heartbeat" \\\n  -H "Authorization: Bearer ${tenant}.${agent}.${token}" \\\n  -H 'Content-Type: application/json' \\\n  --data '{"server_id":"${server}"${tagsJson}}'\nsudo systemctl daemon-reload\nsudo systemctl enable --now guardscale`,
+      bootstrap:`curl -fsSLo /tmp/install-guardscale.sh '${base}/install-agent.sh'\nsudo bash /tmp/install-guardscale.sh --enrollment-key '${tenant}.${token}'`,
+      verify:`sudo systemctl --no-pager --full status guardscale\nsudo journalctl -u guardscale -n 100 --no-pager\nsudo journalctl -u guardscale -f`,
+      identity:`sudo grep -E '^(  id:|  agent_id:)' /etc/guardscale/config.yaml\ncurl -fsS http://localhost/ >/dev/null || true\n# Activity and heartbeat should appear on this node's detail page within 30 seconds.`,
     };
-  },[agentId,serverId,tagsInput,platform,enrollment]);
+  },[enrollment]);
   async function copy(name:string,value:string){await navigator.clipboard.writeText(value);setCopied(name);setTimeout(()=>setCopied(''),1600)}
   function close(){setOpen(false);onAdded()}
   return <><button className="button primary" onClick={begin}>Add node</button>{open&&<div className="g-modal-backdrop" role="presentation" onMouseDown={close}><section className="g-modal" role="dialog" aria-modal="true" aria-labelledby="add-node-title" onMouseDown={e=>e.stopPropagation()}>
@@ -44,12 +34,11 @@ export default function AddNode({nodeCount,onAdded}:{nodeCount:number;onAdded:()
       <a className="button primary" href="/settings/billing">Upgrade plan</a>
     </>:<>
     {error&&<div className="notice"><strong>Enrollment unavailable</strong><span>{error}</span></div>}
-    <div className="notice"><strong>Outbound-only enrollment</strong><span>This enrollment credential is scoped to your organization. Keep it in a secret manager or root-only environment. Never paste it into source control or screenshots.</span></div>
-    <div className="form-grid"><Field label="Node ID" value={serverId} set={setServerId}/><Field label="Agent ID" value={agentId} set={setAgentId}/><label>Tags (optional, comma-separated)<input value={tagsInput} placeholder="web-tier, prod, us-east-1" onChange={e=>setTagsInput(e.target.value)}/></label><label>Linux architecture<select value={platform} onChange={e=>setPlatform(e.target.value as 'amd64'|'arm64')}><option value="amd64">x86_64 / amd64</option><option value="arm64">ARM64</option></select></label></div>
-    <ol className="steps"><Step number="1" title="Download and install" command={commands.install} copied={copied==='install'} onCopy={()=>copy('install',commands.install)}/><Step number="2" title="Configure log access" command={commands.config} copied={copied==='config'} onCopy={()=>copy('config',commands.config)}/><Step number="3" title="Store enrollment credential" command={commands.credential} copied={copied==='credential'} onCopy={()=>copy('credential',commands.credential)}/><Step number="4" title="Enroll and start agent" command={commands.enroll} copied={copied==='enroll'} onCopy={()=>copy('enroll',commands.enroll)}/></ol>
-    <p className="muted small">Confirm the configured log paths are readable, then use <code>journalctl -u guardscale</code> to inspect startup. The node appears in the list below after its first heartbeat.</p>
+    <div className="notice"><strong>Fleet-ready enrollment</strong><span>Use this same command on one instance or thousands. Each EC2 instance derives a stable node ID from IMDSv2 and creates its own agent ID. The installer also detects amd64 or arm64 automatically.</span></div>
+    <div className="notice"><strong>Protect this command</strong><span>The enrollment key is scoped to your organization. Store it in your deployment secret manager and never place it in an AMI, source control, build log, or screenshot.</span></div>
+    <ol className="steps"><Step number="1" title="Copy, paste, and run" command={commands.bootstrap} copied={copied==='bootstrap'} onCopy={()=>copy('bootstrap',commands.bootstrap)}/><Step number="2" title="Verify service and follow logs" command={commands.verify} copied={copied==='verify'} onCopy={()=>copy('verify',commands.verify)}/><Step number="3" title="Confirm identity and live activity" command={commands.identity} copied={copied==='identity'} onCopy={()=>copy('identity',commands.identity)}/></ol>
+    <p className="muted small">The service starts automatically and survives reboot. GuardScale reports a heartbeat every 30 seconds and sends at most one sanitized activity signal per second. Raw logs remain on the node.</p>
     </>}
   </section></div>}</>
 }
-function Field({label,value,set,placeholder}:{label:string;value:string;set:(v:string)=>void;placeholder?:string}){return <label>{label}<input value={value} placeholder={placeholder} onChange={e=>set(clean(e.target.value))}/></label>}
 function Step({number,title,command,copied,onCopy}:{number:string;title:string;command:string;copied:boolean;onCopy:()=>void}){return <li><div className="step-title"><span>{number}</span><strong>{title}</strong><button className="copy-button" onClick={onCopy}>{copied?'Copied':'Copy'}</button></div><pre><code>{command}</code></pre></li>}
