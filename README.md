@@ -42,4 +42,13 @@ Incident bundles are bounded by `storage.max_evidence_lines`. Query values and r
 
 Install the binary at `/usr/local/bin/guardscale`, configuration at `/etc/guardscale/config.yaml`, then install `systemd/guardscale.service`. Its hardening permits only the state directory; future opt-in protection will require separately documented privileges.
 
+For an existing Linux EC2 instance, open **Nodes → Add node** and use the generated values with the checksum-verifying bootstrap installer:
+
+```sh
+curl -fsSLo /tmp/install-guardscale.sh https://guardscale.s3.us-east-1.amazonaws.com/agent/latest/install-agent.sh
+sudo env GUARDSCALE_TENANT_ID='<tenant-id>' GUARDSCALE_AGENT_ID='<agent-id>' GUARDSCALE_NODE_ID='<node-id>' GUARDSCALE_ENROLLMENT_TOKEN='<enrollment-token>' bash /tmp/install-guardscale.sh
+```
+
+The running agent sends a heartbeat every 30 seconds and at most one sanitized request signal per second. Raw log lines, query values, client IPs, referers, and user-agent strings stay on the monitored node.
+
 See [architecture](docs/architecture.md), [security model](docs/security-model.md), [contributing](CONTRIBUTING.md), and [commercial licensing](COMMERCIAL-LICENSE.md).

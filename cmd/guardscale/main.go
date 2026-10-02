@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/techcto/guardscale/internal/agentruntime"
 	"github.com/techcto/guardscale/internal/config"
 	"github.com/techcto/guardscale/internal/incidents"
 	"github.com/techcto/guardscale/internal/replay"
@@ -119,7 +120,9 @@ func run(a []string) {
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 		slog.Info("guardscale started", "server_id", c.Server.ID)
-		<-ctx.Done()
+		if err := agentruntime.Run(ctx, c); err != nil {
+			fatal(err)
+		}
 		slog.Info("guardscale stopped")
 	})
 }

@@ -119,11 +119,11 @@ export const dynamoStore={
   async putEvent(v:GuardScaleEvent){
     await ensureTable();
     const ttl=Math.floor(Date.now()/1000)+7*24*60*60;
-    await client.send(new PutCommand({TableName:tableName,Item:{pk:`NODE#${v.serverId}`,sk:`EVENT#${v.at}#${randomUUID()}`,ttl,...v}}));
+    await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${v.tenantId}#NODE#${v.serverId}`,sk:`EVENT#${v.at}#${randomUUID()}`,ttl,...v}}));
   },
-  async eventsForNode(_tenant:string,serverId:string,limit=200):Promise<GuardScaleEvent[]>{
+  async eventsForNode(tenant:string,serverId:string,limit=200):Promise<GuardScaleEvent[]>{
     await ensureTable();
-    const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',ExpressionAttributeValues:{':pk':`NODE#${serverId}`,':prefix':'EVENT#'},ScanIndexForward:false,Limit:limit}));
+    const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',ExpressionAttributeValues:{':pk':`ORG#${tenant}#NODE#${serverId}`,':prefix':'EVENT#'},ScanIndexForward:false,Limit:limit}));
     return (r.Items??[]) as GuardScaleEvent[];
   },
   async userByName(username:string):Promise<GuardScaleUser|null>{

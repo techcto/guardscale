@@ -1,6 +1,11 @@
 server:
   id: server-example-1
   tenant: tenant-example
+control_plane:
+  endpoint: https://guardscale.org
+  agent_id: agent-example-1
+  token_file: /etc/guardscale/enrollment.token
+  heartbeat_seconds: 30
 logs:
   apache_access: /var/log/httpd/access_log
   apache_error: /var/log/httpd/error_log
@@ -33,6 +38,6 @@ protection:
   dry_run: true
   default_ttl_seconds: 300
 storage:
-  state_dir: ./guardscale-state
+  state_dir: /var/lib/guardscale
   max_evidence_lines: 500
   max_incidents: 20

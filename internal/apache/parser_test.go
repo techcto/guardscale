@@ -19,6 +19,16 @@ func TestUntrustedSpoof(t *testing.T) {
 		t.Fatal(r.ClientIP)
 	}
 }
+func TestCombinedRemovesQueryValues(t *testing.T) {
+	p, _ := New(nil, nil)
+	r, err := p.ParseCombined(`203.0.113.1 - - [02/Oct/2026:12:00:00 +0000] "GET /secret?token=value HTTP/1.1" 200 123 "https://private.example/" "Raw User Agent"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Path != "/secret" {
+		t.Fatalf("path=%q", r.Path)
+	}
+}
 func FuzzGuardScale(f *testing.F) {
 	f.Add("bad")
 	p, _ := New(nil, nil)

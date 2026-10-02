@@ -1,6 +1,8 @@
 [Unit]
 Description=GuardScale infrastructure agent
 After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/guardscale/enrollment.token
 
 [Service]
 Type=simple

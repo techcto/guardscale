@@ -46,8 +46,9 @@ jobs:
           done
           cp configs/config.example.yaml dist/agent/config.example.yaml
           cp systemd/guardscale.service dist/agent/guardscale.service
+          cp devops/install-agent.sh dist/agent/install-agent.sh
           cd dist/agent
-          sha256sum guardscale-linux-* config.example.yaml guardscale.service > SHA256SUMS
+          sha256sum guardscale-linux-* config.example.yaml guardscale.service install-agent.sh > SHA256SUMS
       - name: Build and publish service images
         env: {VERSION: '${{ steps.version.outputs.value }}'}
         run: |

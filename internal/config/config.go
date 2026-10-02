@@ -12,17 +12,22 @@ import (
 )
 
 type Config struct {
-	Server     Server
-	Logs       Logs
-	Proxy      Proxy
-	Origin     Origin
-	Admin      Admin
-	Health     Health
-	Detection  Detection
-	Protection Protection
-	Storage    Storage
+	Server       Server
+	ControlPlane ControlPlane
+	Logs         Logs
+	Proxy        Proxy
+	Origin       Origin
+	Admin        Admin
+	Health       Health
+	Detection    Detection
+	Protection   Protection
+	Storage      Storage
 }
 type Server struct{ ID, Tenant string }
+type ControlPlane struct {
+	Endpoint, AgentID, TokenFile string
+	HeartbeatSeconds             int
+}
 type Logs struct{ ApacheAccess, ApacheError, PHPError, PHPSlow string }
 type Proxy struct{ TrustedCIDRs []string }
 type VerificationHeader struct{ Name, SecretFile string }
@@ -48,9 +53,10 @@ type Storage struct {
 
 func Default() Config {
 	return Config{
-		Detection:  Detection{Warning504Percent: 2, Critical504Percent: 10, Emergency504Percent: 30, TrafficMultiplierWarning: 5, ExpensiveQueryParameters: []string{"table_filter"}},
-		Protection: Protection{DryRun: true, DefaultTTLSeconds: 300},
-		Storage:    Storage{StateDir: "./guardscale-state", MaxEvidenceLines: 500, MaxIncidents: 20},
+		ControlPlane: ControlPlane{Endpoint: "https://guardscale.org", TokenFile: "/etc/guardscale/enrollment.token", HeartbeatSeconds: 30},
+		Detection:    Detection{Warning504Percent: 2, Critical504Percent: 10, Emergency504Percent: 30, TrafficMultiplierWarning: 5, ExpensiveQueryParameters: []string{"table_filter"}},
+		Protection:   Protection{DryRun: true, DefaultTTLSeconds: 300},
+		Storage:      Storage{StateDir: "./guardscale-state", MaxEvidenceLines: 500, MaxIncidents: 20},
 	}
 }
 
@@ -147,6 +153,16 @@ func setScalar(c *Config, sec, key, v string) error {
 		c.Server.ID = v
 	case "server.tenant":
 		c.Server.Tenant = v
+	case "control_plane.endpoint":
+		c.ControlPlane.Endpoint = strings.TrimRight(v, "/")
+	case "control_plane.agent_id":
+		c.ControlPlane.AgentID = v
+	case "control_plane.token_file":
+		c.ControlPlane.TokenFile = v
+	case "control_plane.heartbeat_seconds":
+		x, e := i()
+		c.ControlPlane.HeartbeatSeconds = x
+		return e
 	case "logs.apache_access":
 		c.Logs.ApacheAccess = v
 	case "logs.apache_error":
@@ -202,6 +218,9 @@ func unquote(v string) string { return strings.Trim(strings.TrimSpace(v), "\"'")
 func (c Config) Validate() error {
 	if c.Server.ID == "" || c.Server.Tenant == "" {
 		return fmt.Errorf("server.id and server.tenant are required")
+	}
+	if c.ControlPlane.HeartbeatSeconds < 5 {
+		return fmt.Errorf("control_plane.heartbeat_seconds must be at least 5")
 	}
 	if c.Logs.ApacheAccess == "" {
 		return fmt.Errorf("logs.apache_access is required")
