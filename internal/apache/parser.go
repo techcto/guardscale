@@ -116,7 +116,7 @@ func (p *Parser) ParseCombined(line string) (Request, error) {
 		return Request{}, fmt.Errorf("invalid combined prefix")
 	}
 	ts := strings.TrimPrefix(strings.Join(pre[3:], " "), "[")
-	ts = strings.TrimSuffix(ts, "] ")
+	ts = strings.TrimSpace(strings.TrimSuffix(ts, "]"))
 	t, e := time.Parse("02/Jan/2006:15:04:05 -0700", ts)
 	if e != nil {
 		return Request{}, e

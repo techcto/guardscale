@@ -12,6 +12,7 @@ import (
 // Follow handles truncation/replacement by reopening; missing optional logs are retried.
 func Follow(ctx context.Context, path string, fromStart bool, out chan<- string) error {
 	var offset int64
+	initialized := false
 	for {
 		select {
 		case <-ctx.Done():
@@ -29,8 +30,9 @@ func Follow(ctx context.Context, path string, fromStart bool, out chan<- string)
 			return e
 		}
 		st, _ := f.Stat()
-		if !fromStart && offset == 0 {
+		if !fromStart && !initialized {
 			offset = st.Size()
+			initialized = true
 		}
 		if offset > st.Size() {
 			offset = 0
