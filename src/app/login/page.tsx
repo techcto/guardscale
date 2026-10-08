@@ -1,2 +1,3 @@
+import MarketplaceSubscribe from '../marketplace-subscribe';
 import LoginForm from './login-form';
-export default function Login(){return <main className="min-vh-100 d-flex align-items-center justify-content-center"><section className="g-card login-card"><div className="eyebrow">GuardScale control plane</div><h1>Protect your infrastructure.</h1><p className="muted">Sign in with an existing account or create your GuardScale workspace.</p><LoginForm/></section></main>}
+export default function Login(){return <main className="min-vh-100 d-flex align-items-center justify-content-center"><section className="g-card login-card"><div className="eyebrow">GuardScale control plane</div><h1>Protect your infrastructure.</h1><p className="muted">Sign in with an existing account or create your GuardScale workspace.</p><LoginForm/><div className="mt-3"><MarketplaceSubscribe/></div></section></main>}

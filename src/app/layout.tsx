@@ -1,3 +1,4 @@
+import MarketplaceSubscribe from './marketplace-subscribe';
 import Link from 'next/link';import {cookies} from 'next/headers';import 'bootstrap/dist/css/bootstrap.min.css';import './globals.css';
 import {sessionCookie, verifySession} from '@/lib/session';
 import {store} from '@/lib/store';
@@ -19,7 +20,7 @@ export default async function Layout({children}:{children:React.ReactNode}){
         <Link href="/nodes">Nodes</Link>
         <Link href="/incidents">Incidents</Link>
         {activeOrg?.orgType!=='personal'&&<Link href="/users">Users</Link>}
-      </nav>
+      </nav><MarketplaceSubscribe/>
     </aside>
     <div className="position-fixed top-0 end-0 m-3 z-3">
       <UserMenu id={session.id} displayName={session.username} role={session.role}/>
