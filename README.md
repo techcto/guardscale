@@ -14,6 +14,8 @@ GuardScale correlates behavior at the origin: aggregate velocity, unique-URL tra
 
 ## Quick start
 
+The hosted application is [guardscale.org](https://guardscale.org). Its `guardscale-apphub` CloudFormation stack runs web, API, and worker services on the shared AppHub ECS Fargate platform. AWS credentials and root launch secrets are private; the local defaults below do not apply to the hosted installation.
+
 Start the complete local stack and open `http://localhost`:
 
 ```sh
@@ -50,5 +52,24 @@ sudo bash /tmp/install-guardscale.sh --enrollment-key '<tenant-id>.<enrollment-t
 ```
 
 The command is reusable across a fleet. On EC2, the installer uses IMDSv2 to derive a stable node ID from the instance ID and creates the agent ID automatically; non-EC2 Linux hosts use a one-way machine identity. Architecture is detected automatically. The running agent sends a heartbeat every 30 seconds and at most one sanitized request signal per second. Raw log lines, query values, client IPs, referers, and user-agent strings stay on the monitored node.
+
+## AWS Deployment
+
+Install, update, and delete application infrastructure only through formal CloudFormation templates and reviewed change sets. Do not delete individual AWS resources manually. Standalone installations and AppHub installations remain independent deployment choices.
+
+| Installation | Template | Purpose |
+| --- | --- | --- |
+| Standalone | `devops/cloudformation/guardscale.yaml` | Application and its own load balancer/cluster in an existing VPC |
+| Shared platform | `devops/cloudformation/guardscale-existing.yaml` | Attach services to an existing ECS cluster and listener |
+| Preserved-data relaunch | `devops/cloudformation/guardscale-apphub-relaunch.yaml` | Create replacement compute using existing storage |
+| Data ownership import | `devops/cloudformation/guardscale-apphub-owned-data.yaml` | Import retained storage into the replacement app stack |
+
+The running AppHub installation preserves the original DynamoDB table, evidence bucket, and queues. API and web listener priorities are 600 and 601. Launch parameters must include strong root credentials and a stable session secret; never commit filled parameter files. Certificate and DNS changes must be owned by CloudFormation. Keep the shared platform until all attached app stacks are removed.
+
+## Recovery And Operations
+
+Check `/api/health`, ECS service stability, healthy ALB targets, TLS, login, and agent heartbeats after deployment. Use the Nodes console to confirm enrollment and sanitized telemetry before enabling response actions.
+
+For a replacement stack, apply and verify storage retention first, launch and test new compute, switch traffic through a change set, delete the old stack through CloudFormation, and import its retained storage. Preserve root/session secrets and resource identifiers. The AppHub `RECOVERY.md` workflow and private configuration exporter document this procedure; configuration exports are not database or object-content backups. Scheduled data backups require a separate reviewed deployment and a tested restore path.
 
 See [architecture](docs/architecture.md), [security model](docs/security-model.md), [contributing](CONTRIBUTING.md), and [commercial licensing](COMMERCIAL-LICENSE.md).
