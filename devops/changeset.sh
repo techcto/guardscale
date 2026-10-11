@@ -32,8 +32,10 @@ DETAILS_JSON="$(jq -n \
 
 DETAILS_JSON_STRING="$(printf '%s' "$DETAILS_JSON" | jq 'tostring')"
 
+submit_marketplace() {
 aws marketplace-catalog start-change-set \
   --catalog AWSMarketplace \
+  --client-request-token "guardscale-$RELEASE_VERSION" \
   --change-set "[{
     \"ChangeType\": \"AddDeliveryOptions\",
     \"Entity\": {
@@ -42,3 +44,18 @@ aws marketplace-catalog start-change-set \
     },
     \"Details\": $DETAILS_JSON_STRING
   }]"
+}
+
+# A preceding Marketplace version can retain the product lock for ~50 minutes.
+# Retry only that transient conflict; report other failures immediately.
+submission_error="$(mktemp)"
+trap 'rm -f "$submission_error"' EXIT
+for attempt in $(seq 1 61); do
+  if submit_marketplace 2>"$submission_error"; then exit 0; fi
+  if ! grep -q 'ResourceInUseException' "$submission_error" || [ "$attempt" -eq 61 ]; then
+    cat "$submission_error" >&2
+    exit 1
+  fi
+  echo "Marketplace product is locked by a preceding submission; retry $attempt/60 in 60 seconds."
+  sleep 60
+done
