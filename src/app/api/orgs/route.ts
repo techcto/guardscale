@@ -7,6 +7,7 @@ export async function GET(req:NextRequest){
   return NextResponse.json(memberships.map(m=>({id:m.org.id,name:m.org.name,slug:m.org.slug,orgType:m.org.orgType,role:m.membership.role})));
 }
 export async function POST(req:NextRequest){
+  if(process.env.GUARDSCALE_DEPLOYMENT_MODE!=='saas')return NextResponse.json({error:'Organization creation is disabled in private mode'},{status:404});
   const session=await operator(req);
   if(!session||session.role!=='root')return NextResponse.json({error:'forbidden'},{status:403});
   const {name,contactEmail,contactPhone}=await req.json() as {name?:string;contactEmail?:string;contactPhone?:string};

@@ -4,6 +4,7 @@ export async function POST(req:NextRequest){
   if(!session)return NextResponse.json({error:'unauthorized'},{status:401});
   const {orgId}=await req.json() as {orgId?:string};
   if(!orgId)return NextResponse.json({error:'orgId is required'},{status:400});
+  if(process.env.GUARDSCALE_DEPLOYMENT_MODE!=='saas'&&orgId!==(await store.ensureSingleDeploymentOrg()).id)return NextResponse.json({error:'Organization switching is disabled in private mode'},{status:403});
   const org=await store.organizationById(orgId);
   if(!org)return NextResponse.json({error:'not found'},{status:404});
   let role:'root'|'admin'|'operator'|'viewer';

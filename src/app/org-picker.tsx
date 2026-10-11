@@ -20,7 +20,7 @@ export default function OrgPicker({activeOrgId,activeOrgName,isRoot}:{activeOrgI
     setBusy(true);
     const r=await fetch('/api/orgs/active',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({orgId})});
     setBusy(false);
-    if(r.ok)window.location.assign('/');
+    if(r.ok)window.location.assign('/console');
   }
   return <div className="org-picker position-relative" ref={ref}>
     <button className="org-picker-button" type="button" onClick={()=>{setOpen(o=>!o);if(!orgs)load()}} aria-haspopup="menu" aria-expanded={open}>

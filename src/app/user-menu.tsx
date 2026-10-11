@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import {useEffect, useRef, useState} from 'react';
 
-export default function UserMenu({id,displayName,role}:{id:string;displayName:string;role:string}){
+export default function UserMenu({id,displayName,role,canManageUsers=true}:{id:string;displayName:string;role:string;canManageUsers?:boolean}){
   const [open,setOpen]=useState(false);
   const ref=useRef<HTMLDivElement>(null);
   useEffect(()=>{
@@ -26,6 +26,7 @@ export default function UserMenu({id,displayName,role}:{id:string;displayName:st
       </div>
       <Link className="user-menu-item" href={`/users/${id}`} role="menuitem" onClick={()=>setOpen(false)}>Profile</Link>
       <Link className="user-menu-item" href="/settings" role="menuitem" onClick={()=>setOpen(false)}>Settings</Link>
+      {canManageUsers&&<Link className="user-menu-item" href="/users" role="menuitem" onClick={()=>setOpen(false)}>Users</Link>}
       <button className="user-menu-item user-menu-logout" role="menuitem" onClick={logout}>Log out</button>
     </div>}
   </div>;

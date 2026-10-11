@@ -1,2 +1,2 @@
-import HomeConsole from './home-console';
-export default function Home(){return <HomeConsole/>}
+import PublicHome from './public-home';
+export default function Home(){return <PublicHome saas={process.env.GUARDSCALE_DEPLOYMENT_MODE==='saas'}/>}

@@ -23,7 +23,7 @@ func TestRunSendsHeartbeatAndSanitizedActivity(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Error(err)
 		}
-		if r.URL.Path == "/api/v1/agents/events" {
+		if r.URL.Path == "/api/v1/agents/logs" {
 			events <- payload
 		}
 		w.WriteHeader(http.StatusAccepted)
@@ -40,6 +40,7 @@ func TestRunSendsHeartbeatAndSanitizedActivity(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := config.Default()
+	c.Storage.StateDir = filepath.Join(dir, "state")
 	c.Server.ID = "node-1"
 	c.Server.Tenant = "tenant-1"
 	c.ControlPlane.Endpoint = server.URL
@@ -64,18 +65,9 @@ func TestRunSendsHeartbeatAndSanitizedActivity(t *testing.T) {
 
 	select {
 	case event := <-events:
-		metadata := event["metadata"].(map[string]any)
-		if metadata["path"] != "/secret" {
-			t.Fatalf("path=%v", metadata["path"])
-		}
-		if _, ok := metadata["client_ip"]; ok {
-			t.Fatal("client IP leaked")
-		}
-		if _, ok := metadata["referer"]; ok {
-			t.Fatal("referer leaked")
-		}
-		if _, ok := metadata["user_agent"]; ok {
-			t.Fatal("user agent leaked")
+		entry := event["entries"].([]any)[0].(map[string]any)
+		if entry["message"] != "GET /secret status=200 duration_ms=0" {
+			t.Fatalf("unexpected message: %v", entry["message"])
 		}
 	case <-time.After(4 * time.Second):
 		t.Fatal("timed out waiting for sanitized event")

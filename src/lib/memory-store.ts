@@ -42,7 +42,7 @@ export const memoryStore={
   async incident(tenant:string,incidentId:string){return state.incidents.get(key(tenant,incidentId))??null},
   async incidents(tenant:string){return[...state.incidents.values()].filter(x=>x.tenantId===tenant)},
   async incidentsForNode(tenant:string,serverId:string){return[...state.incidents.values()].filter(x=>x.tenantId===tenant&&x.serverId===serverId)},
-  async putEvent(v:GuardScaleEvent){const k=key(v.tenantId,v.serverId),list=state.events.get(k)??[];list.push(v);if(list.length>MAX_EVENTS_PER_NODE)list.shift();state.events.set(k,list)},
+  async putEvent(v:GuardScaleEvent){const k=key(v.tenantId,v.serverId),list=state.events.get(k)??[];if(v.id&&list.some(e=>e.id===v.id))return;list.push(v);if(list.length>MAX_EVENTS_PER_NODE)list.shift();state.events.set(k,list)},
   async eventsForNode(tenant:string,serverId:string,limit=200){return(state.events.get(key(tenant,serverId))??[]).slice(-limit).reverse()},
   async userByName(username:string){return[...state.users.values()].find(x=>x.username.toLowerCase()===username.toLowerCase())??null},
   async userById(id:string){return state.users.get(id)??null},

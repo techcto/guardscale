@@ -20,7 +20,7 @@ export default function OrganizationsConsole(){
   }
   async function switchTo(orgId:string){
     const r=await fetch('/api/orgs/active',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({orgId})});
-    if(r.ok)window.location.assign('/');
+    if(r.ok)window.location.assign('/console');
   }
   function closeDrawer(){setOpen(false);setCreated(null);setError('')}
   return <>

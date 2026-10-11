@@ -10,7 +10,11 @@ export async function defaultActiveOrgForUser(userId:string):Promise<{orgId:stri
 }
 
 export async function defaultActiveOrgForRoot():Promise<string>{
-  if(process.env.GUARDSCALE_DEPLOYMENT_MODE!=='saas')return (await store.ensureSingleDeploymentOrg()).id;
-  const orgs=await store.organizations();
-  return orgs[0]?.id??'';
+  // A dedicated system workspace, never an arbitrary customer's first org.
+  const org=await store.ensureSingleDeploymentOrg();
+  if(!await store.membership(org.id,'root')){
+    const now=new Date().toISOString();
+    await store.putMembership({id:`root-${org.id}`,orgId:org.id,userId:'root',role:'admin',status:'active',createdAt:now,updatedAt:now});
+  }
+  return org.id;
 }
