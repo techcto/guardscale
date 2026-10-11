@@ -6,6 +6,8 @@ type Detail={node:Node;events:GuardScaleEvent[];incidents:IncidentRecord[]};
 export default function NodeDetailConsole({serverId}:{serverId:string}){
   const router=useRouter();
   const[detail,setDetail]=useState<Detail|null>(null),[error,setError]=useState('');
+  const[confirmDelete,setConfirmDelete]=useState(false),[confirmation,setConfirmation]=useState(''),[deleting,setDeleting]=useState(false),[deleteError,setDeleteError]=useState('');
+  async function remove(){setDeleting(true);setDeleteError('');try{const r=await fetch(`/api/v1/nodes/${encodeURIComponent(serverId)}`,{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({confirmation})});if(!r.ok)throw new Error((await r.json()).error??'Unable to delete server');router.push('/servers');router.refresh()}catch(e){setDeleteError(e instanceof Error?e.message:'Unable to delete server');setDeleting(false)}}
   useEffect(()=>{
     let active=true;
     function tick(){fetch(`/api/v1/nodes/${serverId}`).then(r=>r.ok?r.json().then(data=>{if(active)setDetail(data)}):Promise.resolve(active&&setError(r.status===404?'This server has not been found — it may not have completed its first heartbeat yet.':'Unable to load this server.')))}
@@ -34,6 +36,9 @@ export default function NodeDetailConsole({serverId}:{serverId:string}){
         {events.length?events.map((e,i)=><tr key={i}><td>{e.type}</td><td>{new Date(e.at).toLocaleString()}</td><td className="muted small">{e.metadata?Object.entries(e.metadata).map(([k,v])=>`${k}=${v}`).join(', '):'—'}</td></tr>)
         :<tr><td colSpan={3} className="empty-state"><strong>No activity yet.</strong><span>Events will appear here as the agent reports request and application signals.</span></td></tr>}
       </tbody></table></div>
+    </section>
+    <section className="g-card" style={{marginTop:24}}><h2>Server management</h2><p className="muted">Deleting removes this server from active views and prevents its existing server ID from rejoining. Past incidents and activity are retained until you purge collected data in Settings → Data. This does not terminate the machine or uninstall its agent.</p>
+    {!confirmDelete?<button className="button" onClick={()=>setConfirmDelete(true)}>Delete server…</button>:<div role="group" aria-label="Confirm server deletion"><p>Stop the agent on the host with <code>sudo systemctl disable --now guardscale</code>. Organization enrollment credentials are shared: deletion does not revoke that credential or prevent enrollment under a different ID.</p><label className="field">Type {serverId} to confirm<input value={confirmation} onChange={e=>setConfirmation(e.target.value)} autoComplete="off"/></label>{deleteError&&<p role="alert" className="form-error">{deleteError}</p>}<button className="button" disabled={deleting} onClick={()=>{setConfirmDelete(false);setConfirmation('')}}>Cancel</button> <button className="button" disabled={deleting||confirmation!==serverId} onClick={remove}>{deleting?'Deleting…':'Permanently remove server'}</button></div>}
     </section>
   </main>;
 }

@@ -1,6 +1,6 @@
 import{randomUUID}from'node:crypto';
 import{DynamoDBClient,CreateTableCommand,UpdateTimeToLiveCommand}from'@aws-sdk/client-dynamodb';
-import{DynamoDBDocumentClient,GetCommand,PutCommand,QueryCommand,DeleteCommand}from'@aws-sdk/lib-dynamodb';
+import{DynamoDBDocumentClient,GetCommand,PutCommand,QueryCommand,DeleteCommand,UpdateCommand}from'@aws-sdk/lib-dynamodb';
 import type{GuardScaleEvent,GuardScaleUser,IncidentRecord,Node,OrgMembership,Organization,OrgType,Product,Settings,Subscription}from'./model';
 import{defaultSettings}from'./model';
 import {hasPaidEntitlement} from './subscription-entitlement';
@@ -87,18 +87,36 @@ export const dynamoStore={
   },
   async upsertNode(v:Node){
     await ensureTable();
-    await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${v.tenantId}`,sk:`NODE#${v.serverId}`,...v}}));
+    await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${v.tenantId}`,sk:`NODE#${v.serverId}`,...v},ConditionExpression:'attribute_not_exists(deletedAt)'}));
   },
   async nodes(tenant:string):Promise<Node[]>{
     await ensureTable();
     const rows:Node[]=[];let cursor:Record<string,unknown>|undefined;
-    do{const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',ExpressionAttributeValues:{':pk':`ORG#${tenant}`,':prefix':'NODE#'},ExclusiveStartKey:cursor}));rows.push(...(r.Items??[]) as Node[]);cursor=r.LastEvaluatedKey}while(cursor);
+    do{const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',ExpressionAttributeValues:{':pk':`ORG#${tenant}`,':prefix':'NODE#'},ExclusiveStartKey:cursor}));rows.push(...((r.Items??[]) as Node[]).filter(n=>!n.deletedAt));cursor=r.LastEvaluatedKey}while(cursor);
     return rows;
   },
-  async node(tenant:string,serverId:string):Promise<Node|null>{
+  async nodeRecord(tenant:string,serverId:string):Promise<Node|null>{
     await ensureTable();
-    const r=await client.send(new GetCommand({TableName:tableName,Key:{pk:`ORG#${tenant}`,sk:`NODE#${serverId}`}}));
+    const r=await client.send(new GetCommand({TableName:tableName,Key:{pk:`ORG#${tenant}`,sk:`NODE#${serverId}`},ConsistentRead:true}));
     return (r.Item as Node)??null;
+  },
+  async node(tenant:string,serverId:string):Promise<Node|null>{const node=await dynamoStore.nodeRecord(tenant,serverId);return node&&!node.deletedAt?node:null},
+  async retireNode(tenant:string,serverId:string){await ensureTable();await client.send(new UpdateCommand({TableName:tableName,Key:{pk:`ORG#${tenant}`,sk:`NODE#${serverId}`},UpdateExpression:'SET deletedAt=:at, #status=:status',ExpressionAttributeNames:{'#status':'status'},ExpressionAttributeValues:{':at':new Date().toISOString(),':status':'offline'},ConditionExpression:'attribute_exists(pk)'}));return true},
+  async purgeCollectedData(tenant:string){
+    await ensureTable();const cutoff=new Date().toISOString();let events=0,incidents=0;
+    let cursor:Record<string,unknown>|undefined;
+    do{
+      const page=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk',ExpressionAttributeValues:{':pk':`ORG#${tenant}`},ExclusiveStartKey:cursor,ConsistentRead:true}));
+      for(const row of page.Items??[]){
+        if(String(row.sk).startsWith('INCIDENT#')&&String(row.updatedAt)<=cutoff){await client.send(new DeleteCommand({TableName:tableName,Key:{pk:row.pk,sk:row.sk},ConditionExpression:'updatedAt=:at',ExpressionAttributeValues:{':at':row.updatedAt}})).then(()=>incidents++).catch(error=>{if(error.name!=='ConditionalCheckFailedException')throw error})}
+        if(String(row.sk).startsWith('NODE#')){
+          let eventCursor:Record<string,unknown>|undefined;
+          do{const batch=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND sk BETWEEN :start AND :end',ExpressionAttributeValues:{':pk':`ORG#${tenant}#NODE#${row.serverId}`,':start':'EVENT#',':end':`EVENT#${cutoff}#\uffff`},ExclusiveStartKey:eventCursor,ConsistentRead:true}));for(const event of batch.Items??[]){await client.send(new DeleteCommand({TableName:tableName,Key:{pk:event.pk,sk:event.sk}}));events++}eventCursor=batch.LastEvaluatedKey}while(eventCursor);
+        }
+      }
+      cursor=page.LastEvaluatedKey;
+    }while(cursor);
+    return{events,incidents};
   },
   async putIncident(v:IncidentRecord){
     await ensureTable();

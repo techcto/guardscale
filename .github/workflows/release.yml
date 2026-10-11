@@ -68,6 +68,7 @@ jobs:
           aws s3 cp devops/cloudformation/guardscale-existing.yaml "s3://$GUARDSCALE_CFT_BUCKET/cloudformation/guardscale-existing-$VERSION.yaml" --content-type text/yaml --cache-control no-cache --no-progress
           aws s3 cp devops/cloudformation/guardscale-existing.yaml "s3://$GUARDSCALE_CFT_BUCKET/cloudformation/guardscale-existing.yaml" --content-type text/yaml --cache-control no-cache --no-progress
       - name: Submit AWS Marketplace changeset
+        timeout-minutes: 65
         if: ${{ vars.MP_AWS_MARKETPLACE_PRODUCT_ID != '' }}
         env:
           MP_AWS_MARKETPLACE_PRODUCT_ID: ${{ vars.MP_AWS_MARKETPLACE_PRODUCT_ID }}
