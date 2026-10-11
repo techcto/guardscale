@@ -24,11 +24,15 @@ type logEntry struct {
 }
 
 var secretValue = regexp.MustCompile(`(?i)(authorization|cookie|password|passwd|secret|token|api[_-]?key)\s*[:=]\s*[^\s,;]+`)
+var sensitiveLine = regexp.MustCompile(`(?i)(authorization|cookie|password|passwd|secret|token|api[_-]?key)\s*["']?\s*[:=]`)
 var queryValue = regexp.MustCompile(`([?&][a-zA-Z0-9_.-]+=)[^\s&"']+`)
 var emailValue = regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
 var ipValue = regexp.MustCompile(`\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b`)
 
 func redact(line string) string {
+	if sensitiveLine.MatchString(line) {
+		return "[credential-bearing log content withheld]"
+	}
 	line = secretValue.ReplaceAllString(line, "$1=[redacted]")
 	line = queryValue.ReplaceAllString(line, "${1}[redacted]")
 	line = emailValue.ReplaceAllString(line, "[email]")
