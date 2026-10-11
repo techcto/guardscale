@@ -2,6 +2,7 @@ package logtail
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -13,6 +14,7 @@ import (
 func Follow(ctx context.Context, path string, fromStart bool, out chan<- string) error {
 	var offset int64
 	initialized := false
+	var previous os.FileInfo
 	for {
 		select {
 		case <-ctx.Done():
@@ -29,7 +31,15 @@ func Follow(ctx context.Context, path string, fromStart bool, out chan<- string)
 			}
 			return e
 		}
-		st, _ := f.Stat()
+		st, err := f.Stat()
+		if err != nil {
+			f.Close()
+			return err
+		}
+		if previous != nil && !os.SameFile(previous, st) {
+			offset = 0
+		}
+		previous = st
 		if !fromStart && !initialized {
 			offset = st.Size()
 			initialized = true
@@ -39,6 +49,15 @@ func Follow(ctx context.Context, path string, fromStart bool, out chan<- string)
 		}
 		_, _ = f.Seek(offset, io.SeekStart)
 		s := bufio.NewScanner(f)
+		s.Buffer(make([]byte, 4096), 1024*1024)
+		// Do not emit incomplete writes. Track consumed lines, not the file
+		// descriptor position: Scanner reads ahead into its internal buffer.
+		s.Split(func(data []byte, atEOF bool) (int, []byte, error) {
+			if i := bytes.IndexByte(data, '\n'); i >= 0 {
+				return i + 1, data[:i], nil
+			}
+			return 0, nil, nil
+		})
 		for s.Scan() {
 			select {
 			case out <- s.Text():
@@ -46,9 +65,13 @@ func Follow(ctx context.Context, path string, fromStart bool, out chan<- string)
 				f.Close()
 				return ctx.Err()
 			}
-			offset, _ = f.Seek(0, io.SeekCurrent)
+			offset += int64(len(s.Bytes()) + 1)
 		}
+		scanErr := s.Err()
 		f.Close()
+		if scanErr != nil {
+			return scanErr
+		}
 		if !wait(ctx) {
 			return ctx.Err()
 		}

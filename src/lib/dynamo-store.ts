@@ -52,8 +52,9 @@ export const dynamoStore={
   },
   async organizations():Promise<Organization[]>{
     await ensureTable();
-    const r=await client.send(new QueryCommand({TableName:tableName,IndexName:'GSI1',KeyConditionExpression:'gsi1pk=:pk',ExpressionAttributeValues:{':pk':'ORG'}}));
-    return (r.Items??[]) as Organization[];
+    const rows:Organization[]=[];let cursor:Record<string,unknown>|undefined;
+    do{const r=await client.send(new QueryCommand({TableName:tableName,IndexName:'GSI1',KeyConditionExpression:'gsi1pk=:pk',ExpressionAttributeValues:{':pk':'ORG'},ExclusiveStartKey:cursor}));rows.push(...(r.Items??[]) as Organization[]);cursor=r.LastEvaluatedKey}while(cursor);
+    return rows;
   },
   async putMembership(v:OrgMembership){
     await ensureTable();
@@ -89,8 +90,9 @@ export const dynamoStore={
   },
   async nodes(tenant:string):Promise<Node[]>{
     await ensureTable();
-    const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',ExpressionAttributeValues:{':pk':`ORG#${tenant}`,':prefix':'NODE#'}}));
-    return (r.Items??[]) as Node[];
+    const rows:Node[]=[];let cursor:Record<string,unknown>|undefined;
+    do{const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',ExpressionAttributeValues:{':pk':`ORG#${tenant}`,':prefix':'NODE#'},ExclusiveStartKey:cursor}));rows.push(...(r.Items??[]) as Node[]);cursor=r.LastEvaluatedKey}while(cursor);
+    return rows;
   },
   async node(tenant:string,serverId:string):Promise<Node|null>{
     await ensureTable();
@@ -119,7 +121,7 @@ export const dynamoStore={
   async putEvent(v:GuardScaleEvent){
     await ensureTable();
     const ttl=Math.floor(Date.now()/1000)+7*24*60*60;
-    await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${v.tenantId}#NODE#${v.serverId}`,sk:`EVENT#${v.at}#${randomUUID()}`,ttl,...v}}));
+    await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${v.tenantId}#NODE#${v.serverId}`,sk:`EVENT#${v.at}#${v.id??randomUUID()}`,ttl,...v}}));
   },
   async eventsForNode(tenant:string,serverId:string,limit=200):Promise<GuardScaleEvent[]>{
     await ensureTable();
