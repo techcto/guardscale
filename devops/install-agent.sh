@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Never trace enrollment credentials, including when invoked by cloud-init.
+set +x
 
 GUARDSCALE_URL="${GUARDSCALE_URL:-https://guardscale.org}"
 GUARDSCALE_ASSET_BASE="${GUARDSCALE_ASSET_BASE:-https://guardscale.s3.us-east-1.amazonaws.com/agent/latest}"
@@ -11,12 +13,15 @@ Usage: sudo env GUARDSCALE_ENROLLMENT_KEY='<tenant>.<token>' bash install-agent.
 
 Optional overrides: GUARDSCALE_NODE_ID, GUARDSCALE_AGENT_ID, GUARDSCALE_URL,
 GUARDSCALE_ASSET_BASE. EC2 instance identity is detected automatically.
+For EC2 boot: --ssm-parameter /guardscale/ORG/enrollment (requires AWS_REGION,
+AWS CLI, and an instance role permitted to read that SecureString parameter).
 EOF
 }
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --enrollment-key) GUARDSCALE_ENROLLMENT_KEY="${2:-}"; shift 2 ;;
+    --ssm-parameter) GUARDSCALE_ENROLLMENT_SSM_PARAMETER="${2:-}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -39,6 +44,10 @@ instance_id() {
       http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null || true)"
     if [ -n "$value" ]; then printf '%s' "$value"; return; fi
   fi
+  if [ "${GUARDSCALE_REQUIRE_EC2_IDENTITY:-0}" = "1" ]; then
+    echo 'EC2 instance identity is unavailable; refusing fallback identity.' >&2
+    return 1
+  fi
   if [ -s /etc/machine-id ]; then
     printf 'machine-%s' "$(sha256sum /etc/machine-id | cut -c1-16)"
   else
@@ -47,14 +56,21 @@ instance_id() {
 }
 
 if [ "$INSTALL_ONLY" != "1" ]; then
+  if [ -n "${GUARDSCALE_ENROLLMENT_SSM_PARAMETER:-}" ]; then
+    if [ -n "${GUARDSCALE_ENROLLMENT_KEY:-}" ]; then echo 'Choose a direct key or SSM parameter, not both.' >&2; exit 2; fi
+    command -v aws >/dev/null || { echo 'AWS CLI is required for SSM enrollment.' >&2; exit 1; }
+    : "${AWS_REGION:=${AWS_DEFAULT_REGION:-}}"
+    : "${AWS_REGION:?Set AWS_REGION for the enrollment parameter.}"
+    GUARDSCALE_ENROLLMENT_KEY="$(aws ssm get-parameter --name "$GUARDSCALE_ENROLLMENT_SSM_PARAMETER" --with-decryption --region "$AWS_REGION" --query Parameter.Value --output text)"
+  fi
   if [ -n "${GUARDSCALE_ENROLLMENT_KEY:-}" ]; then
     case "$GUARDSCALE_ENROLLMENT_KEY" in
       *.*) GUARDSCALE_TENANT_ID="${GUARDSCALE_ENROLLMENT_KEY%%.*}"; GUARDSCALE_ENROLLMENT_TOKEN="${GUARDSCALE_ENROLLMENT_KEY#*.}" ;;
       *) echo "GUARDSCALE_ENROLLMENT_KEY is invalid." >&2; exit 2 ;;
     esac
   fi
-  : "${GUARDSCALE_TENANT_ID:?Set the enrollment key shown in Nodes > Add node.}"
-  : "${GUARDSCALE_ENROLLMENT_TOKEN:?Set the enrollment key shown in Nodes > Add node.}"
+  : "${GUARDSCALE_TENANT_ID:?Set the enrollment key shown in Servers > Connect server.}"
+  : "${GUARDSCALE_ENROLLMENT_TOKEN:?Set the enrollment key shown in Servers > Connect server.}"
   GUARDSCALE_NODE_ID="${GUARDSCALE_NODE_ID:-$(instance_id)}"
   GUARDSCALE_AGENT_ID="${GUARDSCALE_AGENT_ID:-agent-${GUARDSCALE_NODE_ID}}"
   case "$GUARDSCALE_TENANT_ID:$GUARDSCALE_NODE_ID:$GUARDSCALE_AGENT_ID" in
@@ -62,12 +78,17 @@ if [ "$INSTALL_ONLY" != "1" ]; then
   esac
 fi
 
+if [ "$INSTALL_ONLY" = "1" ] && [ -e /etc/guardscale/enrollment.token ]; then
+  echo 'Refusing AMI preparation: this machine already contains enrollment credentials. Use a clean image builder.' >&2
+  exit 1
+fi
+
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 binary="guardscale-linux-$agent_arch"
 
 for asset in "$binary" SHA256SUMS config.example.yaml guardscale.service; do
-  curl -fsSLo "$work_dir/$asset" "$GUARDSCALE_ASSET_BASE/$asset"
+  curl --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 -fsSLo "$work_dir/$asset" "$GUARDSCALE_ASSET_BASE/$asset"
 done
 (cd "$work_dir" && grep " $binary\$" SHA256SUMS | sha256sum -c -)
 
@@ -94,6 +115,7 @@ printf '%s' "$GUARDSCALE_ENROLLMENT_TOKEN" > /etc/guardscale/enrollment.token
 
 /usr/local/bin/guardscale test-config --config /etc/guardscale/config.yaml
 systemctl daemon-reload
-systemctl enable --now guardscale
+systemctl enable guardscale
+systemctl restart guardscale
 systemctl --no-pager --full status guardscale
-echo "GuardScale enrolled node $GUARDSCALE_NODE_ID with agent $GUARDSCALE_AGENT_ID."
+echo "GuardScale agent started for node $GUARDSCALE_NODE_ID. Registration is confirmed by the first accepted heartbeat in your console."
