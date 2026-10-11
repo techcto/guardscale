@@ -1,1 +1,2 @@
-import{NextResponse}from'next/server';import{store}from'@/lib/store';export async function GET(){return NextResponse.json((await store.products()).map(({stripePriceId,...product})=>({...product,available:Boolean(stripePriceId)})))}
+import{NextResponse}from'next/server';import{store}from'@/lib/store';
+export async function GET(){const configured=process.env.GUARDSCALE_DEPLOYMENT_MODE==='saas'&&Boolean(process.env.STRIPE_SECRET_KEY&&process.env.STRIPE_WEBHOOK_SECRET);return NextResponse.json((await store.products()).map(({stripePriceId,...product})=>({...product,available:product.monthlyPrice===0||Boolean(configured&&stripePriceId)})),{headers:{'Cache-Control':'no-store'}})}
