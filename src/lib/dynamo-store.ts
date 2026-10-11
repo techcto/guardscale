@@ -3,6 +3,7 @@ import{DynamoDBClient,CreateTableCommand,UpdateTimeToLiveCommand}from'@aws-sdk/c
 import{DynamoDBDocumentClient,GetCommand,PutCommand,QueryCommand,DeleteCommand}from'@aws-sdk/lib-dynamodb';
 import type{GuardScaleEvent,GuardScaleUser,IncidentRecord,Node,OrgMembership,Organization,OrgType,Product,Settings,Subscription}from'./model';
 import{defaultSettings}from'./model';
+import {hasPaidEntitlement} from './subscription-entitlement';
 
 const tableName=process.env.GUARDSCALE_TABLE??'guardscale-local';
 const client=DynamoDBDocumentClient.from(new DynamoDBClient({endpoint:process.env.GUARDSCALE_DYNAMODB_ENDPOINT}),{marshallOptions:{removeUndefinedValues:true}});
@@ -175,7 +176,7 @@ export const dynamoStore={
   },
   async activeSubscriptionForOrg(orgId:string):Promise<Subscription|null>{
     const rows=await dynamoStore.subscriptions(orgId);
-    const active=rows.filter(x=>x.status==='active'||x.status==='trialing');
+    const active=rows.filter(hasPaidEntitlement);
     return active.sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0]??null;
   },
   async putSubscription(v:Subscription){
