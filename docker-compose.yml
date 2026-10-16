@@ -55,6 +55,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
+      GUARDSCALE_DEPLOYMENT_MODE: ${GUARDSCALE_DEPLOYMENT_MODE:-on-premise}
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local

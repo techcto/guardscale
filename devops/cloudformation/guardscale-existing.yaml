@@ -449,6 +449,7 @@ Resources:
             - {Name: GUARDSCALE_ROOT_USER, Value: !Ref RootUsername}
             - {Name: GUARDSCALE_ROOT_PASSWORD, Value: !Ref RootPassword}
             - {Name: GUARDSCALE_SESSION_SECRET, Value: !Ref SessionSecret}
+            - {Name: GUARDSCALE_DEPLOYMENT_MODE, Value: !Ref DeploymentMode}
             - {Name: STRIPE_SECRET_KEY, Value: !Ref StripeSecretKey}
             - {Name: STRIPE_WEBHOOK_SECRET, Value: !Ref StripeWebhookSecret}
             - {Name: STRIPE_STARTER_PRICE_ID, Value: !Ref StripeStarterPriceId}
