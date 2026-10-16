@@ -1,0 +1,13 @@
+.gs-public .gs-public-hero{position:relative;isolation:isolate;display:block;max-width:none;overflow:hidden;padding:88px max(32px,calc((100% - 1296px)/2)) 150px;background:#f6faff}
+.gs-public-hero .gs-hero-copy{position:relative;z-index:1;max-width:740px;pointer-events:none}
+.gs-hero-copy a{pointer-events:auto}
+.gs-hero-log-background{position:absolute;inset:0;z-index:0}
+.gs-hero-log-stream{position:absolute;inset:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-start;padding:24px 4%;opacity:.38;pointer-events:none;mask-image:linear-gradient(to bottom,transparent,#000 10%,#000 85%,transparent)}
+.gs-hero-log-line{display:grid;grid-template-columns:80px 80px minmax(150px,1fr) 60px 100px;gap:24px;flex-shrink:0;padding:10px 0;border-bottom:1px solid #c5def0;color:#176594;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap}
+.gs-hero-log-background:after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,.98),rgba(255,255,255,.92) 40%,rgba(255,255,255,.18) 100%);pointer-events:none}
+.gs-hero-log-controls{position:absolute;z-index:2;bottom:24px;left:max(32px,calc((100% - 1296px)/2));right:max(32px,calc((100% - 1296px)/2));display:flex;align-items:center;flex-wrap:wrap;gap:12px 24px;font-size:12px;color:#345b78}
+.gs-hero-log-controls>div{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+.gs-hero-log-controls strong{color:#123450}
+.gs-hero-log-controls button{margin-left:auto;font-size:12px;padding:8px 14px}
+.gs-hero-log-controls p{flex-basis:100%;margin:0;font-size:11px;max-width:780px}
+@media(max-width:700px){.gs-public .gs-public-hero{padding:48px 24px 190px}.gs-public-hero .gs-hero-copy{max-width:none}.gs-hero-log-controls{left:24px;right:24px;bottom:20px}.gs-hero-log-line{gap:12px;font-size:11px;grid-template-columns:55px 45px minmax(100px,1fr) 30px 65px}.gs-hero-log-background:after{background:rgba(255,255,255,.9)}}

@@ -1,0 +1,85 @@
+name: guardscale-local-fixture
+services:
+  web:
+    profiles: [local-fixture]
+    build:
+      context: ../..
+      dockerfile: devops/local/Dockerfile.web
+    environment:
+      GUARDSCALE_LOCAL_FIXTURE: 'true'
+      GUARDSCALE_DEPLOYMENT_MODE: saas
+      GUARDSCALE_ROOT_USER: root
+      GUARDSCALE_DYNAMODB_ENDPOINT: http://database:8000
+      GUARDSCALE_TABLE: guardscale-local-fixture
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+    secrets: [root_password, session_secret]
+    ports: ['127.0.0.1:8183:3000']
+    depends_on: [database]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    networks: [fixture, publish]
+  database:
+    profiles: [local-fixture]
+    image: amazon/dynamodb-local:2.6.1
+    command: [-jar, DynamoDBLocal.jar, -sharedDb, -inMemory]
+    networks: [fixture]
+  enroll:
+    profiles: [local-fixture]
+    image: node:26-alpine
+    command: [node, /scripts/enroll.mjs]
+    environment:
+      GUARDSCALE_LOCAL_FIXTURE: 'true'
+      GUARDSCALE_FIXTURE_SITE_URL: http://localhost:8184
+    volumes:
+      - ./enroll.mjs:/scripts/enroll.mjs:ro
+      - ./verify.mjs:/scripts/verify.mjs:ro
+      - enrollment:/runtime
+    secrets: [root_password]
+    depends_on:
+      web: {condition: service_healthy}
+    networks: [fixture]
+  site:
+    profiles: [local-fixture]
+    build:
+      context: ../..
+      dockerfile: devops/local/Dockerfile.site
+    environment:
+      GUARDSCALE_LOCAL_FIXTURE: 'true'
+    volumes:
+      - enrollment:/runtime:ro
+      - sample_database:/var/lib/guardscale-demo
+    ports: ['127.0.0.1:8184:80']
+    depends_on:
+      enroll: {condition: service_completed_successfully}
+    cap_drop: [NET_RAW]
+    networks: [fixture, publish]
+  browser:
+    profiles: [local-tests]
+    build:
+      context: ../..
+      dockerfile: devops/local/Dockerfile.browser
+    environment:
+      GUARDSCALE_LOCAL_FIXTURE: 'true'
+    secrets: [root_password]
+    volumes:
+      - ./tests.mjs:/tests/tests.mjs:ro
+    depends_on:
+      site: {condition: service_started}
+    networks: [fixture]
+networks:
+  publish: {}
+  fixture:
+    internal: true
+volumes:
+  enrollment:
+  sample_database:
+secrets:
+  root_password:
+    file: .secrets/root-password
+  session_secret:
+    file: .secrets/session-secret

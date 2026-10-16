@@ -1,0 +1,13 @@
+.git
+.github
+.next
+node_modules
+devops/local/.secrets
+devops/local/artifacts
+devops/local/verified-results.json
+.aws
+playwright-report
+test-results
+.env
+.env.*
+*.log

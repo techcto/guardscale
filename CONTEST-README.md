@@ -1,6 +1,22 @@
 # GuardScale — AWS CDS Agentic AI Partner Hackathon
 
-## Copy-ready Devpost fields
+## Submission draft — not submission-ready
+
+### Requirements audit — October 9, 2026
+
+| Requirement | Status / remaining evidence |
+| --- | --- |
+| AWS-deployed AI solution | Blocked: no Bedrock/AgentCore inference call found in audited application/agent source. Implement, test and deploy a real AI workflow. AgentCore is recommended, not mandatory. |
+| Eligible runtime CDS service | SES and EUM Social send adapters exist; demonstrate actual configured delivery. Log mode and EUM Push do not qualify. |
+| Partner eligibility | Confirm APN registration, terms, authorized representative and team eligibility. |
+| New-project eligibility | Verify creation within September 14–October 28, 2026; disclose pre-existing code as required. Renaming a repository does not prove newness. |
+| ACE opportunity | Net-new qualifying opportunity within the window, with required campaign; provide ID privately. |
+| Submission artifacts | Pending: exported architecture, approximately three-minute public English video, working AI/CDS demo, deployed access/instructions, and free judge access through judging. |
+| Repository | AGPL-3.0 exists; verify submitted-revision source, assets, setup and judge access. |
+
+See [requirements](https://aws-cds-partner.devpost.com/) and [rules](https://aws-cds-partner.devpost.com/rules). Marketplace delivery is not a substitute for runtime evidence.
+
+## Devpost fields — complete after verification
 
 ### Project name
 
@@ -8,7 +24,7 @@
 
 ### Elevator pitch (under 200 characters)
 
-> GuardScale detects attacks and application failures, alerts teams via WhatsApp and email, and lets operators safely respond in real time.
+> GuardScale detects attacks and application failures, alerts teams via WhatsApp and email, and preserves bounded evidence. AI-assisted response is in development.
 
 ### About the project
 
@@ -16,23 +32,23 @@ Use the sections from **Origin story** through **Safety and responsible agentic 
 
 ### Built with (up to 25 tags)
 
-`Go`, `Next.js`, `React`, `TypeScript`, `Docker`, `AWS`, `Amazon ECS`, `AWS Fargate`, `Application Load Balancer`, `Amazon DynamoDB`, `Amazon S3`, `Amazon SQS`, `Amazon CloudWatch`, `Amazon SES`, `AWS End User Messaging Social`, `WhatsApp`, `Amazon Bedrock`, `Bedrock AgentCore`, `CloudFormation`, `GitHub Actions`, `Apache`, `PHP-FPM`, `Linux`, `systemd`, `nftables`
+`Go`, `Next.js`, `React`, `TypeScript`, `Docker`, `AWS`, `Amazon ECS`, `AWS Fargate`, `Application Load Balancer`, `Amazon DynamoDB`, `Amazon S3`, `Amazon SQS`, `Amazon CloudWatch`, `Amazon SES`, `AWS End User Messaging Social`, `WhatsApp`, `CloudFormation`, `GitHub Actions`, `Apache`, `PHP-FPM`, `Linux`, `systemd`, `nftables`
 
 ### Try it out links
 
 - Devpost submission: https://devpost.com/software/guardscale
-- Demo: `<DEPLOYED_DEMO_URL>`
-- Source: `<PUBLIC_REPOSITORY_URL>`
-- API health: `<DEPLOYED_DEMO_URL>/api/health`
+- Demo: `https://guardscale.org`
+- Source: `https://github.com/techcto/guardscale`
+- API health: `https://guardscale.org/api/health`
 
 ### Project media
 
-- Gallery images: dashboard overview, incident timeline, WhatsApp approval exchange, recovery result, and architecture diagram. Use synthetic data only and crop to a 3:2 ratio where practical.
+- Gallery images: dashboard overview, incident timeline, verified outbound notification delivery, and architecture diagram. Use synthetic data only and crop to a 3:2 ratio where practical.
 - Video demo: `<YOUTUBE_OR_VIMEO_URL>`
 
 ### Code repository access
 
-`<PUBLIC_REPOSITORY_URL>`
+`https://github.com/techcto/guardscale`
 
 Before submission, confirm the public repository has a visible OSI-approved `LICENSE` file and includes every runtime integration actually shown in the video.
 
@@ -48,16 +64,15 @@ Create this through AWS Partner Central ACE with marketing campaign code `AWS CD
 
 ### Which CDS services does the solution use?
 
-- AWS End User Messaging Social (WhatsApp)
-- Amazon Simple Email Service (SES)
+Select only services actually demonstrated at runtime. SES and AWS End User Messaging Social adapters exist, but delivery evidence remains to be recorded.
 
 ### Was WhatsApp the sole CDS service?
 
-`No` — the project uses WhatsApp and Amazon SES.
+Answer after verifying which services the submitted demo actually uses.
 
 ### Describe how AWS End User Messaging Social (WhatsApp) was used
 
-> GuardScale uses AWS End User Messaging Social as a two-way incident-response interface. It sends a concise, structured incident alert with request rate, failure rate, PHP saturation, and the detected behavioral pattern. An authenticated operator can reply with commands such as STATUS, DETAILS, PROTECT, EXTEND, RESTORE, or IGNORE. GuardScale maps a recognized reply to a predefined policy action; mutation requests require authorization, target validation, expiry, TTL, audit, and local-agent acceptance. Free-form questions are answered from redacted structured evidence through the AI layer, but neither WhatsApp nor AI can execute arbitrary shell commands. GuardScale sends follow-up recovery measurements through the same conversation.
+> GuardScale includes an outbound AWS End User Messaging Social adapter for structured incident alerts. Actual delivery must be verified before submitting this field. Opt-in Guardian source now includes bounded Bedrock inspection, trusted WhatsApp reply handling and temporary Protect execution. Local approval/block/expiry tests passed; live AI/CDS delivery still needs deployment verification. RESTORE/service restart tools are not implemented.
 
 ### Country fields
 
@@ -66,9 +81,9 @@ Create this through AWS Partner Central ACE with marketing campaign code `AWS CD
 
 ## The pitch
 
-GuardScale turns a production-origin incident into a two-way, policy-controlled conversation. A lightweight Go agent recognizes a coordinated agent swarm, preserves bounded forensic evidence, and sends a structured incident to an AWS control plane. GuardScale explains the incident through Amazon Bedrock/AgentCore, alerts an operator through AWS End User Messaging Social for WhatsApp, accepts an explicit `PROTECT` response, maps it to a predefined temporary action, verifies recovery, and delivers the forensic report through Amazon SES.
+GuardScale correlates origin telemetry, preserves bounded evidence and provides a tenant-scoped console with configurable outbound WhatsApp and SES adapters. AI explanation and policy-controlled response are planned, not completed.
 
-This project targets the [AWS Communication Developer Services Agentic AI Partner Hackathon](https://aws-cds-partner.devpost.com/), whose submission deadline is October 28, 2026 at 1:00 PM PDT. The challenge requires a deployed AI solution using at least one eligible AWS CDS service; GuardScale is designed to demonstrate both WhatsApp and SES, with Bedrock AgentCore as the conversational reasoning layer.
+Target: [AWS CDS Agentic AI Partner Hackathon](https://aws-cds-partner.devpost.com/), due October 28, 2026 at 1 PM PDT (4 PM EDT). The deployed-AI requirement is not yet established by the audited source.
 
 ## Origin story
 
@@ -78,15 +93,7 @@ GuardScale correlates the behavior the origin actually experiences. It combines 
 
 ## Three-minute demonstration
 
-1. Replay a synthetic distributed pagination swarm: traffic rises from 55 to 1,500 requests/minute while HTTP 504s peak at 65%.
-2. The Go agent correlates `TrafficSpike`, `DistributedCrawler`, `PaginationEnumeration`, `UniqueURLStorm`, `DirectOriginAccess`, `PHPSaturation`, `SlowStackStorm`, and `HTTPFailureSpike`.
-3. GuardScale freezes a bounded, redacted evidence bundle and sends the structured incident outbound.
-4. The AWS API acknowledges immediately and queues correlation work in SQS.
-5. The worker asks Bedrock/AgentCore to explain the evidence using structured, non-sensitive fields.
-6. An operator receives the incident through WhatsApp and replies `PROTECT`.
-7. GuardScale authenticates the operator, maps the message to an allowlisted action with a TTL, and sends a signed command. There is no arbitrary shell path.
-8. The local agent validates its own policy, applies or dry-runs the temporary protection, and reports the result.
-9. Recovery telemetry is returned through WhatsApp; Amazon SES sends the bounded forensic report; the dashboard shows the incident timeline.
+Record verified behavior: synthetic traffic replay, correlated incident, bounded evidence, console timeline and configured real CDS delivery. Add an actual deployed AI workflow before submission. Do not invent performance measurements or present simulated WhatsApp approvals as implemented functionality.
 
 ## AWS architecture
 
@@ -104,7 +111,6 @@ Application Load Balancer
                          │
                          ▼
                   guardscale-worker (ECS Fargate)
-                    ├── Bedrock / AgentCore
                     ├── AWS End User Messaging Social / WhatsApp
                     └── Amazon SES
 ```
@@ -113,8 +119,8 @@ CloudWatch receives platform logs and service health. GuardScale telemetry remai
 
 ## Safety and responsible agentic behavior
 
-- AI explains and recommends; policy authorizes mutations.
-- Commands are versioned, signed, nonce/expiry limited, audited, and allowlisted.
+- Phase 1 is detection-first; no cloud-directed mutation or AI inference is demonstrated.
+- Signed, expiring, allowlisted commands and AI-assisted decisions are future requirements.
 - The agent never exposes arbitrary shell execution.
 - Local policy may reject a cloud-approved action.
 - Automatic actions are disabled by default, dry-run first, and require TTL rollback.
@@ -124,7 +130,7 @@ CloudWatch receives platform logs and service health. GuardScale telemetry remai
 
 ## Measurable customer impact
 
-GuardScale is designed to reduce time-to-understanding from a manual cross-log investigation to one correlated incident timeline, reduce time-to-safe-action through a conversational approval path, and reduce recovery risk through evidence-first, reversible actions. Demo measurements compare detection latency, peak 504 rate, PHP slow-worker count, and time from operator approval to verified recovery.
+GuardScale is designed to reduce time-to-understanding from a manual cross-log investigation to one correlated incident timeline, reduce time-to-safe-action through a conversational approval path, and reduce recovery risk through evidence-first, reversible actions. Collect reproducible measured detection latency and error-rate results. Approval-to-recovery measurements require the response workflow first.
 
 ## Reproduce locally
 
@@ -145,13 +151,13 @@ go build -o bin/guardscale ./cmd/guardscale
 bin/guardscale test-config --config configs/config.example.yaml
 ```
 
-The local stack uses only synthetic identifiers and local service substitutes. AWS CDS, Bedrock/AgentCore, and production mutations must be explicitly configured; mock/log modes are the safe local defaults.
+The local stack uses only synthetic identifiers and local service substitutes. CDS adapters need explicit AWS configuration; log mode is the safe default. Environment variables alone do not implement Bedrock/AgentCore or response execution.
 
 ## Submission checklist
 
 - Public repository includes an OSI-approved license before submission.
 - Architecture diagram is exported from the architecture above.
-- Approximately three-minute demonstration video shows the complete conversational loop.
+- Approximately three-minute demonstration video shows actual implemented AI and CDS runtime behavior.
 - Deployed project URL or interaction instructions are supplied.
 - Runtime code demonstrates eligible AWS CDS usage.
 - WhatsApp submission text explains AWS End User Messaging Social usage.
@@ -161,3 +167,7 @@ The local stack uses only synthetic identifiers and local service substitutes. A
 ## Commercial path
 
 The open-source agent remains independently useful. Commercial value comes from hosted correlation, conversational response, AWS enrichment, longer retention, team workflows, enterprise policies, Marketplace delivery, and support. The architecture supports hosted SaaS and customer-hosted AWS deployment without putting cloud administrator credentials on monitored origins.
+
+## Guardian evaluation and limitations
+
+The PHP/Apache fixture includes reproducible Playwright checks for real log ingestion, newest-first views, scroll anchoring, pause/resume and public redaction. The disposable security tests exercise real detection → local alert audit → authenticated human approval → iptables/ipset block → kernel expiry/recovery, with operator/control-plane access preserved. See the [local testing guide](devops/local/README.md) for commands. Local-only alerts and runs without configured AI do not demonstrate live Bedrock/CDS delivery. The source includes the Guardian tool loop, scoped MCP response tools and disabled-by-default Auto Guardian policy; deployment and real-provider tests remain necessary.

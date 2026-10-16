@@ -1,0 +1,204 @@
+package agentruntime
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"net/netip"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"time"
+
+	"github.com/techcto/guardscale/internal/agentclient"
+	"github.com/techcto/guardscale/internal/apache"
+	"github.com/techcto/guardscale/internal/config"
+	"github.com/techcto/guardscale/internal/detection"
+	"github.com/techcto/guardscale/internal/uploader"
+)
+
+type candidate struct {
+	IP      string
+	Expires time.Time
+}
+type responder struct {
+	c          config.Config
+	client     agentclient.Client
+	requests   []apache.Request
+	candidates map[string]candidate
+	cooldown   map[string]time.Time
+}
+
+func newResponder(c config.Config, client agentclient.Client) *responder {
+	r := &responder{c: c, client: client, candidates: map[string]candidate{}, cooldown: map[string]time.Time{}}
+	b, err := os.ReadFile(filepath.Join(c.Storage.StateDir, "response-candidates.json"))
+	if err == nil {
+		_ = json.Unmarshal(b, &r.candidates)
+	}
+	return r
+}
+func (r *responder) add(request apache.Request) {
+	r.requests = append(r.requests, request)
+	if len(r.requests) > 1000 {
+		r.requests = r.requests[len(r.requests)-1000:]
+	}
+}
+func (r *responder) evaluate(ctx context.Context) {
+	now := time.Now().UTC()
+	recent := r.requests[:0]
+	for _, q := range r.requests {
+		if now.Sub(q.Time) < time.Minute {
+			recent = append(recent, q)
+		}
+	}
+	r.requests = recent
+	if len(recent) < 20 {
+		return
+	}
+	findings := detection.Evaluate(detection.Snapshot{Start: now.Add(-time.Minute), End: now, Requests: recent}, r.c)
+	if len(findings) == 0 {
+		return
+	}
+	counts := map[string]int{}
+	for _, q := range recent {
+		counts[q.ClientIP]++
+	}
+	var ip string
+	for address, n := range counts {
+		if n >= 20 && n > counts[ip] {
+			ip = address
+		}
+	}
+	if now.Before(r.cooldown[ip]) {
+		return
+	}
+	digest := sha256.Sum256([]byte(r.c.Server.ID + ip + now.String()))
+	id := hex.EncodeToString(digest[:16])
+	if ip != "" {
+		r.candidates[id] = candidate{IP: ip, Expires: now.Add(15 * time.Minute)}
+	}
+	for key, c := range r.candidates {
+		if now.After(c.Expires) {
+			delete(r.candidates, key)
+		}
+	}
+	if os.MkdirAll(r.c.Storage.StateDir, 0700) != nil {
+		return
+	}
+	b, _ := json.Marshal(r.candidates)
+	if os.WriteFile(filepath.Join(r.c.Storage.StateDir, "response-candidates.json"), b, 0600) != nil {
+		return
+	}
+	// Raw logs stay local; bounded findings and source context are private organization evidence.
+	payload := map[string]any{"id": id, "server_id": r.c.Server.ID, "state": "review", "started_at": now.Format(time.RFC3339Nano), "findings": findings}
+	if ip != "" {
+		payload["candidate_id"] = id
+		payload["source_ip"] = ip
+	}
+	if err := r.outbox().Enqueue("/api/v1/agents/incidents", payload); err != nil {
+		slog.Warn("incident spool failed", "incident_id", id)
+		return
+	}
+	r.cooldown[ip] = now.Add(5 * time.Minute)
+	for key, until := range r.cooldown {
+		if now.After(until) {
+			delete(r.cooldown, key)
+		}
+	}
+}
+func (r *responder) outbox() uploader.Queue {
+	return uploader.Queue{Dir: filepath.Join(r.c.Storage.StateDir, "incident-outbox"), Endpoint: r.c.ControlPlane.Endpoint, Token: r.client.Token, MaxItems: 100, Client: &http.Client{Timeout: 40 * time.Second}}
+}
+func (r *responder) deliver(ctx context.Context) {
+	tick := time.NewTicker(2 * time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			call, cancel := context.WithTimeout(ctx, 40*time.Second)
+			if err := r.outbox().Flush(call); err != nil && ctx.Err() == nil {
+				slog.Warn("incident upload deferred; bounded spool retained")
+			}
+			cancel()
+		}
+	}
+}
+func permittedTarget(address string, allowed []string) bool {
+	ip, err := netip.ParseAddr(address)
+	if err != nil || !ip.Is4() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return false
+	}
+	for _, s := range allowed {
+		p, e := netip.ParsePrefix(s)
+		if e == nil && p.Bits() >= 24 && p.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+func (r *responder) poll(ctx context.Context) {
+	commands, err := r.client.Commands(ctx)
+	if err != nil {
+		return
+	}
+	for _, command := range commands {
+		if command.Kind == "inspect_server" {
+			expiry, e := time.Parse(time.RFC3339Nano, command.ExpiresAt)
+			if e != nil || time.Now().After(expiry) {
+				_ = r.client.CommandResult(ctx, command.ID, "expired")
+				continue
+			}
+			result := map[string]string{"recent_requests": strconv.Itoa(len(r.requests)), "protection_enabled": strconv.FormatBool(r.c.Protection.Enabled && !r.c.Protection.DryRun)}
+			for source, path := range map[string]string{"apache_access": r.c.Logs.ApacheAccess, "apache_error": r.c.Logs.ApacheError, "php_error": r.c.Logs.PHPError, "php_slow": r.c.Logs.PHPSlow} {
+				f, e := os.Open(path)
+				if e != nil {
+					result[source] = "unavailable"
+				} else {
+					_ = f.Close()
+					result[source] = "readable"
+				}
+			}
+			_ = r.client.InspectionResult(ctx, command.ID, result)
+			continue
+		}
+		if command.Kind != "protect" || !r.c.Protection.Enabled || r.c.Protection.DryRun {
+			continue
+		}
+		c, ok := r.candidates[command.CandidateID]
+		expiry, e := time.Parse(time.RFC3339Nano, command.ExpiresAt)
+		ttl := int(time.Until(expiry).Seconds())
+		if e == nil && ttl < 1 {
+			_ = r.client.CommandResult(ctx, command.ID, "expired")
+			continue
+		}
+		if !ok || time.Now().After(c.Expires) || e != nil || ttl > 900 || !permittedTarget(c.IP, r.c.Protection.AllowedCIDRs) {
+			_ = r.client.CommandResult(ctx, command.ID, "rejected")
+			continue
+		}
+		// Kernel-enforced timeouts survive agent failure/restart. Scope only inbound HTTP(S).
+		run := func(name string, args ...string) error {
+			call, cancel := context.WithTimeout(ctx, 3*time.Second)
+			defer cancel()
+			return exec.CommandContext(call, name, args...).Run()
+		}
+		err = run("ipset", "create", "guardscale_temporary", "hash:ip", "family", "inet", "timeout", "900", "maxelem", "1000", "-exist")
+		rule := []string{"INPUT", "-p", "tcp", "-m", "multiport", "--dports", "80,443", "-m", "set", "--match-set", "guardscale_temporary", "src", "-j", "REJECT"}
+		if err == nil && run("iptables", append([]string{"-w", "2", "-C"}, rule...)...) != nil {
+			err = run("iptables", append([]string{"-w", "2", "-I"}, rule...)...)
+		}
+		if err == nil {
+			err = run("ipset", "add", "guardscale_temporary", c.IP, "timeout", strconv.Itoa(ttl), "-exist")
+		}
+		status := "applied"
+		if err != nil {
+			status = "failed"
+		}
+		_ = r.client.CommandResult(ctx, command.ID, status)
+	}
+}

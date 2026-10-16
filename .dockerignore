@@ -6,6 +6,12 @@ bin
 dist
 coverage
 guardscale-state
+devops/local/.secrets
+devops/local/artifacts
+devops/local/verified-results.json
+.aws
+playwright-report
+test-results
 .env
 .env.*
 !.env.example
@@ -14,3 +20,4 @@ guardscale-state
 *.prof
 devops/**/*.parameters.json
 devops/**/*.local.json
+submodules

@@ -1,0 +1,16 @@
+FROM golang:1.23-alpine AS agent
+WORKDIR /src
+COPY go.mod ./
+COPY cmd ./cmd
+COPY internal ./internal
+RUN CGO_ENABLED=0 go build -trimpath -o /guardscale ./cmd/guardscale
+FROM php:8.4-apache
+ARG PROTECTION_TOOLS=false
+RUN if [ "$PROTECTION_TOOLS" = true ]; then apt-get update && apt-get install -y --no-install-recommends ipset iptables && rm -rf /var/lib/apt/lists/*; fi
+COPY --from=agent /guardscale /usr/local/bin/guardscale
+COPY devops/local/site/ /var/www/html/
+COPY devops/local/apache.conf /etc/apache2/sites-available/000-default.conf
+COPY devops/local/php.ini /usr/local/etc/php/conf.d/fixture.ini
+COPY devops/local/site-entrypoint.sh /usr/local/bin/fixture-entrypoint
+RUN mkdir -p /var/log/guardscale /var/lib/guardscale /var/lib/guardscale-demo && touch /var/log/guardscale/access.log /var/log/guardscale/apache-error.log /var/log/guardscale/php-error.log && chown -R www-data:www-data /var/log/guardscale /var/lib/guardscale-demo
+CMD ["sh", "/usr/local/bin/fixture-entrypoint"]

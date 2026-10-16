@@ -1,0 +1,14 @@
+# Opt-in only; same disposable probe identity/approved target as the base test.
+services:
+  probe:
+    image: guardscale-local-security-tools:dev
+    build:
+      context: ../..
+      dockerfile: devops/local/Dockerfile.tools
+    environment:
+      GUARDSCALE_SECURITY_TOOLS: 'true'
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=128m,uid=1000,gid=1000
+      - /home/node:rw,nosuid,noexec,size=128m,uid=1000,gid=1000
+    security_opt: [no-new-privileges:true]

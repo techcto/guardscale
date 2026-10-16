@@ -1,0 +1,46 @@
+# Explicit opt-in only. NET_ADMIN is confined to the disposable PHP container.
+name: guardscale-local-security-fixture
+services:
+  web:
+    environment:
+      GUARDSCALE_SECURITY_TEST: 'true'
+    ports: !override ['127.0.0.1:8185:3000']
+  site:
+    ports: !override ['127.0.0.1:8186:80']
+    cap_drop: !override [] # iptables set-match also needs the default NET_RAW socket capability.
+    build:
+      args:
+        PROTECTION_TOOLS: 'true'
+    cap_add: [NET_ADMIN]
+    networks:
+      fixture:
+        ipv4_address: 192.0.2.10
+      publish: {}
+  enroll:
+    environment:
+      GUARDSCALE_SECURITY_TEST: 'true'
+      GUARDSCALE_FIXTURE_SITE_URL: http://localhost:8186
+  probe:
+    profiles: [local-security]
+    image: node:26-alpine
+    user: node
+    command: [node, /scripts/probe.mjs]
+    environment:
+      GUARDSCALE_SECURITY_TEST: 'true'
+    volumes:
+      - ./probe.mjs:/scripts/probe.mjs:ro
+      - ./attack-client.mjs:/scripts/attack-client.mjs:ro
+    cap_drop: [ALL]
+    networks:
+      fixture:
+        ipv4_address: 192.0.2.20
+  browser:
+    environment:
+      GUARDSCALE_SECURITY_TEST: 'true'
+    volumes:
+      - ./security-tests.mjs:/tests/security-tests.mjs:ro
+networks:
+  fixture:
+    ipam:
+      config:
+        - subnet: 192.0.2.0/24

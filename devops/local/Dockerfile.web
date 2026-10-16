@@ -1,0 +1,8 @@
+FROM node:26-alpine
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build -- --webpack && cp -r public .next/standalone/public && cp -r .next/static .next/standalone/.next/static
+ENV NODE_ENV=development NEXT_TELEMETRY_DISABLED=1
+CMD ["node", "devops/local/web.mjs"]

@@ -16,7 +16,7 @@ flowchart TB
     API --> S3[(S3 evidence)]
     API --> Queue[SQS + DLQ]
     Queue --> Worker[guardscale-worker\nECS Fargate]
-    Worker --> Bedrock[Bedrock / AgentCore]
+    Worker -.->|Planned, not implemented| Bedrock[Bedrock / AgentCore]
     Worker --> WhatsApp[AWS End User Messaging Social\nWhatsApp]
     Worker --> SES[Amazon SES]
     Web --> DDB
@@ -26,6 +26,6 @@ flowchart TB
     Worker --> Logs
     Web --> Logs
   end
-  WhatsApp -->|Authenticated operator reply| Worker
-  Worker -->|Signed allowlisted command| API
-  API -->|Agent polls outbound| Agent
+  WhatsApp -.->|Planned inbound reply| Worker
+  Worker -.->|Planned signed command| API
+  API -.->|Planned command delivery, Phase 1 disabled| Agent

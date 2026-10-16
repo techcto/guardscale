@@ -131,6 +131,9 @@ func (p *Parser) ParseCombined(line string) (Request, error) {
 		return Request{}, e
 	}
 	b, _ := strconv.ParseInt(post[1], 10, 64)
-	u, _ := url.ParseRequestURI(req[1])
+	u, parseErr := url.ParseRequestURI(req[1])
+	if parseErr != nil {
+		return Request{}, fmt.Errorf("invalid request URI")
+	}
 	return Request{Time: t, ClientIP: pre[0], PeerIP: pre[0], Method: req[0], URI: req[1], Path: u.Path, Status: status, Bytes: b, Referer: parts[3], UserAgent: parts[5]}, nil
 }

@@ -87,7 +87,11 @@ export const dynamoStore={
   },
   async upsertNode(v:Node){
     await ensureTable();
-    await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${v.tenantId}`,sk:`NODE#${v.serverId}`,...v},ConditionExpression:'attribute_not_exists(deletedAt)'}));
+    const fields=Object.entries(v).filter(([name,value])=>name!=='websiteUrls'&&value!==undefined);
+    await client.send(new UpdateCommand({TableName:tableName,Key:{pk:`ORG#${v.tenantId}`,sk:`NODE#${v.serverId}`},UpdateExpression:'SET '+fields.map((_,i)=>`#f${i}=:v${i}`).join(', '),ExpressionAttributeNames:Object.fromEntries(fields.map(([name],i)=>[`#f${i}`,name])),ExpressionAttributeValues:Object.fromEntries(fields.map(([,value],i)=>[`:v${i}`,value])),ConditionExpression:'attribute_not_exists(deletedAt)'}));
+  },
+  async setNodeWebsites(tenant:string,serverId:string,websiteUrls:string[]){
+    await ensureTable();await client.send(new UpdateCommand({TableName:tableName,Key:{pk:`ORG#${tenant}`,sk:`NODE#${serverId}`},UpdateExpression:'SET websiteUrls=:urls',ExpressionAttributeValues:{':urls':websiteUrls},ConditionExpression:'attribute_exists(pk) AND attribute_not_exists(deletedAt)'}));
   },
   async nodes(tenant:string):Promise<Node[]>{
     await ensureTable();

@@ -1,0 +1,6 @@
+[submodule "submodules/ffuf"]
+	path = submodules/ffuf
+	url = https://github.com/techcto/ffuf.git
+[submodule "submodules/nuclei"]
+	path = submodules/nuclei
+	url = https://github.com/techcto/nuclei.git
