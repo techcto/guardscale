@@ -6,6 +6,9 @@ import {NextRequest} from 'next/server';
 import {createSession,sessionCookie} from './session';
 import {POST as purge} from '../app/api/v1/settings/purge/route';
 import {DELETE as remove} from '../app/api/v1/nodes/[id]/route';
+import {POST as createOrg} from '../app/api/orgs/route';
+import {POST as switchOrg} from '../app/api/orgs/active/route';
+import {GET as enrollment} from '../app/api/v1/nodes/enrollment/route';
 test('server removal blocks re-enrollment and organization purge retains enrollment and isolates customers',async()=>{
  const tenant=randomUUID(),other=randomUUID();
  const node={tenantId:tenant,serverId:'server-one',agentId:'agent-one',displayName:'One',tags:[],status:'healthy' as const,createdAt:new Date().toISOString(),lastHeartbeat:new Date().toISOString()};
@@ -48,4 +51,25 @@ test('destructive routes enforce origin, role, confirmation, and active organiza
  assert.equal(await store.node(org.id,node.serverId),null);
  await store.putMembership({id:randomUUID(),orgId:org.id,userId:'test-admin',role:'viewer',status:'active',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
  assert.equal((await purge(request('POST','PURGE'))).status,403);
+});
+test('root can create customer organizations, switch, and receive isolated enrollment commands',async()=>{
+ const previousMode=process.env.GUARDSCALE_DEPLOYMENT_MODE;
+ process.env.GUARDSCALE_DEPLOYMENT_MODE='saas';
+ try{
+  const base=await store.createOrganization({name:'Root test workspace',ownerId:'root',orgType:'business'});
+  const secret=process.env.GUARDSCALE_SESSION_SECRET??'local-lifecycle-test-secret-not-for-production';process.env.GUARDSCALE_SESSION_SECRET=secret;
+  let cookie=`${sessionCookie}=${await createSession({id:'root',username:'root',role:'root',orgId:base.id,expiresAt:Date.now()+60000},secret)}`;
+  const request=(path:string,value?:object)=>new NextRequest('http://localhost'+path,{method:value?'POST':'GET',headers:{host:'localhost',origin:'http://localhost',cookie,'content-type':'application/json'},...(value?{body:JSON.stringify(value)}:{})});
+  const tokens:string[]=[];
+  for(const name of ['Customer A verification','Customer B verification']){
+   const created=await createOrg(request('/api/orgs',{name}));assert.equal(created.status,201);const org=await created.json();
+   assert.equal(org.name,name);assert.equal((await store.membership(org.id,'root'))?.role,'admin');
+   const switched=await switchOrg(request('/api/orgs/active',{orgId:org.id}));assert.equal(switched.status,200);
+   cookie=switched.headers.get('set-cookie')!.split(';')[0];
+   const credentials=await enrollment(request('/api/v1/nodes/enrollment'));assert.equal(credentials.status,200);const data=await credentials.json();
+   assert.equal(data.tenantId,org.id);assert.ok(data.enrollmentToken);tokens.push(data.enrollmentToken);
+   assert.deepEqual(await store.nodes(org.id),[]);
+  }
+  assert.notEqual(tokens[0],tokens[1]);
+ }finally{if(previousMode===undefined)delete process.env.GUARDSCALE_DEPLOYMENT_MODE;else process.env.GUARDSCALE_DEPLOYMENT_MODE=previousMode}
 });

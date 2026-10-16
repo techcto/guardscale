@@ -1,0 +1,20 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createHmac} from 'node:crypto';
+import {store} from './store';
+import {processWhatsAppEnvelope} from './incident-workflow';
+import {commandsFor} from './protection-commands';
+test('WhatsApp approval requires configured sender, origination, fresh code and scoped incident',async()=>{
+ process.env.GUARDSCALE_SESSION_SECRET='unit-only-secret-not-a-deployment-credential';
+ const org=await store.createOrganization({name:'WhatsApp unit test',ownerId:'root',orgType:'business'}),now=new Date().toISOString();
+ await store.upsertNode({tenantId:org.id,serverId:'node',agentId:'agent',displayName:'Node',tags:[],status:'healthy',createdAt:now,lastHeartbeat:now});
+ await store.putIncident({tenantId:org.id,serverId:'node',agentId:'agent',incidentId:'incident',state:'review',startedAt:now,updatedAt:now,payload:{candidate_id:'a'.repeat(32)}});
+ const settings=await store.settings(org.id);await store.putSettings(org.id,{...settings,notifications:{...settings.notifications,whatsappEnabled:true,whatsappSenderId:'phone-123',recipients:'+15550100001'},response:{...settings.response,allowRemoteRequests:true,dryRun:false,defaultTtlSeconds:30}});
+ const code=createHmac('sha256',process.env.GUARDSCALE_SESSION_SECRET).update(org.id+':incident').digest('hex').slice(0,16);
+ const envelope=(from:string,origin='phone-123',timestamp=String(Math.floor(Date.now()/1000)))=>({context:{MetaPhoneNumberIds:[{arn:'arn:aws:social-messaging:us-east-1:123456789012:phone-number-id/'+origin}]},whatsAppWebhookEntry:JSON.stringify({changes:[{value:{messages:[{id:'unit-message',from,timestamp,type:'text',text:{body:'Protect '+code}}]}}]})});
+ await processWhatsAppEnvelope(envelope('15550100002'));assert.equal((await commandsFor(org.id)).length,0);
+ await processWhatsAppEnvelope(envelope('15550100001','wrong-origin'));assert.equal((await commandsFor(org.id)).length,0);
+ await processWhatsAppEnvelope(envelope('15550100001','phone-123','NaN'));assert.equal((await commandsFor(org.id)).length,0);
+ await processWhatsAppEnvelope(envelope('15550100001'));assert.equal((await commandsFor(org.id)).length,1);
+ await processWhatsAppEnvelope(envelope('15550100001'));assert.equal((await commandsFor(org.id)).length,1);
+});

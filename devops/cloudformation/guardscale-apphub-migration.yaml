@@ -71,6 +71,43 @@
     "AppHubWebPriority": {
       "Type": "Number",
       "Default": 201
+    },
+    "GuardianModelId": {
+      "Type": "String",
+      "Default": "",
+      "AllowedValues": [
+        "",
+        "amazon.nova-lite-v1:0",
+        "us.amazon.nova-lite-v1:0"
+      ]
+    },
+    "NotificationMode": {
+      "Type": "String",
+      "Default": "log",
+      "AllowedValues": [
+        "log",
+        "aws"
+      ]
+    },
+    "WhatsappOriginationId": {
+      "Type": "String",
+      "Default": ""
+    },
+    "NotificationRecipients": {
+      "Type": "String",
+      "Default": ""
+    },
+    "SesFrom": {
+      "Type": "String",
+      "Default": ""
+    },
+    "WhatsappEventTopicArn": {
+      "Type": "String",
+      "Default": ""
+    },
+    "WhatsappAlertTemplate": {
+      "Type": "String",
+      "Default": ""
     }
   },
   "Conditions": {
@@ -123,6 +160,30 @@
         },
         {
           "Condition": "UseTLS"
+        }
+      ]
+    },
+    "HasGuardianModel": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "GuardianModelId"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "HasWhatsappTopic": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "WhatsappEventTopicArn"
+            },
+            ""
+          ]
         }
       ]
     }
@@ -650,6 +711,60 @@
                 "Value": {
                   "Ref": "DeploymentMode"
                 }
+              },
+              {
+                "Name": "AWS_REGION",
+                "Value": {
+                  "Ref": "AWS::Region"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_AI_MODEL_ID",
+                "Value": {
+                  "Ref": "GuardianModelId"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_NOTIFICATION_MODE",
+                "Value": {
+                  "Ref": "NotificationMode"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_WHATSAPP_ORIGINATION_ID",
+                "Value": {
+                  "Ref": "WhatsappOriginationId"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_NOTIFICATION_RECIPIENTS",
+                "Value": {
+                  "Ref": "NotificationRecipients"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_SES_FROM",
+                "Value": {
+                  "Ref": "SesFrom"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN",
+                "Value": {
+                  "Ref": "WhatsappEventTopicArn"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_WHATSAPP_ALERT_TEMPLATE",
+                "Value": {
+                  "Ref": "WhatsappAlertTemplate"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_PUBLIC_URL",
+                "Value": {
+                  "Fn::Sub": "https://${AppHostHeader}"
+                }
               }
             ],
             "LogConfiguration": {
@@ -736,6 +851,66 @@
                 "Value": {
                   "Ref": "SessionSecret"
                 }
+              },
+              {
+                "Name": "AWS_REGION",
+                "Value": {
+                  "Ref": "AWS::Region"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_DEPLOYMENT_MODE",
+                "Value": {
+                  "Ref": "DeploymentMode"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_AI_MODEL_ID",
+                "Value": {
+                  "Ref": "GuardianModelId"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_NOTIFICATION_MODE",
+                "Value": {
+                  "Ref": "NotificationMode"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_WHATSAPP_ORIGINATION_ID",
+                "Value": {
+                  "Ref": "WhatsappOriginationId"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_NOTIFICATION_RECIPIENTS",
+                "Value": {
+                  "Ref": "NotificationRecipients"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_SES_FROM",
+                "Value": {
+                  "Ref": "SesFrom"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN",
+                "Value": {
+                  "Ref": "WhatsappEventTopicArn"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_WHATSAPP_ALERT_TEMPLATE",
+                "Value": {
+                  "Ref": "WhatsappAlertTemplate"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_PUBLIC_URL",
+                "Value": {
+                  "Fn::Sub": "https://${AppHostHeader}"
+                }
               }
             ],
             "LogConfiguration": {
@@ -786,6 +961,78 @@
                 "Name": "GUARDSCALE_QUEUE_URL",
                 "Value": {
                   "Ref": "Queue"
+                }
+              },
+              {
+                "Name": "AWS_REGION",
+                "Value": {
+                  "Ref": "AWS::Region"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_TABLE",
+                "Value": {
+                  "Ref": "GuardScaleTable"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_SESSION_SECRET",
+                "Value": {
+                  "Ref": "SessionSecret"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_DEPLOYMENT_MODE",
+                "Value": {
+                  "Ref": "DeploymentMode"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_AI_MODEL_ID",
+                "Value": {
+                  "Ref": "GuardianModelId"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_NOTIFICATION_MODE",
+                "Value": {
+                  "Ref": "NotificationMode"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_WHATSAPP_ORIGINATION_ID",
+                "Value": {
+                  "Ref": "WhatsappOriginationId"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_NOTIFICATION_RECIPIENTS",
+                "Value": {
+                  "Ref": "NotificationRecipients"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_SES_FROM",
+                "Value": {
+                  "Ref": "SesFrom"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN",
+                "Value": {
+                  "Ref": "WhatsappEventTopicArn"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_WHATSAPP_ALERT_TEMPLATE",
+                "Value": {
+                  "Ref": "WhatsappAlertTemplate"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_PUBLIC_URL",
+                "Value": {
+                  "Fn::Sub": "https://${AppHostHeader}"
                 }
               }
             ],
@@ -1060,6 +1307,90 @@
             }
           }
         ]
+      }
+    },
+    "GuardianModelPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Condition": "HasGuardianModel",
+      "Properties": {
+        "PolicyName": "guardscale-guardian-inference",
+        "Roles": [
+          {
+            "Ref": "TaskRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "bedrock:InvokeModel"
+              ],
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-lite-v1:0"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.amazon.nova-lite-v1:0"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "WhatsappQueuePolicy": {
+      "Type": "AWS::SQS::QueuePolicy",
+      "Condition": "HasWhatsappTopic",
+      "Properties": {
+        "Queues": [
+          {
+            "Ref": "Queue"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "sns.amazonaws.com"
+              },
+              "Action": "sqs:SendMessage",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "Queue",
+                  "Arn"
+                ]
+              },
+              "Condition": {
+                "ArnEquals": {
+                  "aws:SourceArn": {
+                    "Ref": "WhatsappEventTopicArn"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "WhatsappSubscription": {
+      "Type": "AWS::SNS::Subscription",
+      "Condition": "HasWhatsappTopic",
+      "Properties": {
+        "TopicArn": {
+          "Ref": "WhatsappEventTopicArn"
+        },
+        "Protocol": "sqs",
+        "Endpoint": {
+          "Fn::GetAtt": [
+            "Queue",
+            "Arn"
+          ]
+        },
+        "RawMessageDelivery": false
       }
     }
   },

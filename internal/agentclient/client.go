@@ -12,6 +12,7 @@ import (
 )
 
 type Client struct {
+	DiscoveredHosts           []string
 	Endpoint, Token, ServerID string
 	HTTP                      *http.Client
 }
@@ -44,8 +45,9 @@ func (c Client) post(ctx context.Context, path string, payload any) error {
 
 func (c Client) Heartbeat(ctx context.Context) error {
 	return c.post(ctx, "/api/v1/agents/heartbeat", map[string]any{
-		"server_id": c.ServerID,
-		"platform":  runtime.GOOS + "/" + runtime.GOARCH,
+		"server_id":        c.ServerID,
+		"platform":         runtime.GOOS + "/" + runtime.GOARCH,
+		"discovered_hosts": c.DiscoveredHosts,
 	})
 }
 
@@ -55,4 +57,46 @@ func (c Client) Event(ctx context.Context, eventType string, metadata map[string
 		"type":      eventType,
 		"metadata":  metadata,
 	})
+}
+
+func (c Client) Incident(ctx context.Context, payload any) error {
+	return c.post(ctx, "/api/v1/agents/incidents", payload)
+}
+
+type Command struct {
+	ID          string `json:"id"`
+	CandidateID string `json:"candidateId"`
+	ExpiresAt   string `json:"expiresAt"`
+	Kind        string `json:"kind"`
+}
+
+func (c Client) Commands(ctx context.Context) ([]Command, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.Endpoint, "/")+"/api/v1/agents/commands?server_id="+c.ServerID, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	h := c.HTTP
+	if h == nil {
+		h = &http.Client{Timeout: 5 * time.Second}
+	}
+	r, err := h.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Body.Close()
+	if r.StatusCode != 200 {
+		return nil, fmt.Errorf("command poll returned %d", r.StatusCode)
+	}
+	var v struct {
+		Commands []Command `json:"commands"`
+	}
+	err = json.NewDecoder(r.Body).Decode(&v)
+	return v.Commands, err
+}
+func (c Client) CommandResult(ctx context.Context, id, status string) error {
+	return c.post(ctx, "/api/v1/agents/commands", map[string]string{"server_id": c.ServerID, "id": id, "status": status})
+}
+func (c Client) InspectionResult(ctx context.Context, id string, result map[string]string) error {
+	return c.post(ctx, "/api/v1/agents/commands", map[string]any{"server_id": c.ServerID, "id": id, "status": "complete", "result": result})
 }

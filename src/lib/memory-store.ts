@@ -39,6 +39,7 @@ export const memoryStore={
   async upsertNode(v:Node){const existing=state.nodes.get(key(v.tenantId,v.serverId));if(existing?.deletedAt)throw new Error('Server removed');state.nodes.set(key(v.tenantId,v.serverId),{...existing,...v,createdAt:existing?.createdAt??v.createdAt})},
   async nodes(tenant:string){return[...state.nodes.values()].filter(x=>x.tenantId===tenant&&!x.deletedAt)},
   async nodeRecord(tenant:string,serverId:string){return state.nodes.get(key(tenant,serverId))??null},
+  async setNodeWebsites(tenant:string,serverId:string,websiteUrls:string[]){const node=state.nodes.get(key(tenant,serverId));if(!node||node.deletedAt)throw Error('Server removed');state.nodes.set(key(tenant,serverId),{...node,websiteUrls})},
   async node(tenant:string,serverId:string){const node=state.nodes.get(key(tenant,serverId));return node&&!node.deletedAt?node:null},
   async retireNode(tenant:string,serverId:string){const node=state.nodes.get(key(tenant,serverId));if(!node)return false;state.nodes.set(key(tenant,serverId),{...node,deletedAt:new Date().toISOString(),status:'offline'});return true},
   async purgeCollectedData(tenant:string){let events=0,incidents=0;for(const [k,list]of state.events){if(k.startsWith(tenant+'\0')){events+=list.length;state.events.delete(k)}}for(const [k,v]of state.incidents){if(v.tenantId===tenant){incidents++;state.incidents.delete(k)}}return{events,incidents}},

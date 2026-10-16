@@ -6,6 +6,6 @@ export async function GET(req:NextRequest){
  const session=await operator(req);if(!session)return NextResponse.json({error:'unauthorized'},{status:401});
  const nodes=await store.nodes(session.orgId);
  const groups=await Promise.all(nodes.map(async node=>(await store.eventsForNode(session.orgId,node.serverId,50)).map(e=>({id:`${node.serverId}:${e.id??e.at+e.type}`,serverId:node.serverId,serverName:node.displayName,at:e.at,type:e.type,message:e.metadata?.message??e.type}))));
- const entries=groups.flat().sort((a,b)=>b.at.localeCompare(a.at)).slice(0,150).reverse();
+ const entries=groups.flat().sort((a,b)=>b.at.localeCompare(a.at)||b.id.localeCompare(a.id)).slice(0,150);
  return NextResponse.json({entries},{headers:{'Cache-Control':'private, no-store','Vary':'Cookie'}});
 }

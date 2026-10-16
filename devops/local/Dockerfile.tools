@@ -1,0 +1,13 @@
+FROM golang:1.26-alpine AS tools
+WORKDIR /build/ffuf
+COPY submodules/ffuf/ ./
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 go build -p 2 -buildvcs=false -trimpath -o /out/ffuf .
+WORKDIR /build/nuclei
+COPY submodules/nuclei/ ./
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 go build -p 2 -buildvcs=false -trimpath -o /out/nuclei ./cmd/nuclei
+FROM node:26-alpine
+COPY --from=tools /out/ffuf /out/nuclei /usr/local/bin/
+COPY submodules/ffuf/LICENSE /usr/share/licenses/ffuf/LICENSE
+COPY submodules/nuclei/LICENSE.md /usr/share/licenses/nuclei/LICENSE.md
+COPY devops/local/scanners/ /fixtures/
+USER node

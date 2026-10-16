@@ -1,0 +1,14 @@
+# Explicitly opt-in; never mount credentials into the monitored PHP server.
+services:
+  web:
+    environment:
+      GUARDSCALE_AI_MODEL_ID: ${GUARDSCALE_AI_MODEL_ID:-us.amazon.nova-lite-v1:0}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      GUARDSCALE_BEDROCK_CREDENTIALS_FILE: /run/secrets/guardian-bedrock.json
+    volumes:
+      - type: bind
+        source: ${GUARDSCALE_BEDROCK_CREDENTIALS_PATH:?Set an absolute path to the dedicated Bedrock session JSON}
+        target: /run/secrets/guardian-bedrock.json
+        read_only: true
+        bind:
+          create_host_path: false

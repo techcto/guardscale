@@ -1,0 +1,21 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {store} from './store';
+import {evaluateAutoGuardian} from './auto-guardian';
+import {commandsFor} from './protection-commands';
+test('Auto Guardian requires standing opt-in, real-delivery mode, critical inspected evidence and a bounded action cap',async()=>{
+ const org=await store.createOrganization({name:'Auto Guardian unit test',ownerId:'root',orgType:'business'});
+ const now=new Date().toISOString(),startedAt=new Date(Date.now()-90000).toISOString();
+ await store.upsertNode({tenantId:org.id,serverId:'node',agentId:'agent',displayName:'Node',tags:[],status:'healthy',createdAt:now,lastHeartbeat:now});
+ const payload={candidate_id:'b'.repeat(32),alertedAt:startedAt,alertDelivery:'provider_accepted',notified:['unit-provider-acceptance-record'],findings:[{name:'HTTPFailureSpike',severity:'critical'}],analysis:{status:'complete',recommendation:'protect',trace:[{tool:'inspect_server',status:'complete',result:{recent_requests:'60'}}]}};
+ await store.putIncident({tenantId:org.id,serverId:'node',agentId:'agent',incidentId:'auto-one',state:'review',startedAt,updatedAt:now,payload});
+ const settings=await store.settings(org.id);await store.putSettings(org.id,{...settings,response:{...settings.response,allowRemoteRequests:true,dryRun:false,defaultTtlSeconds:300,autoGuardian:{enabled:false,waitSeconds:60,maxTtlSeconds:30,maxActionsPerHour:1}}});
+ process.env.GUARDSCALE_NOTIFICATION_MODE='aws';await evaluateAutoGuardian();assert.equal((await commandsFor(org.id)).length,0);
+ const enabled=await store.settings(org.id);enabled.response.autoGuardian!.enabled=true;await store.putSettings(org.id,enabled);
+ process.env.GUARDSCALE_NOTIFICATION_MODE='log';await evaluateAutoGuardian();assert.equal((await commandsFor(org.id)).length,0);
+ process.env.GUARDSCALE_NOTIFICATION_MODE='aws';await Promise.all([evaluateAutoGuardian(),evaluateAutoGuardian()]);
+ const first=(await commandsFor(org.id))[0];assert.ok(first);assert.ok(Date.parse(first.expiresAt)-Date.parse(first.createdAt)<=30000);
+ await store.putIncident({tenantId:org.id,serverId:'node',agentId:'agent',incidentId:'auto-two',state:'review',startedAt,updatedAt:now,payload});
+ await evaluateAutoGuardian();assert.equal((await commandsFor(org.id)).length,1);
+ delete process.env.GUARDSCALE_NOTIFICATION_MODE;
+});

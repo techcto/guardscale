@@ -43,6 +43,20 @@ Metadata:
           - AssignPublicIp
 
 Parameters:
+  GuardianModelId:
+    Type: String
+    Default: ''
+    AllowedValues: ['', 'amazon.nova-lite-v1:0', 'us.amazon.nova-lite-v1:0']
+  NotificationMode:
+    Type: String
+    Default: log
+    AllowedValues: [log, aws]
+  WhatsappEventTopicArn:
+    Type: String
+    Default: ''
+  WhatsappAlertTemplate:
+    Type: String
+    Default: ''
   EnvironmentName:
     Type: String
     Default: guardscale
@@ -135,7 +149,46 @@ Parameters:
     Default: DISABLED
     AllowedValues: [ENABLED, DISABLED]
 
+Conditions:
+  HasGuardianModel: !Not [!Equals [!Ref GuardianModelId, '']]
+  HasWhatsappTopic: !Not [!Equals [!Ref WhatsappEventTopicArn, '']]
+
 Resources:
+  GuardianModelPolicy:
+    Type: AWS::IAM::Policy
+    Condition: HasGuardianModel
+    Properties:
+      PolicyName: guardscale-guardian-inference
+      Roles: [{Ref: TaskRole}]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: ['bedrock:InvokeModel']
+            Resource:
+              - {Fn::Sub: 'arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-lite-v1:0'}
+              - {Fn::Sub: 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.amazon.nova-lite-v1:0'}
+  WhatsappQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: HasWhatsappTopic
+    Properties:
+      Queues: [{Ref: Queue}]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: sns.amazonaws.com}
+            Action: sqs:SendMessage
+            Resource: {Fn::GetAtt: [Queue, Arn]}
+            Condition: {ArnEquals: {'aws:SourceArn': {Ref: WhatsappEventTopicArn}}}
+  WhatsappSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasWhatsappTopic
+    Properties:
+      TopicArn: {Ref: WhatsappEventTopicArn}
+      Protocol: sqs
+      Endpoint: {Fn::GetAtt: [Queue, Arn]}
+      RawMessageDelivery: false
   ServiceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -342,6 +395,12 @@ Resources:
             - {Name: GUARDSCALE_ROOT_USER, Value: !Ref RootUsername}
             - {Name: GUARDSCALE_ROOT_PASSWORD, Value: !Ref RootPassword}
             - {Name: GUARDSCALE_SESSION_SECRET, Value: !Ref SessionSecret}
+            - {Name: AWS_REGION, Value: !Ref 'AWS::Region'}
+            - {Name: GUARDSCALE_AI_MODEL_ID, Value: !Ref GuardianModelId}
+            - {Name: GUARDSCALE_NOTIFICATION_MODE, Value: !Ref NotificationMode}
+            - {Name: GUARDSCALE_WHATSAPP_ALERT_TEMPLATE, Value: !Ref WhatsappAlertTemplate}
+            - {Name: GUARDSCALE_PUBLIC_URL, Value: !Sub 'https://${HostHeader}'}
+            - {Name: GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN, Value: !Ref WhatsappEventTopicArn}
             - {Name: GUARDSCALE_TABLE, Value: !Ref GuardScaleTable}
             - {Name: GUARDSCALE_QUEUE_URL, Value: !Ref Queue}
             - {Name: GUARDSCALE_EVIDENCE_BUCKET, Value: !Ref EvidenceBucket}
@@ -378,6 +437,12 @@ Resources:
           Environment:
             - {Name: NODE_ENV, Value: production}
             - {Name: PORT, Value: '3001'}
+            - {Name: AWS_REGION, Value: !Ref 'AWS::Region'}
+            - {Name: GUARDSCALE_AI_MODEL_ID, Value: !Ref GuardianModelId}
+            - {Name: GUARDSCALE_NOTIFICATION_MODE, Value: !Ref NotificationMode}
+            - {Name: GUARDSCALE_WHATSAPP_ALERT_TEMPLATE, Value: !Ref WhatsappAlertTemplate}
+            - {Name: GUARDSCALE_PUBLIC_URL, Value: !Sub 'https://${HostHeader}'}
+            - {Name: GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN, Value: !Ref WhatsappEventTopicArn}
             - {Name: GUARDSCALE_TABLE, Value: !Ref GuardScaleTable}
             - {Name: GUARDSCALE_QUEUE_URL, Value: !Ref Queue}
             - {Name: GUARDSCALE_EVIDENCE_BUCKET, Value: !Ref EvidenceBucket}
@@ -410,7 +475,14 @@ Resources:
           Image: !Ref WorkerImage
           Essential: true
           Environment:
+            - {Name: GUARDSCALE_SESSION_SECRET, Value: !Ref SessionSecret}
             - {Name: NODE_ENV, Value: production}
+            - {Name: AWS_REGION, Value: !Ref 'AWS::Region'}
+            - {Name: GUARDSCALE_AI_MODEL_ID, Value: !Ref GuardianModelId}
+            - {Name: GUARDSCALE_NOTIFICATION_MODE, Value: !Ref NotificationMode}
+            - {Name: GUARDSCALE_WHATSAPP_ALERT_TEMPLATE, Value: !Ref WhatsappAlertTemplate}
+            - {Name: GUARDSCALE_PUBLIC_URL, Value: !Sub 'https://${HostHeader}'}
+            - {Name: GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN, Value: !Ref WhatsappEventTopicArn}
             - {Name: GUARDSCALE_TABLE, Value: !Ref GuardScaleTable}
             - {Name: GUARDSCALE_QUEUE_URL, Value: !Ref Queue}
             - {Name: GUARDSCALE_EVIDENCE_BUCKET, Value: !Ref EvidenceBucket}

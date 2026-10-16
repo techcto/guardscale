@@ -2,6 +2,12 @@
 /dist/
 /coverage.out
 /guardscale-state/
+/devops/local/.secrets/
+/devops/local/artifacts/
+/devops/local/verified-results.json
+/.aws/
+/playwright-report/
+/test-results/
 *.test
 *.prof
 

@@ -1,0 +1,47 @@
+id: guardscale-local-enumeration
+info:
+  name: Disposable fixture enumeration workload (not a vulnerability finding)
+  author: guardscale
+  severity: info
+  description: Harmless bounded missing-page requests, solely for local ingestion/detection/protection tests.
+  tags: guardscale-local
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}/nuclei-probe-{{route}}?table_filter=test'
+    attack: batteringram
+    payloads:
+      route:
+        - '01'
+        - '02'
+        - '03'
+        - '04'
+        - '05'
+        - '06'
+        - '07'
+        - '08'
+        - '09'
+        - '10'
+        - '11'
+        - '12'
+        - '13'
+        - '14'
+        - '15'
+        - '16'
+        - '17'
+        - '18'
+        - '19'
+        - '20'
+        - '21'
+        - '22'
+        - '23'
+        - '24'
+        - '25'
+        - '26'
+        - '27'
+        - '28'
+        - '29'
+        - '30'
+    matchers:
+      - type: status
+        status: [404]

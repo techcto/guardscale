@@ -11,8 +11,51 @@ Parameters:
   RootPassword: {Type: String, NoEcho: true, MinLength: 12}
   SessionSecret: {Type: String, NoEcho: true, MinLength: 32}
   DeploymentMode: {Type: String, Default: on-premise, AllowedValues: ['on-premise', 'saas']}
-Conditions: {UseTLS: {Fn::Not: [{Fn::Equals: [{Ref: CertificateArn}, '']}]}}
+  GuardianModelId: {Type: String, Default: '', AllowedValues: ['', 'amazon.nova-lite-v1:0', 'us.amazon.nova-lite-v1:0']}
+  NotificationMode: {Type: String, Default: log, AllowedValues: [log, aws]}
+  WhatsappOriginationId: {Type: String, Default: ''}
+  NotificationRecipients: {Type: String, Default: ''}
+  SesFrom: {Type: String, Default: ''}
+  PublicUrl: {Type: String, Default: ''}
+  WhatsappEventTopicArn: {Type: String, Default: ''}
+  WhatsappAlertTemplate: {Type: String, Default: ''}
+Conditions: {UseTLS: {Fn::Not: [{Fn::Equals: [{Ref: CertificateArn}, '']}]}, HasGuardianModel: {Fn::Not: [{Fn::Equals: [{Ref: GuardianModelId}, '']}]}, HasWhatsappTopic: {Fn::Not: [{Fn::Equals: [{Ref: WhatsappEventTopicArn}, '']}]}}
 Resources:
+  GuardianModelPolicy:
+    Type: AWS::IAM::Policy
+    Condition: HasGuardianModel
+    Properties:
+      PolicyName: guardscale-guardian-inference
+      Roles: [{Ref: TaskRole}]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: ['bedrock:InvokeModel']
+            Resource:
+              - {Fn::Sub: 'arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-lite-v1:0'}
+              - {Fn::Sub: 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.amazon.nova-lite-v1:0'}
+  WhatsappQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: HasWhatsappTopic
+    Properties:
+      Queues: [{Ref: Queue}]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: sns.amazonaws.com}
+            Action: sqs:SendMessage
+            Resource: {Fn::GetAtt: [Queue, Arn]}
+            Condition: {ArnEquals: {'aws:SourceArn': {Ref: WhatsappEventTopicArn}}}
+  WhatsappSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasWhatsappTopic
+    Properties:
+      TopicArn: {Ref: WhatsappEventTopicArn}
+      Protocol: sqs
+      Endpoint: {Fn::GetAtt: [Queue, Arn]}
+      RawMessageDelivery: false
   Cluster: {Type: 'AWS::ECS::Cluster', Properties: {ClusterName: {Fn::Sub: 'guardscale-${AWS::StackName}'}, ClusterSettings: [{Name: containerInsights, Value: enabled}]}}
   ALBSG:
     Type: 'AWS::EC2::SecurityGroup'
@@ -44,9 +87,9 @@ Resources:
     Properties:
       AssumeRolePolicyDocument: {Version: '2012-10-17', Statement: [{Effect: Allow, Principal: {Service: ecs-tasks.amazonaws.com}, Action: 'sts:AssumeRole'}]}
       Policies: [{PolicyName: guardscale-data, PolicyDocument: {Version: '2012-10-17', Statement: [{Effect: Allow, Action: ['dynamodb:GetItem','dynamodb:PutItem','dynamodb:DeleteItem','dynamodb:Query','dynamodb:UpdateItem'], Resource: [{Fn::GetAtt: [GuardScaleTable, Arn]}, {Fn::Sub: '${GuardScaleTable.Arn}/index/*'}]}, {Effect: Allow, Action: ['sqs:SendMessage','sqs:ReceiveMessage','sqs:DeleteMessage','sqs:GetQueueAttributes'], Resource: {Fn::GetAtt: [Queue, Arn]}}, {Effect: Allow, Action: ['s3:GetObject','s3:PutObject'], Resource: {Fn::Sub: '${EvidenceBucket.Arn}/*'}}, {Effect: Allow, Action: ['ses:SendEmail','social-messaging:SendWhatsAppMessage'], Resource: '*'}]}}]
-  WebTask: {Type: 'AWS::ECS::TaskDefinition', Properties: {RequiresCompatibilities: [FARGATE], NetworkMode: awsvpc, Cpu: '256', Memory: '512', ExecutionRoleArn: {Fn::GetAtt: [ExecutionRole, Arn]}, TaskRoleArn: {Fn::GetAtt: [TaskRole, Arn]}, ContainerDefinitions: [{Name: web, Image: {Fn::Sub: '${ImageBase}-web:${ReleaseVersion}'}, PortMappings: [{ContainerPort: 3000}], Environment: [{Name: GUARDSCALE_TABLE, Value: {Ref: GuardScaleTable}}, {Name: GUARDSCALE_ROOT_USER, Value: {Ref: RootUsername}}, {Name: GUARDSCALE_ROOT_PASSWORD, Value: {Ref: RootPassword}}, {Name: GUARDSCALE_SESSION_SECRET, Value: {Ref: SessionSecret}}, {Name: GUARDSCALE_DEPLOYMENT_MODE, Value: {Ref: DeploymentMode}}], LogConfiguration: {LogDriver: awslogs, Options: {awslogs-group: {Ref: LogGroup}, awslogs-region: {Ref: 'AWS::Region'}, awslogs-stream-prefix: web}}}]}}
-  ApiTask: {Type: 'AWS::ECS::TaskDefinition', Properties: {RequiresCompatibilities: [FARGATE], NetworkMode: awsvpc, Cpu: '256', Memory: '512', ExecutionRoleArn: {Fn::GetAtt: [ExecutionRole, Arn]}, TaskRoleArn: {Fn::GetAtt: [TaskRole, Arn]}, ContainerDefinitions: [{Name: api, Image: {Fn::Sub: '${ImageBase}-api:${ReleaseVersion}'}, PortMappings: [{ContainerPort: 3001}], Environment: [{Name: GUARDSCALE_TABLE, Value: {Ref: GuardScaleTable}}, {Name: GUARDSCALE_QUEUE_URL, Value: {Ref: Queue}}, {Name: GUARDSCALE_EVIDENCE_BUCKET, Value: {Ref: EvidenceBucket}}, {Name: GUARDSCALE_ROOT_USER, Value: {Ref: RootUsername}}, {Name: GUARDSCALE_ROOT_PASSWORD, Value: {Ref: RootPassword}}, {Name: GUARDSCALE_SESSION_SECRET, Value: {Ref: SessionSecret}}], LogConfiguration: {LogDriver: awslogs, Options: {awslogs-group: {Ref: LogGroup}, awslogs-region: {Ref: 'AWS::Region'}, awslogs-stream-prefix: api}}}]}}
-  WorkerTask: {Type: 'AWS::ECS::TaskDefinition', Properties: {RequiresCompatibilities: [FARGATE], NetworkMode: awsvpc, Cpu: '256', Memory: '512', ExecutionRoleArn: {Fn::GetAtt: [ExecutionRole, Arn]}, TaskRoleArn: {Fn::GetAtt: [TaskRole, Arn]}, ContainerDefinitions: [{Name: worker, Image: {Fn::Sub: '${ImageBase}-worker:${ReleaseVersion}'}, Environment: [{Name: GUARDSCALE_QUEUE_URL, Value: {Ref: Queue}}], LogConfiguration: {LogDriver: awslogs, Options: {awslogs-group: {Ref: LogGroup}, awslogs-region: {Ref: 'AWS::Region'}, awslogs-stream-prefix: worker}}}]}}
+  WebTask: {Type: 'AWS::ECS::TaskDefinition', Properties: {RequiresCompatibilities: [FARGATE], NetworkMode: awsvpc, Cpu: '256', Memory: '512', ExecutionRoleArn: {Fn::GetAtt: [ExecutionRole, Arn]}, TaskRoleArn: {Fn::GetAtt: [TaskRole, Arn]}, ContainerDefinitions: [{Name: web, Image: {Fn::Sub: '${ImageBase}-web:${ReleaseVersion}'}, PortMappings: [{ContainerPort: 3000}], Environment: [{Name: GUARDSCALE_WHATSAPP_ALERT_TEMPLATE, Value: {Ref: WhatsappAlertTemplate}}, {Name: AWS_REGION, Value: {Ref: 'AWS::Region'}}, {Name: GUARDSCALE_AI_MODEL_ID, Value: {Ref: GuardianModelId}}, {Name: GUARDSCALE_NOTIFICATION_MODE, Value: {Ref: NotificationMode}}, {Name: GUARDSCALE_SES_FROM, Value: {Ref: SesFrom}}, {Name: GUARDSCALE_NOTIFICATION_RECIPIENTS, Value: {Ref: NotificationRecipients}}, {Name: GUARDSCALE_WHATSAPP_ORIGINATION_ID, Value: {Ref: WhatsappOriginationId}}, {Name: GUARDSCALE_PUBLIC_URL, Value: {Ref: PublicUrl}}, {Name: GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN, Value: {Ref: WhatsappEventTopicArn}}, {Name: GUARDSCALE_TABLE, Value: {Ref: GuardScaleTable}}, {Name: GUARDSCALE_ROOT_USER, Value: {Ref: RootUsername}}, {Name: GUARDSCALE_ROOT_PASSWORD, Value: {Ref: RootPassword}}, {Name: GUARDSCALE_SESSION_SECRET, Value: {Ref: SessionSecret}}, {Name: GUARDSCALE_DEPLOYMENT_MODE, Value: {Ref: DeploymentMode}}], LogConfiguration: {LogDriver: awslogs, Options: {awslogs-group: {Ref: LogGroup}, awslogs-region: {Ref: 'AWS::Region'}, awslogs-stream-prefix: web}}}]}}
+  ApiTask: {Type: 'AWS::ECS::TaskDefinition', Properties: {RequiresCompatibilities: [FARGATE], NetworkMode: awsvpc, Cpu: '256', Memory: '512', ExecutionRoleArn: {Fn::GetAtt: [ExecutionRole, Arn]}, TaskRoleArn: {Fn::GetAtt: [TaskRole, Arn]}, ContainerDefinitions: [{Name: api, Image: {Fn::Sub: '${ImageBase}-api:${ReleaseVersion}'}, PortMappings: [{ContainerPort: 3001}], Environment: [{Name: GUARDSCALE_DEPLOYMENT_MODE, Value: {Ref: DeploymentMode}}, {Name: GUARDSCALE_WHATSAPP_ALERT_TEMPLATE, Value: {Ref: WhatsappAlertTemplate}}, {Name: AWS_REGION, Value: {Ref: 'AWS::Region'}}, {Name: GUARDSCALE_AI_MODEL_ID, Value: {Ref: GuardianModelId}}, {Name: GUARDSCALE_NOTIFICATION_MODE, Value: {Ref: NotificationMode}}, {Name: GUARDSCALE_SES_FROM, Value: {Ref: SesFrom}}, {Name: GUARDSCALE_NOTIFICATION_RECIPIENTS, Value: {Ref: NotificationRecipients}}, {Name: GUARDSCALE_WHATSAPP_ORIGINATION_ID, Value: {Ref: WhatsappOriginationId}}, {Name: GUARDSCALE_PUBLIC_URL, Value: {Ref: PublicUrl}}, {Name: GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN, Value: {Ref: WhatsappEventTopicArn}}, {Name: GUARDSCALE_TABLE, Value: {Ref: GuardScaleTable}}, {Name: GUARDSCALE_QUEUE_URL, Value: {Ref: Queue}}, {Name: GUARDSCALE_EVIDENCE_BUCKET, Value: {Ref: EvidenceBucket}}, {Name: GUARDSCALE_ROOT_USER, Value: {Ref: RootUsername}}, {Name: GUARDSCALE_ROOT_PASSWORD, Value: {Ref: RootPassword}}, {Name: GUARDSCALE_SESSION_SECRET, Value: {Ref: SessionSecret}}], LogConfiguration: {LogDriver: awslogs, Options: {awslogs-group: {Ref: LogGroup}, awslogs-region: {Ref: 'AWS::Region'}, awslogs-stream-prefix: api}}}]}}
+  WorkerTask: {Type: 'AWS::ECS::TaskDefinition', Properties: {RequiresCompatibilities: [FARGATE], NetworkMode: awsvpc, Cpu: '256', Memory: '512', ExecutionRoleArn: {Fn::GetAtt: [ExecutionRole, Arn]}, TaskRoleArn: {Fn::GetAtt: [TaskRole, Arn]}, ContainerDefinitions: [{Name: worker, Image: {Fn::Sub: '${ImageBase}-worker:${ReleaseVersion}'}, Environment: [{Name: GUARDSCALE_WHATSAPP_ALERT_TEMPLATE, Value: {Ref: WhatsappAlertTemplate}}, {Name: AWS_REGION, Value: {Ref: 'AWS::Region'}}, {Name: GUARDSCALE_AI_MODEL_ID, Value: {Ref: GuardianModelId}}, {Name: GUARDSCALE_NOTIFICATION_MODE, Value: {Ref: NotificationMode}}, {Name: GUARDSCALE_SES_FROM, Value: {Ref: SesFrom}}, {Name: GUARDSCALE_NOTIFICATION_RECIPIENTS, Value: {Ref: NotificationRecipients}}, {Name: GUARDSCALE_WHATSAPP_ORIGINATION_ID, Value: {Ref: WhatsappOriginationId}}, {Name: GUARDSCALE_PUBLIC_URL, Value: {Ref: PublicUrl}}, {Name: GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN, Value: {Ref: WhatsappEventTopicArn}}, {Name: GUARDSCALE_QUEUE_URL, Value: {Ref: Queue}}, {Name: GUARDSCALE_TABLE, Value: {Ref: GuardScaleTable}}, {Name: GUARDSCALE_SESSION_SECRET, Value: {Ref: SessionSecret}}], LogConfiguration: {LogDriver: awslogs, Options: {awslogs-group: {Ref: LogGroup}, awslogs-region: {Ref: 'AWS::Region'}, awslogs-stream-prefix: worker}}}]}}
   WebService: {Type: 'AWS::ECS::Service', DependsOn: Listener, Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: WebTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}, LoadBalancers: [{ContainerName: web, ContainerPort: 3000, TargetGroupArn: {Ref: WebTarget}}]}}
   ApiService: {Type: 'AWS::ECS::Service', DependsOn: ApiRule, Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: ApiTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}, LoadBalancers: [{ContainerName: api, ContainerPort: 3001, TargetGroupArn: {Ref: ApiTarget}}]}}
   WorkerService: {Type: 'AWS::ECS::Service', Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: WorkerTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}}}

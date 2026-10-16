@@ -45,6 +45,7 @@ type Detection struct {
 type Protection struct {
 	Enabled, DryRun   bool
 	DefaultTTLSeconds int
+	AllowedCIDRs      []string
 }
 type Storage struct {
 	StateDir                       string
@@ -137,6 +138,8 @@ func appendList(c *Config, sec, sub, v string) error {
 		c.Admin.ProtectedHosts = append(c.Admin.ProtectedHosts, v)
 	case "health.protected_paths":
 		c.Health.ProtectedPaths = append(c.Health.ProtectedPaths, v)
+	case "protection.allowed_cidrs":
+		c.Protection.AllowedCIDRs = append(c.Protection.AllowedCIDRs, v)
 	case "detection.expensive_query_parameters":
 		c.Detection.ExpensiveQueryParameters = append(c.Detection.ExpensiveQueryParameters, v)
 	default:

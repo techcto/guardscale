@@ -21,7 +21,7 @@ async function aggregate():Promise<Snapshot>{
    }
   }
  }
- return {scope:'platform',entries:rows.sort((a,b)=>b.at-a.at).slice(0,80).reverse().map(r=>r.entry)};
+ return {scope:'platform',entries:rows.sort((a,b)=>b.at-a.at||b.entry.id.localeCompare(a.entry.id)).slice(0,80).map(r=>r.entry)};
 }
 export async function GET(){
  try{

@@ -31,7 +31,7 @@ GuardScale correlates behavior at the origin: aggregate velocity, unique-URL tra
 
 **A swarm can look human one request at a time. GuardScale looks at the origin.** The project connects bounded, redacted agent observations to an incident console and an AWS notification workflow so operators can understand pressure before choosing a response. Its safety model separates evidence and explanation from authorization to change infrastructure.
 
-See the [hackathon story and submission checklist](CONTEST-README.md) and [architecture](docs/architecture.md). The conversational-response sections of the contest story describe the intended full workflow; demonstrate only configured, verified runtime features. The current Phase 1 agent is detection-first and does not execute arbitrary shell commands or mutate Apache, PHP-FPM, or firewall state.
+See the [hackathon story and submission checklist](CONTEST-README.md) and [architecture](docs/architecture.md). Target: [AWS CDS Agentic AI Partner Hackathon](https://aws-cds-partner.devpost.com/). Outbound CDS adapters exist, but The opt-in Guardian source now includes Bedrock inspection, scoped approvals and temporary protection; deployed AI/CDS evidence still requires verification. Demonstrate only verified runtime behavior; See [Guardian workflow and deployment prerequisites](docs/guardian.md). The current Phase 1 agent is detection-first and does not execute arbitrary shell commands or mutate Apache, PHP-FPM, or firewall state.
 
 ## Try GuardScale
 
@@ -106,7 +106,7 @@ bin/guardscale replay --config config.yaml --php-slow sample-slow.log sample-acc
 
 The GuardScale log format is tab-separated: RFC3339 timestamp, X-Forwarded-For, immediate peer, Host, method, URI, status, bytes, duration milliseconds, Referer, User-Agent, and verification state (`valid`, `missing`, or `invalid`). Forwarded identity is used only when the immediate peer matches `proxy.trusted_cidrs`; chains are evaluated right-to-left.
 
-Incident bundles are bounded by `storage.max_evidence_lines`. Query values and referers are removed and user agents fingerprinted. Protection ships disabled and dry-run; Phase 1 never mutates Apache, PHP-FPM, or firewall state.
+Incident bundles are bounded by `storage.max_evidence_lines`. Query values and referers are removed and user agents fingerprinted. Protection ships disabled and dry-run; Default operation never mutates Apache, PHP-FPM, or firewall state; opt-in Guardian adds bounded temporary HTTP(S) protection.
 
 Install the binary at `/usr/local/bin/guardscale`, configuration at `/etc/guardscale/config.yaml`, then install `systemd/guardscale.service`. Its hardening permits only the state directory; future opt-in protection will require separately documented privileges.
 
@@ -146,3 +146,10 @@ See [architecture](docs/architecture.md), [security model](docs/security-model.m
 ## License
 
 GuardScale is [AGPL-3.0-or-later](LICENSE), with separately negotiated [commercial licensing](COMMERCIAL-LICENSE.md) for maintainer-owned code. AGPL permits commercial hosting; it does not reserve SaaS operation exclusively to the maintainers.
+
+## Real localhost testing and Guardian
+
+Run `node devops/local/start.mjs` for the real PHP/Apache website and enrolled Go agent, then `node devops/local/test.mjs` for Playwright. An explicitly enabled disposable security fixture tests human-approved temporary protection and expiry. See [local testing](devops/local/README.md) and [Guardian tools, policy and deployment](docs/guardian.md). These source changes do not update production or demonstrate real message delivery by themselves.
+# Hackathon testing guide
+
+See [local setup, real agent tests, environment variables and Bedrock limitations](docs/hackathon-local-testing.md).
