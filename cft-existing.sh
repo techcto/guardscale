@@ -46,6 +46,12 @@ Optional values:
   STRIPE_WEBHOOK_SECRET
   STRIPE_STARTER_PRICE_ID
   STRIPE_SCALE_PRICE_ID
+  GUARDSCALE_USAGE_EXPORT
+  STRIPE_SERVER_OVERAGE_PRICE_ID
+  STRIPE_LOG_OVERAGE_PRICE_ID
+  STRIPE_AI_OVERAGE_PRICE_ID
+  GUARDSCALE_LOG_MB_INCLUDED_JSON
+  GUARDSCALE_AI_CREDIT_WEIGHTS_JSON
   GUARDSCALE_API_LISTENER_PRIORITY
   GUARDSCALE_WEB_LISTENER_PRIORITY
   GUARDSCALE_VERSION                 Image tag to publish/deploy (default: latest)
@@ -156,6 +162,12 @@ deploy() {
   [[ -n "${STRIPE_WEBHOOK_SECRET:-}" ]] && parameters+=("StripeWebhookSecret=$STRIPE_WEBHOOK_SECRET")
   [[ -n "${STRIPE_STARTER_PRICE_ID:-}" ]] && parameters+=("StripeStarterPriceId=$STRIPE_STARTER_PRICE_ID")
   [[ -n "${STRIPE_SCALE_PRICE_ID:-}" ]] && parameters+=("StripeScalePriceId=$STRIPE_SCALE_PRICE_ID")
+  [[ -n "${GUARDSCALE_USAGE_EXPORT:-}" ]] && parameters+=("UsageExport=$GUARDSCALE_USAGE_EXPORT")
+  [[ -n "${STRIPE_SERVER_OVERAGE_PRICE_ID:-}" ]] && parameters+=("StripeServerOveragePriceId=$STRIPE_SERVER_OVERAGE_PRICE_ID")
+  [[ -n "${STRIPE_LOG_OVERAGE_PRICE_ID:-}" ]] && parameters+=("StripeLogOveragePriceId=$STRIPE_LOG_OVERAGE_PRICE_ID")
+  [[ -n "${STRIPE_AI_OVERAGE_PRICE_ID:-}" ]] && parameters+=("StripeAIOveragePriceId=$STRIPE_AI_OVERAGE_PRICE_ID")
+  [[ -n "${GUARDSCALE_LOG_MB_INCLUDED_JSON:-}" ]] && parameters+=("LogMbIncluded=$GUARDSCALE_LOG_MB_INCLUDED_JSON")
+  [[ -n "${GUARDSCALE_AI_CREDIT_WEIGHTS_JSON:-}" ]] && parameters+=("AICreditWeights=$GUARDSCALE_AI_CREDIT_WEIGHTS_JSON")
   [[ -n "${GUARDSCALE_API_LISTENER_PRIORITY:-}" ]] && parameters+=("ApiListenerPriority=$GUARDSCALE_API_LISTENER_PRIORITY")
   [[ -n "${GUARDSCALE_WEB_LISTENER_PRIORITY:-}" ]] && parameters+=("WebListenerPriority=$GUARDSCALE_WEB_LISTENER_PRIORITY")
 

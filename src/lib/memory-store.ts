@@ -1,10 +1,10 @@
 import{randomUUID}from'node:crypto';
-import type{GuardScaleEvent,GuardScaleUser,IncidentRecord,Node,OrgMembership,Organization,OrgType,Product,Settings,Subscription}from'./model';
+import type{GuardScaleEvent,GuardScaleUser,IncidentRecord,Node,OrgMembership,Organization,OrgType,Product,Settings,Subscription,UsageCounts,UsageDelta,UsageHour}from'./model';
 import{defaultSettings}from'./model';
 import {hasPaidEntitlement} from './subscription-entitlement';
-type State={orgs:Map<string,Organization>;singletonOrgId?:string;memberships:Map<string,OrgMembership>;nodes:Map<string,Node>;incidents:Map<string,IncidentRecord>;events:Map<string,GuardScaleEvent[]>;users:Map<string,GuardScaleUser>;passwords:Map<string,string>;subscriptions:Map<string,Subscription>;settings:Map<string,Settings>};
+type State={orgs:Map<string,Organization>;singletonOrgId?:string;memberships:Map<string,OrgMembership>;nodes:Map<string,Node>;incidents:Map<string,IncidentRecord>;events:Map<string,GuardScaleEvent[]>;users:Map<string,GuardScaleUser>;passwords:Map<string,string>;subscriptions:Map<string,Subscription>;settings:Map<string,Settings>;usage:Map<string,UsageHour>;claims:Set<string>};
 const g=globalThis as typeof globalThis&{guardscaleState?:State};
-export const state:State=g.guardscaleState??={orgs:new Map(),memberships:new Map(),nodes:new Map(),incidents:new Map(),events:new Map(),users:new Map(),passwords:new Map(),subscriptions:new Map(),settings:new Map()};
+export const state:State=g.guardscaleState??={orgs:new Map(),memberships:new Map(),nodes:new Map(),incidents:new Map(),events:new Map(),users:new Map(),passwords:new Map(),subscriptions:new Map(),settings:new Map(),usage:new Map(),claims:new Set()};
 g.guardscaleState=state;
 const key=(tenant:string,id:string)=>`${tenant}\0${id}`;
 const membershipKey=(orgId:string,userId:string)=>`${orgId}\0${userId}`;
@@ -47,7 +47,7 @@ export const memoryStore={
   async incident(tenant:string,incidentId:string){return state.incidents.get(key(tenant,incidentId))??null},
   async incidents(tenant:string){return[...state.incidents.values()].filter(x=>x.tenantId===tenant)},
   async incidentsForNode(tenant:string,serverId:string){return[...state.incidents.values()].filter(x=>x.tenantId===tenant&&x.serverId===serverId)},
-  async putEvent(v:GuardScaleEvent){const k=key(v.tenantId,v.serverId),list=state.events.get(k)??[];if(v.id&&list.some(e=>e.id===v.id))return;list.push(v);if(list.length>MAX_EVENTS_PER_NODE)list.shift();state.events.set(k,list)},
+  async putEvent(v:GuardScaleEvent){const k=key(v.tenantId,v.serverId),list=state.events.get(k)??[];if(v.id&&list.some(e=>e.id===v.id))return false;list.push(v);if(list.length>MAX_EVENTS_PER_NODE)list.shift();state.events.set(k,list);return true},
   async eventsForNode(tenant:string,serverId:string,limit=200){return(state.events.get(key(tenant,serverId))??[]).slice(-limit).reverse()},
   async userByName(username:string){return[...state.users.values()].find(x=>x.username.toLowerCase()===username.toLowerCase())??null},
   async userById(id:string){return state.users.get(id)??null},
@@ -60,5 +60,10 @@ export const memoryStore={
   async subscriptions(orgId:string){return[...state.subscriptions.values()].filter(x=>x.orgId===orgId)},
   async activeSubscriptionForOrg(orgId:string){const rows=[...state.subscriptions.values()].filter(x=>x.orgId===orgId&&hasPaidEntitlement(x));return rows.sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0]??null},
   async putSubscription(v:Subscription){state.subscriptions.set(v.id,v)},
+  async addUsage(orgId:string,periodStart:string,hour:string,delta:UsageDelta,billable:boolean,claim?:string){if(claim){if(state.claims.has(key(orgId,'CLAIM#'+claim)))return false;state.claims.add(key(orgId,'CLAIM#'+claim))}for(const k of [key(orgId,'H#'+hour+'#'+periodStart),key(orgId,'P#'+periodStart)]){const v=state.usage.get(k)??{hour,periodStart,billable:false,exported:{},serverHours:0,logBytes:0,ai:{}};v.serverHours+=delta.serverHours??0;v.logBytes+=delta.logBytes??0;if(delta.ai){const m=v.ai[delta.ai.model]??={calls:0,inputTokens:0,outputTokens:0,unknownCalls:0};m.calls+=delta.ai.calls??0;m.inputTokens+=delta.ai.inputTokens??0;m.outputTokens+=delta.ai.outputTokens??0;m.unknownCalls+=delta.ai.unknownCalls??0}if(billable&&k.includes('\0H#'))v.billable=true;state.usage.set(k,v)}return true},
+  async usageTotals(orgId:string,periodStart:string):Promise<UsageCounts>{const v=state.usage.get(key(orgId,'P#'+periodStart));return structuredClone({serverHours:v?.serverHours??0,logBytes:v?.logBytes??0,ai:v?.ai??{}})},
+  async usageHours(orgId:string,fromHour:string){return[...state.usage.entries()].filter(([k,v])=>k.startsWith(key(orgId,'H#'))&&v.hour>=fromHour).map(([,v])=>structuredClone(v)).sort((a,b)=>a.hour.localeCompare(b.hour))},
+  async markUsageHour(orgId:string,hour:string,periodStart:string,fields:{exported?:Record<string,number>;exportAttempts?:number;lastExportError?:string}){const k=key(orgId,'H#'+hour+'#'+periodStart),v=state.usage.get(k);if(v)state.usage.set(k,{...v,...fields,exported:{...v.exported,...fields.exported}})},
+  async claimOnce(orgId:string,claim:string,_ttlDays:number){const k=key(orgId,'CLAIM#'+claim);if(state.claims.has(k))return false;state.claims.add(k);return true},
 };
 export type Store=typeof memoryStore;

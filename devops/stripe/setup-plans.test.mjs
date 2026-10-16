@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { setup } from './setup-plans.mjs';
 
 function fakeStripe() {
-  const products = new Map(), prices = [], updates = [], uploads = [], coupons = new Map(), promotions = [];
+  const products = new Map(), prices = [], updates = [], uploads = [], coupons = new Map(), promotions = [], meters = [];
   const client = {
     files: { create: async v => { uploads.push(v.purpose); return { id: 'file_1' }; } },
     fileLinks: { create: async () => ({ url: 'https://files.stripe.com/links/logo' }) },
@@ -20,13 +20,17 @@ function fakeStripe() {
       list: async ({ code }) => ({ data: promotions.filter(p => p.code.toUpperCase() === code.toUpperCase()) }),
       create: async value => { const p = { ...value, id: `promo_${promotions.length}`, active: true }; promotions.push(p); return p; },
     },
+    billing: { meters: {
+      list: async function* () { yield* meters; },
+      create: async value => { const m = { ...value, id: `mtr_${meters.length}`, status: 'active' }; meters.push(m); return m; },
+    } },
     prices: {
       list: async ({ lookup_keys }) => ({ data: prices.filter(p => lookup_keys.includes(p.lookup_key)) }),
       create: async value => { const p = { ...value, id: `price_${prices.length}`, active: true,
         recurring: { usage_type: 'licensed', ...value.recurring, interval_count: 1 } }; prices.push(p); return p; },
     },
   };
-  return { client, products, prices, updates, uploads, coupons, promotions };
+  return { client, products, prices, updates, uploads, coupons, promotions, meters };
 }
 
 test('setup reuses plans without duplicating resources', async () => {
@@ -90,4 +94,29 @@ test('incomplete or invalid coupon settings are rejected before any Stripe resou
   await assert.rejects(setup(client, undefined, { ...dev50, GUARDSCALE_COUPON_PERCENT_OFF: '120' }), /PERCENT_OFF/);
   await assert.rejects(setup(client, undefined, { ...dev50, GUARDSCALE_COUPON_DURATION: '' }), /DURATION/);
   assert.equal(coupons.size + products.size + prices.length, 0);
+});
+
+test('usage meters are created once; overage prices are metered, only created with amounts, and reused on rerun', async () => {
+  const { client, prices, meters } = fakeStripe();
+  const plain = await setup(client);
+  assert.deepEqual(meters.map(m => m.event_name), ['guardscale_server_hours_v1', 'guardscale_log_mb_v1', 'guardscale_ai_credits_v1']);
+  assert.equal(plain.STRIPE_SERVER_OVERAGE_PRICE_ID, undefined);
+  const amounts = { GUARDSCALE_SERVER_HOUR_CENTS: '1.5', GUARDSCALE_LOG_MB_CENTS: '0.05' };
+  const first = await setup(client, undefined, amounts);
+  const server = prices.find(p => p.id === first.STRIPE_SERVER_OVERAGE_PRICE_ID), log = prices.find(p => p.id === first.STRIPE_LOG_OVERAGE_PRICE_ID);
+  assert.equal(server.recurring.usage_type, 'metered');
+  assert.equal(server.recurring.meter, first.guardscale_server_hours_v1);
+  assert.equal(server.unit_amount_decimal, '1.5');
+  assert.equal(log.recurring.meter, first.guardscale_log_mb_v1);
+  assert.equal(first.STRIPE_AI_OVERAGE_PRICE_ID, undefined);
+  assert.deepEqual(await setup(client, undefined, amounts), first);
+  assert.equal(meters.length, 3);
+  meters[0].default_aggregation = { formula: 'count' };
+  await assert.rejects(setup(client), /Meter conflict/);
+});
+
+test('invalid overage amounts are rejected before any Stripe resource is created', async () => {
+  const { client, products, prices, meters } = fakeStripe();
+  await assert.rejects(setup(client, undefined, { GUARDSCALE_LOG_MB_CENTS: 'abc' }), /Invalid GUARDSCALE_LOG_MB_CENTS/);
+  assert.equal(products.size + prices.length + meters.length, 0);
 });

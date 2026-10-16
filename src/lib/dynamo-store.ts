@@ -1,7 +1,7 @@
 import{randomUUID}from'node:crypto';
 import{DynamoDBClient,CreateTableCommand,UpdateTimeToLiveCommand}from'@aws-sdk/client-dynamodb';
-import{DynamoDBDocumentClient,GetCommand,PutCommand,QueryCommand,DeleteCommand,UpdateCommand}from'@aws-sdk/lib-dynamodb';
-import type{GuardScaleEvent,GuardScaleUser,IncidentRecord,Node,OrgMembership,Organization,OrgType,Product,Settings,Subscription}from'./model';
+import{DynamoDBDocumentClient,GetCommand,PutCommand,QueryCommand,DeleteCommand,UpdateCommand,TransactWriteCommand}from'@aws-sdk/lib-dynamodb';
+import type{GuardScaleEvent,GuardScaleUser,IncidentRecord,Node,OrgMembership,Organization,OrgType,Product,Settings,Subscription,UsageCounts,UsageDelta,UsageHour}from'./model';
 import{defaultSettings}from'./model';
 import {hasPaidEntitlement} from './subscription-entitlement';
 
@@ -24,6 +24,21 @@ function ensureTable(){
     }catch(error){if(!(error instanceof Error&&error.name==='ResourceInUseException'))throw error}
   })();
   return tableReady;
+}
+
+// Usage counters are flat attributes so one UpdateItem can ADD to them: serverHours, logBytes, ai#<model>#<field>, exported#<meter>.
+const aiFields=['calls','inputTokens','outputTokens','unknownCalls'] as const;
+function usageAdds(delta:UsageDelta){
+  const adds:[string,number][]=[];
+  if(delta.serverHours)adds.push(['serverHours',delta.serverHours]);
+  if(delta.logBytes)adds.push(['logBytes',delta.logBytes]);
+  if(delta.ai)for(const f of aiFields)if(delta.ai[f])adds.push([`ai#${delta.ai.model}#${f}`,delta.ai[f]!]);
+  return{expression:'ADD '+adds.map((_,i)=>`#a${i} :a${i}`).join(', '),names:Object.fromEntries(adds.map(([n],i)=>[`#a${i}`,n])),values:Object.fromEntries(adds.map(([,v],i)=>[`:a${i}`,v]))};
+}
+function usageCounts(item:Record<string,unknown>|undefined):UsageCounts{
+  const counts:UsageCounts={serverHours:Number(item?.serverHours??0),logBytes:Number(item?.logBytes??0),ai:{}};
+  for(const [name,value] of Object.entries(item??{})){const m=/^ai#(.+)#(calls|inputTokens|outputTokens|unknownCalls)$/.exec(name);if(m)(counts.ai[m[1]]??={calls:0,inputTokens:0,outputTokens:0,unknownCalls:0})[m[2] as typeof aiFields[number]]=Number(value)}
+  return counts;
 }
 
 function slugify(name:string){return name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')||randomUUID().slice(0,8)}
@@ -141,10 +156,12 @@ export const dynamoStore={
     const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',FilterExpression:'serverId=:sid',ExpressionAttributeValues:{':pk':`ORG#${tenant}`,':prefix':'INCIDENT#',':sid':serverId}}));
     return (r.Items??[]) as IncidentRecord[];
   },
+  // Returns false when an event with the same ID was already stored, so agent retries are not counted twice.
   async putEvent(v:GuardScaleEvent){
     await ensureTable();
     const ttl=Math.floor(Date.now()/1000)+7*24*60*60;
-    await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${v.tenantId}#NODE#${v.serverId}`,sk:`EVENT#${v.at}#${v.id??randomUUID()}`,ttl,...v}}));
+    try{await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${v.tenantId}#NODE#${v.serverId}`,sk:`EVENT#${v.at}#${v.id??randomUUID()}`,ttl,...v},...(v.id?{ConditionExpression:'attribute_not_exists(sk)'}:{})}));return true}
+    catch(error){if(error instanceof Error&&error.name==='ConditionalCheckFailedException')return false;throw error}
   },
   async eventsForNode(tenant:string,serverId:string,limit=200):Promise<GuardScaleEvent[]>{
     await ensureTable();
@@ -204,5 +221,40 @@ export const dynamoStore={
   async putSubscription(v:Subscription){
     await ensureTable();
     await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${v.orgId}`,sk:`SUBSCRIPTION#${v.id}`,...v}}));
+  },
+  // The hour and billing-period counters change in one transaction, so quota checks and Stripe export always agree.
+  // With a claim key, the change applies only once per key (e.g. one server-hour per server); returns false when already claimed.
+  async addUsage(orgId:string,periodStart:string,hour:string,delta:UsageDelta,billable:boolean,claim?:string){
+    await ensureTable();
+    const add=usageAdds(delta),pk=`ORG#${orgId}`;if(add.expression==='ADD ')return false;
+    const hourSet={names:{'#period':'periodStart',...(billable?{'#billable':'billable'}:{})},values:{':period':periodStart,...(billable?{':true':true}:{})}};
+    try{await client.send(new TransactWriteCommand({TransactItems:[
+      ...(claim?[{Put:{TableName:tableName,Item:{pk,sk:`CLAIM#${claim}`,createdAt:new Date().toISOString(),ttl:Math.floor(Date.now()/1000)+40*86400},ConditionExpression:'attribute_not_exists(sk)'}}]:[]),
+      {Update:{TableName:tableName,Key:{pk,sk:`USAGE#H#${hour}#${periodStart}`},UpdateExpression:'SET #period=:period'+(billable?', #billable=:true ':' ')+add.expression,ExpressionAttributeNames:{...add.names,...hourSet.names},ExpressionAttributeValues:{...add.values,...hourSet.values}}},
+      {Update:{TableName:tableName,Key:{pk,sk:`USAGE#P#${periodStart}`},UpdateExpression:add.expression,ExpressionAttributeNames:add.names,ExpressionAttributeValues:add.values}},
+    ]}));return true}
+    catch(error){if(claim&&error instanceof Error&&error.name==='TransactionCanceledException'&&/ConditionalCheckFailed/.test(error.message))return false;throw error}
+  },
+  async usageTotals(orgId:string,periodStart:string):Promise<UsageCounts>{
+    await ensureTable();
+    return usageCounts((await client.send(new GetCommand({TableName:tableName,Key:{pk:`ORG#${orgId}`,sk:`USAGE#P#${periodStart}`}}))).Item);
+  },
+  async usageHours(orgId:string,fromHour:string):Promise<UsageHour[]>{
+    await ensureTable();
+    const items:Record<string,unknown>[]=[];let start:Record<string,unknown>|undefined;
+    do{const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND sk BETWEEN :from AND :to',ExpressionAttributeValues:{':pk':`ORG#${orgId}`,':from':`USAGE#H#${fromHour}`,':to':'USAGE#H#~'},ExclusiveStartKey:start}));items.push(...(r.Items??[]));start=r.LastEvaluatedKey}while(start);
+    return items.map(item=>({...usageCounts(item),hour:String(item.sk).slice('USAGE#H#'.length,'USAGE#H#'.length+13),periodStart:String(item.periodStart),billable:item.billable===true,exported:Object.fromEntries(Object.entries(item).filter(([k])=>k.startsWith('exported#')).map(([k,v])=>[k.slice('exported#'.length),Number(v)])),exportAttempts:item.exportAttempts as number|undefined,lastExportError:item.lastExportError as string|undefined}));
+  },
+  async markUsageHour(orgId:string,hour:string,periodStart:string,fields:{exported?:Record<string,number>;exportAttempts?:number;lastExportError?:string}){
+    await ensureTable();
+    const sets:[string,unknown][]=[...Object.entries(fields.exported??{}).map(([m,v])=>[`exported#${m}`,v] as [string,unknown]),...(fields.exportAttempts!==undefined?[['exportAttempts',fields.exportAttempts] as [string,unknown]]:[]),...(fields.lastExportError!==undefined?[['lastExportError',fields.lastExportError] as [string,unknown]]:[])];
+    if(!sets.length)return;
+    await client.send(new UpdateCommand({TableName:tableName,Key:{pk:`ORG#${orgId}`,sk:`USAGE#H#${hour}#${periodStart}`},UpdateExpression:'SET '+sets.map((_,i)=>`#s${i}=:s${i}`).join(', '),ExpressionAttributeNames:Object.fromEntries(sets.map(([n],i)=>[`#s${i}`,n])),ExpressionAttributeValues:Object.fromEntries(sets.map(([,v],i)=>[`:s${i}`,v]))}));
+  },
+  // First caller wins (server-hour counting, usage alerts); claims expire after ttlDays.
+  async claimOnce(orgId:string,key:string,ttlDays:number){
+    await ensureTable();
+    try{await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${orgId}`,sk:`CLAIM#${key}`,createdAt:new Date().toISOString(),ttl:Math.floor(Date.now()/1000)+ttlDays*86400},ConditionExpression:'attribute_not_exists(sk)'}));return true}
+    catch(error){if(error instanceof Error&&error.name==='ConditionalCheckFailedException')return false;throw error}
   },
 };
