@@ -1,0 +1,93 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { setup } from './setup-plans.mjs';
+
+function fakeStripe() {
+  const products = new Map(), prices = [], updates = [], uploads = [], coupons = new Map(), promotions = [];
+  const client = {
+    files: { create: async v => { uploads.push(v.purpose); return { id: 'file_1' }; } },
+    fileLinks: { create: async () => ({ url: 'https://files.stripe.com/links/logo' }) },
+    products: {
+      retrieve: async id => { if (!products.has(id)) throw Object.assign(new Error('missing'), { code: 'resource_missing' }); return products.get(id); },
+      create: async value => { const p = { ...value, active: true }; products.set(p.id, p); return p; },
+      update: async (id, value) => { const p = { ...products.get(id), ...value }; products.set(id, p); updates.push(id); return p; },
+    },
+    coupons: {
+      retrieve: async id => { if (!coupons.has(id)) throw Object.assign(new Error('missing'), { code: 'resource_missing' }); return coupons.get(id); },
+      create: async ({ applies_to, expand, ...value }) => { const c = { ...value, valid: true, applies_to: { products: applies_to.products } }; coupons.set(c.id, c); return c; },
+    },
+    promotionCodes: {
+      list: async ({ code }) => ({ data: promotions.filter(p => p.code.toUpperCase() === code.toUpperCase()) }),
+      create: async value => { const p = { ...value, id: `promo_${promotions.length}`, active: true }; promotions.push(p); return p; },
+    },
+    prices: {
+      list: async ({ lookup_keys }) => ({ data: prices.filter(p => lookup_keys.includes(p.lookup_key)) }),
+      create: async value => { const p = { ...value, id: `price_${prices.length}`, active: true,
+        recurring: { usage_type: 'licensed', ...value.recurring, interval_count: 1 } }; prices.push(p); return p; },
+    },
+  };
+  return { client, products, prices, updates, uploads, coupons, promotions };
+}
+
+test('setup reuses plans without duplicating resources', async () => {
+  const { client, products, prices } = fakeStripe();
+  const first = await setup(client);
+  assert.deepEqual(await setup(client), first);
+  assert.equal(products.size, 2);
+  assert.equal(prices.length, 2);
+  assert.deepEqual(prices.map(p => p.unit_amount), [4900, 19900]);
+});
+
+test('products get Checkout names, descriptions and one uploaded logo, updated in place on rerun', async () => {
+  const { client, products, updates, uploads } = fakeStripe();
+  products.set('guardscale_starter_v1', { id: 'guardscale_starter_v1', name: 'GuardScale starter', active: true, images: [] });
+  await setup(client, { data: Buffer.from('png'), name: 'logo.png' });
+  const starter = products.get('guardscale_starter_v1');
+  assert.equal(starter.name, 'GuardScale Starter');
+  assert.match(starter.description, /Up to 5 protected servers/);
+  assert.deepEqual(starter.images, ['https://files.stripe.com/links/logo']);
+  assert.equal(starter.metadata.logo_file, 'file_1');
+  assert.deepEqual(uploads, ['business_logo'], 'logo uploaded once and reused');
+  const before = updates.length;
+  await setup(client, { data: Buffer.from('png'), name: 'logo.png' });
+  assert.equal(updates.length, before, 'no updates when display is already current');
+});
+
+const dev50 = { GUARDSCALE_COUPON_CODE: 'GUARDSCALE_DEV50', GUARDSCALE_COUPON_PERCENT_OFF: '50', GUARDSCALE_COUPON_DURATION: '3' };
+
+test('no coupon is created without coupon settings', async () => {
+  const { client, coupons, promotions } = fakeStripe();
+  assert.equal((await setup(client)).coupon, undefined);
+  assert.equal(coupons.size + promotions.length, 0);
+});
+
+test('coupon and promotion code are created once, limited to GuardScale plans, and reused on rerun', async () => {
+  const { client, coupons, promotions } = fakeStripe();
+  const first = await setup(client, undefined, dev50);
+  assert.deepEqual(first.coupon, { code: 'GUARDSCALE_DEV50', coupon: 'guardscale_guardscale_dev50', promotion_code: 'promo_0', percent_off: 50, duration: 'repeating', duration_in_months: 3, active: true });
+  assert.deepEqual(coupons.get('guardscale_guardscale_dev50').applies_to.products, ['guardscale_starter_v1', 'guardscale_scale_v1']);
+  assert.deepEqual(promotions[0].promotion, { type: 'coupon', coupon: 'guardscale_guardscale_dev50' });
+  assert.deepEqual((await setup(client, undefined, dev50)).coupon, first.coupon);
+  assert.equal(coupons.size, 1);
+  assert.equal(promotions.length, 1);
+});
+
+test('changed terms, inactive or reassigned codes fail for manual review', async () => {
+  const { client, promotions } = fakeStripe();
+  await setup(client, undefined, dev50);
+  await assert.rejects(setup(client, undefined, { ...dev50, GUARDSCALE_COUPON_PERCENT_OFF: '60' }), /Coupon conflict/);
+  promotions[0].active = false;
+  await assert.rejects(setup(client, undefined, dev50), /Promotion code conflict/);
+  promotions[0].active = true;
+  promotions[0].promotion.coupon = 'other_coupon';
+  await assert.rejects(setup(client, undefined, dev50), /Promotion code conflict/);
+});
+
+test('incomplete or invalid coupon settings are rejected before any Stripe resource is created', async () => {
+  const { client, coupons, products, prices } = fakeStripe();
+  await assert.rejects(setup(client, undefined, { GUARDSCALE_COUPON_CODE: 'GUARDSCALE50' }), /PERCENT_OFF/);
+  await assert.rejects(setup(client, undefined, { ...dev50, GUARDSCALE_COUPON_CODE: 'dev50' }), /uppercase/);
+  await assert.rejects(setup(client, undefined, { ...dev50, GUARDSCALE_COUPON_PERCENT_OFF: '120' }), /PERCENT_OFF/);
+  await assert.rejects(setup(client, undefined, { ...dev50, GUARDSCALE_COUPON_DURATION: '' }), /DURATION/);
+  assert.equal(coupons.size + products.size + prices.length, 0);
+});

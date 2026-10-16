@@ -30,6 +30,10 @@ Deploy parameters:
   GUARDSCALE_ROOT_USER           Optional root username (default: root)
   GUARDSCALE_ROOT_PASSWORD       Root operator password (>=12 chars)
   GUARDSCALE_SESSION_SECRET      Session signing secret (>=32 chars)
+  STRIPE_SECRET_KEY              Optional, saas only
+  STRIPE_WEBHOOK_SECRET
+  STRIPE_STARTER_PRICE_ID
+  STRIPE_SCALE_PRICE_ID
   GUARDSCALE_CFT_BUCKET          S3 bucket for CFT uploads (default: guardscale)
   AWS_PROFILE                  Optional AWS CLI profile
 EOF
@@ -130,6 +134,10 @@ deploy() {
   [[ -n "${GUARDSCALE_CERTIFICATE_ARN:-}" ]] && parameters+=("CertificateArn=$GUARDSCALE_CERTIFICATE_ARN")
   [[ -n "${GUARDSCALE_DEPLOYMENT_MODE:-}" ]] && parameters+=("DeploymentMode=$GUARDSCALE_DEPLOYMENT_MODE")
   [[ -n "${GUARDSCALE_ROOT_USER:-}" ]] && parameters+=("RootUsername=$GUARDSCALE_ROOT_USER")
+  [[ -n "${STRIPE_SECRET_KEY:-}" ]] && parameters+=("StripeSecretKey=$STRIPE_SECRET_KEY")
+  [[ -n "${STRIPE_WEBHOOK_SECRET:-}" ]] && parameters+=("StripeWebhookSecret=$STRIPE_WEBHOOK_SECRET")
+  [[ -n "${STRIPE_STARTER_PRICE_ID:-}" ]] && parameters+=("StripeStarterPriceId=$STRIPE_STARTER_PRICE_ID")
+  [[ -n "${STRIPE_SCALE_PRICE_ID:-}" ]] && parameters+=("StripeScalePriceId=$STRIPE_SCALE_PRICE_ID")
 
   aws_cli cloudformation deploy \
     --template-file "$TEMPLATE" \
