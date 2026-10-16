@@ -2,6 +2,7 @@ import {NextRequest,NextResponse} from 'next/server';
 import type Stripe from 'stripe';
 import {stripe} from '@/lib/stripe';
 import {store} from '@/lib/store';
+import {forgetPlan} from '@/lib/usage';
 export async function POST(req:NextRequest){
  const signature=req.headers.get('stripe-signature'),secret=process.env.STRIPE_WEBHOOK_SECRET;
  if(!signature||!secret||!process.env.STRIPE_SECRET_KEY)return NextResponse.json({error:'Webhook not configured'},{status:503});
@@ -21,7 +22,11 @@ async function save(v:Stripe.Subscription,fallback:Record<string,string>={}){
  const orgId=v.metadata.orgId??fallback.orgId,productId=v.metadata.productId??fallback.productId;
  if(!orgId||!productId||!await store.organizationById(orgId))return;
  const product=(await store.products()).find(p=>p.id===productId&&p.active&&p.monthlyPrice>0);
- if(!product||!product.stripePriceId||!v.items.data.some(item=>item.price.id===product.stripePriceId))return;
+ const item=v.items.data.find(item=>item.price.id===product?.stripePriceId);
+ if(!product||!product.stripePriceId||!item)return;
  const status=['active','trialing','past_due','canceled','unpaid'].includes(v.status)?v.status as 'active'|'trialing'|'past_due'|'canceled'|'unpaid':'unpaid';
- await store.putSubscription({id:v.id,orgId,productId,stripeCustomerId:typeof v.customer==='string'?v.customer:v.customer.id,stripeSubscriptionId:v.id,status,updatedAt:new Date().toISOString()});
+ // The plan item's billing period is the usage period for included amounts and overage.
+ const iso=(seconds:number)=>new Date(seconds*1000).toISOString();
+ await store.putSubscription({id:v.id,orgId,productId,stripeCustomerId:typeof v.customer==='string'?v.customer:v.customer.id,stripeSubscriptionId:v.id,status,currentPeriodStart:iso(item.current_period_start),currentPeriodEnd:iso(item.current_period_end),updatedAt:new Date().toISOString()});
+ forgetPlan(orgId);
 }

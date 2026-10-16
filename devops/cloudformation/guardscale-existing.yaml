@@ -33,6 +33,12 @@ Metadata:
           - StripeWebhookSecret
           - StripeStarterPriceId
           - StripeScalePriceId
+          - UsageExport
+          - StripeServerOveragePriceId
+          - StripeLogOveragePriceId
+          - StripeAIOveragePriceId
+          - LogMbIncluded
+          - AICreditWeights
       - Label:
           default: Published images
         Parameters:
@@ -131,6 +137,31 @@ Parameters:
   StripeScalePriceId:
     Type: String
     Default: ''
+  UsageExport:
+    Type: String
+    Default: disabled
+    AllowedValues: [disabled, enabled]
+    Description: Enable opted-in overage and Stripe meter export (saas only). Disabled keeps hard plan limits.
+  StripeServerOveragePriceId:
+    Type: String
+    Default: ''
+    Description: Metered price on guardscale_server_hours_v1 (setup-plans.mjs).
+  StripeLogOveragePriceId:
+    Type: String
+    Default: ''
+    Description: Metered price on guardscale_log_mb_v1.
+  StripeAIOveragePriceId:
+    Type: String
+    Default: ''
+    Description: Metered price on guardscale_ai_credits_v1.
+  LogMbIncluded:
+    Type: String
+    Default: ''
+    Description: JSON of log MB included per plan. Empty leaves logs unmetered.
+  AICreditWeights:
+    Type: String
+    Default: ''
+    Description: Versioned AI credit weights JSON with included_credits per plan. Empty leaves AI unpriced.
   WebImage:
     Type: String
     Description: Published ECR image URI for the GuardScale web container.
@@ -411,6 +442,12 @@ Resources:
             - {Name: STRIPE_WEBHOOK_SECRET, Value: !Ref StripeWebhookSecret}
             - {Name: STRIPE_STARTER_PRICE_ID, Value: !Ref StripeStarterPriceId}
             - {Name: STRIPE_SCALE_PRICE_ID, Value: !Ref StripeScalePriceId}
+            - {Name: GUARDSCALE_USAGE_EXPORT, Value: !Ref UsageExport}
+            - {Name: STRIPE_SERVER_OVERAGE_PRICE_ID, Value: !Ref StripeServerOveragePriceId}
+            - {Name: STRIPE_LOG_OVERAGE_PRICE_ID, Value: !Ref StripeLogOveragePriceId}
+            - {Name: STRIPE_AI_OVERAGE_PRICE_ID, Value: !Ref StripeAIOveragePriceId}
+            - {Name: GUARDSCALE_LOG_MB_INCLUDED_JSON, Value: !Ref LogMbIncluded}
+            - {Name: GUARDSCALE_AI_CREDIT_WEIGHTS_JSON, Value: !Ref AICreditWeights}
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -454,6 +491,12 @@ Resources:
             - {Name: STRIPE_WEBHOOK_SECRET, Value: !Ref StripeWebhookSecret}
             - {Name: STRIPE_STARTER_PRICE_ID, Value: !Ref StripeStarterPriceId}
             - {Name: STRIPE_SCALE_PRICE_ID, Value: !Ref StripeScalePriceId}
+            - {Name: GUARDSCALE_USAGE_EXPORT, Value: !Ref UsageExport}
+            - {Name: STRIPE_SERVER_OVERAGE_PRICE_ID, Value: !Ref StripeServerOveragePriceId}
+            - {Name: STRIPE_LOG_OVERAGE_PRICE_ID, Value: !Ref StripeLogOveragePriceId}
+            - {Name: STRIPE_AI_OVERAGE_PRICE_ID, Value: !Ref StripeAIOveragePriceId}
+            - {Name: GUARDSCALE_LOG_MB_INCLUDED_JSON, Value: !Ref LogMbIncluded}
+            - {Name: GUARDSCALE_AI_CREDIT_WEIGHTS_JSON, Value: !Ref AICreditWeights}
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -490,6 +533,14 @@ Resources:
             - {Name: GUARDSCALE_WHATSAPP_ORIGINATION_ID, Value: !Ref WhatsappOriginationId}
             - {Name: GUARDSCALE_NOTIFICATION_RECIPIENTS, Value: !Ref NotificationRecipients}
             - {Name: GUARDSCALE_SES_FROM, Value: !Ref SesFrom}
+            - {Name: GUARDSCALE_DEPLOYMENT_MODE, Value: !Ref DeploymentMode}
+            - {Name: STRIPE_SECRET_KEY, Value: !Ref StripeSecretKey}
+            - {Name: GUARDSCALE_USAGE_EXPORT, Value: !Ref UsageExport}
+            - {Name: STRIPE_SERVER_OVERAGE_PRICE_ID, Value: !Ref StripeServerOveragePriceId}
+            - {Name: STRIPE_LOG_OVERAGE_PRICE_ID, Value: !Ref StripeLogOveragePriceId}
+            - {Name: STRIPE_AI_OVERAGE_PRICE_ID, Value: !Ref StripeAIOveragePriceId}
+            - {Name: GUARDSCALE_LOG_MB_INCLUDED_JSON, Value: !Ref LogMbIncluded}
+            - {Name: GUARDSCALE_AI_CREDIT_WEIGHTS_JSON, Value: !Ref AICreditWeights}
           LogConfiguration:
             LogDriver: awslogs
             Options:

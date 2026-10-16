@@ -3,6 +3,8 @@ import {notifier,type Notification} from '../lib/notifications';
 import {store} from '../lib/store';
 import {evaluateAutoGuardian} from '../lib/auto-guardian';
 import {processIncident,processWhatsAppEnvelope,notifyProtectionOutcome} from '../lib/incident-workflow';
+import {exportUsage,reconcileUsage,usageAlerts,usageExportEnabled} from '../lib/usage';
+import {stripe} from '../lib/stripe';
 const queue=process.env.GUARDSCALE_QUEUE_URL;if(!queue)throw Error('GUARDSCALE_QUEUE_URL is required');
 const sqs=new SQSClient({endpoint:process.env.GUARDSCALE_QUEUE_ENDPOINT});
 async function receive(){
@@ -40,4 +42,17 @@ async function main(){
   }
  }
 }
+// Usage alerts, Stripe meter export and hourly reconciliation run beside queue work; all are no-ops outside SaaS.
+const usageSeconds=Number(process.env.GUARDSCALE_USAGE_CYCLE_SECONDS??300);let cycles=0;
+async function usageCycle(){
+ if(process.env.GUARDSCALE_DEPLOYMENT_MODE!=='saas')return;
+ const exporting=usageExportEnabled()&&!!process.env.STRIPE_SECRET_KEY,reconcile=exporting&&cycles++%Math.max(1,Math.round(3600/usageSeconds))===0;
+ for(const org of await store.organizations()){
+  try{const alerts=await usageAlerts(org.id);if(alerts)console.log(JSON.stringify({level:'info',usageAlerts:alerts,tenant:org.id}))}catch(e){console.error(JSON.stringify({level:'error',message:'Usage alert failed',tenant:org.id,error:e instanceof Error?e.name:'error'}))}
+  if(!exporting)continue;
+  try{const r=await exportUsage(org.id,stripe());if(r.status==='ok'&&(r.sent||r.failed))console.log(JSON.stringify({level:'info',usageExport:r,tenant:org.id}));if(reconcile&&r.status==='ok')for(const m of await reconcileUsage(org.id,stripe()))if(m.difference)console.log(JSON.stringify({level:'warn',usageReconciliation:m,tenant:org.id,note:'Stripe summaries lag; persistent differences need review'}))}
+  catch(e){console.error(JSON.stringify({level:'error',message:'Usage export failed; hours stay pending for retry',tenant:org.id,error:e instanceof Error?e.name:'error'}))}
+ }
+}
+if(Number.isFinite(usageSeconds)&&usageSeconds>=30){setInterval(()=>void usageCycle().catch(()=>console.error(JSON.stringify({level:'error',message:'Usage cycle failed'}))),usageSeconds*1000);void usageCycle().catch(()=>console.error(JSON.stringify({level:'error',message:'Usage cycle failed'})))}
 void main();
