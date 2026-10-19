@@ -11,3 +11,13 @@
 .gs-hero-log-controls button{margin-left:auto;font-size:12px;padding:8px 14px}
 .gs-hero-log-controls p{flex-basis:100%;margin:0;font-size:11px;max-width:780px}
 @media(max-width:700px){.gs-public .gs-public-hero{padding:48px 24px 190px}.gs-public-hero .gs-hero-copy{max-width:none}.gs-hero-log-controls{left:24px;right:24px;bottom:20px}.gs-hero-log-line{gap:12px;font-size:11px;grid-template-columns:55px 45px minmax(100px,1fr) 30px 65px}.gs-hero-log-background:after{background:rgba(255,255,255,.9)}}
+/* Hero tail: newest request rises in at the bottom; older requests glide up and fade into the hero. */
+.gs-hero-log-tail{justify-content:flex-end;opacity:1;padding-bottom:168px;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 35%);mask-image:linear-gradient(to bottom,transparent 0,#000 35%)}
+.gs-hero-log-tail .gs-hero-log-line{color:var(--blue);border-bottom-color:rgba(0,120,189,.16);opacity:.62;will-change:transform,opacity}.gs-hero-log-tail .gs-hero-log-line:last-child{opacity:1}
+.gs-hero-log-line.is-streaming{animation:gs-hero-stream-in 2.4s ease-out}.gs-hero-log-line.is-streaming strong{color:var(--text)}.gs-hero-log-line .gs-access-error{color:var(--red)}
+@keyframes gs-hero-stream-in{from{opacity:1;background:rgba(0,120,189,.1)}60%{opacity:1}to{background:transparent}}
+@media(prefers-reduced-motion:reduce){.gs-hero-log-line.is-streaming{animation:none}}
+
+/* Wide screens: the stream fills the hero's whole right side (to its edge, as before), starting 32px after the 740px headline column. */
+@media(min-width:1240px){.gs-hero-log-tail{left:calc(max(32px,(100% - 1296px)/2) + 772px);right:0;width:auto;padding-left:0;padding-right:4%}.gs-hero-log-tail .gs-hero-log-line{grid-template-columns:62px 52px minmax(130px,1fr) 40px 64px;gap:14px}.gs-hero-log-background:has(.gs-hero-log-tail):after{background:linear-gradient(90deg,rgba(255,255,255,.98),rgba(255,255,255,.92) 50%,rgba(255,255,255,0) 62%)}}
+.gs-hero-log-controls p{max-width:none;padding-right:max(0px,calc(100% - 780px))}
