@@ -1,0 +1,43 @@
+/* Admin console in the GuardScale console layout and theme. */
+.gs-console .content-area:has(>.admin-shell){max-width:none;padding:0}
+.admin-shell{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:calc(100vh - 72px)}
+.admin-sidenav{background:#fff;border-right:1px solid var(--line);padding:22px 0}
+.admin-sidenav nav{position:sticky;top:92px}
+.admin-sidenav-back{display:block;padding:0 20px 18px;font-size:13px;font-weight:600;color:var(--muted)}
+.admin-sidenav-back:hover{color:var(--cyan)}
+.admin-sidenav nav>div{margin-bottom:18px}
+.admin-sidenav-heading{margin:0 0 6px;padding:0 20px;font-size:12px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--text)}
+.admin-sidenav nav a{display:flex;align-items:center;gap:12px;padding:10px 20px;font-size:14px;color:var(--text)}
+.admin-sidenav nav a:hover{background:#f1f6fb}
+.admin-sidenav nav a[aria-current=page]{background:var(--cyan);color:#fff;font-weight:650}
+/* Spacing matches the console content area; the header is the dashboard's compact hero at admin scale. */
+.admin-content{min-width:0;max-width:1320px;padding:0 32px 64px}
+.gs-console .admin-content .hero{padding:30px 0 22px}
+.gs-console .admin-content .hero h1{font-size:32px;line-height:1.15;letter-spacing:-.8px;margin:6px 0 0;overflow-wrap:anywhere}
+.admin-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.admin-hero-main{display:flex;align-items:center;gap:18px;min-width:0}
+.admin-hero .eyebrow{font-size:12px}.admin-hero .eyebrow a{color:inherit}.admin-hero .eyebrow a:hover{text-decoration:underline}
+.gs-console .admin-content .hero p.muted{margin:8px 0 0;max-width:640px}
+.gs-console .admin-content .g-card{margin-bottom:20px;padding:20px 24px}
+.admin-content .g-card>h2{margin:0 0 14px;font-size:18px}
+.admin-content .table th,.admin-content .table td{padding:12px}
+.admin-content .table code{font-size:13px;color:var(--text)}
+.admin-content .empty-state{padding:40px 12px}
+.admin-content .status.failed{background:#fdecee;color:#b01d2d}
+.admin-avatar{display:inline-grid;place-items:center;flex-shrink:0;width:36px;height:36px;border-radius:50%;background:#eaf4ff;color:#005f96;font-size:13px;font-weight:700;text-transform:uppercase}
+.admin-avatar-lg{width:56px;height:56px;font-size:19px}
+.admin-entity{display:flex;align-items:center;gap:12px;min-width:0;color:var(--text)}
+.admin-entity strong,.admin-entity small{display:block}.admin-entity small{color:var(--muted)}
+.admin-entity:hover strong{color:var(--cyan)}
+.admin-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:18px;margin:0}
+.admin-facts dt{font-size:12px;font-weight:600;color:var(--muted)}
+.admin-facts dd{margin:4px 0 0;overflow-wrap:anywhere}
+.admin-facts code{font-size:12px;color:var(--text)}
+.admin-privacy{border-left:3px solid var(--cyan);background:#f3f7fc;padding:10px 14px;margin:0 0 20px;font-size:13px;color:var(--muted)}
+.admin-error{margin:16px 0 0;padding:10px 14px;border-left:3px solid #b01d2d;background:#fdecee;font-size:13px;color:#8e1d29}
+.admin-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.admin-stats .g-card span{display:block;font-size:12px;font-weight:600;color:var(--muted)}
+.admin-stats .g-card strong{font-size:28px}
+@media(max-width:800px){.admin-shell{grid-template-columns:minmax(0,1fr);min-height:0}.admin-sidenav{border-right:0;border-bottom:1px solid var(--line);padding:10px 0}.admin-sidenav nav{position:static;display:flex;overflow-x:auto;gap:4px;padding:0 12px}.admin-sidenav nav>div{display:flex;margin:0}.admin-sidenav-heading{display:none}.admin-sidenav nav a{padding:8px 12px;border-radius:8px;white-space:nowrap}.admin-sidenav-back{padding:0 20px 8px}.admin-content{padding:0 18px 40px}.admin-stats{grid-template-columns:minmax(0,1fr)}.admin-hero{align-items:flex-start}}
+.admin-usage-period{margin:-6px 0 14px;font-size:13px;color:var(--muted)}
+.admin-content .status.failed{background:#fdecee;color:#b42318}
