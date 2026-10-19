@@ -1,31 +1,14 @@
-import {createHmac} from 'node:crypto';
 import {NextResponse} from 'next/server';
-import {store} from '@/lib/store';
-import {publicAccessLog} from '@/lib/public-access-log';
+import {publicActivity,watchActivity,type PublicEntry} from '@/lib/live-activity';
+import {eventStream,untilAborted,wantsEventStream} from '@/lib/event-stream';
 export const dynamic='force-dynamic';
-type Entry={id:string;method:string;status:number;durationMs:number};
-type Snapshot={scope:'platform';entries:Entry[]};
+type Snapshot={scope:'platform';entries:PublicEntry[]};
 let cached:Snapshot|undefined,expires=0,pending:Promise<Snapshot>|undefined;
-async function aggregate():Promise<Snapshot>{
- const rows:{at:number;entry:Entry}[]=[];
- const secret=process.env.GUARDSCALE_SESSION_SECRET;
- if(!secret)return {scope:'platform',entries:[]};
- const now=Date.now(),cutoff=now-15*60_000;
- for(const org of await store.organizations()){
-  for(const node of await store.nodes(org.id)){
-   for(const e of await store.eventsForNode(org.id,node.serverId,200)){
-    const at=Date.parse(e.at);if(e.type!=='log.apache_access'||!Number.isFinite(at)||at<cutoff||at>now)continue;
-    const safe=publicAccessLog(e.metadata?.message??'');if(!safe)continue;
-    const id=createHmac('sha256',secret).update(JSON.stringify([org.id,node.serverId,e.id,e.at,e.metadata?.message])).digest('hex');
-    rows.push({at,entry:{id,...safe}});
-   }
-  }
- }
- return {scope:'platform',entries:rows.sort((a,b)=>b.at-a.at||b.entry.id.localeCompare(a.entry.id)).slice(0,80).map(r=>r.entry)};
-}
-export async function GET(){
+export async function GET(req:Request){
+ // `Accept: text/event-stream` streams the same privacy-safe projection; one shared reader serves every viewer.
+ if(wantsEventStream(req))return eventStream(req,async(send,signal)=>{const watch=await watchActivity('public',publicActivity,entries=>send('entries',{entries}));try{send('snapshot',{entries:watch.snapshot});await untilAborted(signal)}finally{watch.stop()}});
  try{
-  if(!cached||Date.now()>=expires){pending??=aggregate().then(value=>{cached=value;expires=Date.now()+5000;return value}).finally(()=>{pending=undefined});await pending}
+  if(!cached||Date.now()>=expires){pending??=publicActivity().then(entries=>{cached={scope:'platform',entries};expires=Date.now()+5000;return cached}).finally(()=>{pending=undefined});await pending}
   return NextResponse.json(cached,{headers:{'Cache-Control':'no-store'}});
  }catch{return NextResponse.json({error:'Activity temporarily unavailable'},{status:503,headers:{'Cache-Control':'no-store'}})}
 }
