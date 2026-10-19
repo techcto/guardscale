@@ -18,7 +18,8 @@ export type Settings={
   billing?:{overageEnabled:boolean;capPercent:number;alertPercents:number[];updatedAt:string};
   updatedAt:string;
 };
-export type Product={id:string;name:string;description:string;stripePriceId:string;monthlyPrice:number;serverLimit:number;active:boolean};
+// Measured units attached to the plan (AutoVision pattern): included servers, log MB and Guardian AI credits per billing period; null = not metered.
+export type Product={id:string;name:string;description:string;stripePriceId:string;monthlyPrice:number;serverLimit:number;logMbIncluded:number|null;aiCreditsIncluded:number|null;active:boolean};
 export type Subscription={id:string;orgId:string;productId:string;stripeCustomerId?:string;stripeSubscriptionId?:string;status:'trialing'|'active'|'past_due'|'canceled'|'unpaid';currentPeriodStart?:string;currentPeriodEnd?:string;updatedAt:string};
 // Measured usage for one organization hour or billing period. AI usage is kept per model; unknown calls have no reported tokens.
 export type UsageAi=Record<string,{calls:number;inputTokens:number;outputTokens:number;unknownCalls:number}>;

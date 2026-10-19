@@ -120,3 +120,17 @@ test('invalid overage amounts are rejected before any Stripe resource is created
   await assert.rejects(setup(client, undefined, { GUARDSCALE_LOG_MB_CENTS: 'abc' }), /Invalid GUARDSCALE_LOG_MB_CENTS/);
   assert.equal(products.size + prices.length + meters.length, 0);
 });
+
+test('plan products carry their included units, and reruns add missing unit metadata without other changes', async () => {
+  const { client, products, updates } = fakeStripe();
+  await setup(client);
+  assert.deepEqual([products.get('guardscale_starter_v1').metadata.included_servers, products.get('guardscale_starter_v1').metadata.included_log_mb], ['5', '10000']);
+  assert.deepEqual([products.get('guardscale_scale_v1').metadata.included_servers, products.get('guardscale_scale_v1').metadata.included_log_mb], ['50', '100000']);
+  // A product created before log MB was attached gains it on the next run; other metadata is kept.
+  const old = products.get('guardscale_starter_v1'); products.set(old.id, { ...old, metadata: { application: 'guardscale', included_servers: '5', logo_file: 'file_old' } });
+  updates.length = 0; await setup(client);
+  assert.deepEqual(products.get('guardscale_starter_v1').metadata, { application: 'guardscale', included_servers: '5', logo_file: 'file_old', included_log_mb: '10000' });
+  assert.deepEqual(updates, ['guardscale_starter_v1']);
+  updates.length = 0; await setup(client);
+  assert.deepEqual(updates, [], 'nothing to change on a current rerun');
+});

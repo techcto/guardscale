@@ -1,6 +1,6 @@
 import {store} from './store';
 import {notifier,type Notifier} from './notifications';
-import type {Settings,Subscription,UsageAi,UsageCounts,UsageHour} from './model';
+import type {Settings,Subscription,UsageAi,UsageCounts,UsageHour,Product} from './model';
 
 // Measured units, priced like the AWS services they run on: server-hours (EC2 instance-hours),
 // log MB ingested (CloudWatch Logs ingestion; 7-day retention included) and Guardian AI credits (Bedrock tokens).
@@ -44,9 +44,12 @@ export function usagePeriod(subscription:Subscription|null,now=new Date()):Perio
 }
 export type Allowance={serverHours:number;logBytes:number|null;aiCredits:number|null};
 // Included server-hours are the plan's servers for every hour of the period, so a server added late costs only its hours.
-export function allowanceFor(productId:string,serverLimit:number,period:Period,weights=creditWeights(),logs=logAllowances()):Allowance{
- const hours=Math.round((Date.parse(period.end)-Date.parse(period.start))/3600000);
- return{serverHours:serverLimit*hours,logBytes:logs?(logs[productId]??0)*MB:null,aiCredits:weights?weights.included_credits[productId]??0:null};
+// Allowances come from the plan's measured units. GUARDSCALE_LOG_MB_INCLUDED_JSON and the weights' included_credits
+// remain deployment overrides per plan; AI credits are only metered once versioned credit weights are configured.
+type PlanUnits=Pick<Product,'id'|'serverLimit'|'logMbIncluded'|'aiCreditsIncluded'>;
+export function allowanceFor(product:PlanUnits,period:Period,weights=creditWeights(),logs=logAllowances()):Allowance{
+ const hours=Math.round((Date.parse(period.end)-Date.parse(period.start))/3600000),logMb=logs?.[product.id]??product.logMbIncluded;
+ return{serverHours:product.serverLimit*hours,logBytes:logMb===null?null:logMb*MB,aiCredits:weights?weights.included_credits[product.id]??product.aiCreditsIncluded??0:null};
 }
 
 type Plan={subscription:Subscription|null;productId:string;serverLimit:number;period:Period;allowance:Allowance;billing:Settings['billing']|null;optedIn:boolean};
@@ -57,7 +60,7 @@ export async function planFor(orgId:string,fresh=false):Promise<Plan>{
  const [subscription,products,settings]=await Promise.all([store.activeSubscriptionForOrg(orgId),store.products(),store.settings(orgId)]);
  const product=products.find(p=>p.id===subscription?.productId)??products.find(p=>p.id==='dev')!,period=usagePeriod(subscription);
  const billing=settings.billing??null,optedIn=Boolean(billing?.overageEnabled&&usageExportEnabled()&&subscription?.stripeCustomerId&&product.id!=='dev');
- const plan={subscription,productId:product.id,serverLimit:product.serverLimit,period,allowance:allowanceFor(product.id,product.serverLimit,period),billing,optedIn};
+ const plan={subscription,productId:product.id,serverLimit:product.serverLimit,period,allowance:allowanceFor(product,period),billing,optedIn};
  plans.set(orgId,{at:Date.now(),plan});return plan;
 }
 // Without opt-in usage stops at the allowance; with it, at the admin's hard cap.

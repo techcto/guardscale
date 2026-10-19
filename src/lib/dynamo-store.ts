@@ -206,7 +206,7 @@ export const dynamoStore={
     await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${tenant}`,sk:'SETTINGS',...v}}));
   },
   async products():Promise<Product[]>{
-    return[{id:'dev',name:'Dev',description:'Free tier for a single personal workspace.',stripePriceId:'',monthlyPrice:0,serverLimit:1,active:true},{id:'starter',name:'Starter',description:'Detection and alerting for a small server fleet.',stripePriceId:process.env.STRIPE_STARTER_PRICE_ID??'',monthlyPrice:49,serverLimit:5,active:true},{id:'scale',name:'Scale',description:'Response automation and expanded infrastructure coverage.',stripePriceId:process.env.STRIPE_SCALE_PRICE_ID??'',monthlyPrice:199,serverLimit:50,active:true}];
+    return[{id:'dev',name:'Dev',description:'Free tier for a single personal workspace.',stripePriceId:'',monthlyPrice:0,serverLimit:1,logMbIncluded:1000,aiCreditsIncluded:null,active:true},{id:'starter',name:'Starter',description:'Detection and alerting for a small server fleet.',stripePriceId:process.env.STRIPE_STARTER_PRICE_ID??'',monthlyPrice:49,serverLimit:5,logMbIncluded:10000,aiCreditsIncluded:null,active:true},{id:'scale',name:'Scale',description:'Response automation and expanded infrastructure coverage.',stripePriceId:process.env.STRIPE_SCALE_PRICE_ID??'',monthlyPrice:199,serverLimit:50,logMbIncluded:100000,aiCreditsIncluded:null,active:true}];
   },
   async subscriptions(orgId:string):Promise<Subscription[]>{
     await ensureTable();
