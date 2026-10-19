@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import Stripe from 'stripe';
 
 export const plans = [
-  { id: 'starter', name: 'GuardScale Starter', cents: 4900, servers: 5, env: 'STRIPE_STARTER_PRICE_ID' },
-  { id: 'scale', name: 'GuardScale Scale', cents: 19900, servers: 50, env: 'STRIPE_SCALE_PRICE_ID' },
+  { id: 'starter', name: 'GuardScale Starter', cents: 4900, servers: 5, logMb: 10000, env: 'STRIPE_STARTER_PRICE_ID' },
+  { id: 'scale', name: 'GuardScale Scale', cents: 19900, servers: 50, logMb: 100000, env: 'STRIPE_SCALE_PRICE_ID' },
 ];
 // Shown in the Checkout order summary. Keep descriptions factual: what the plan includes, nothing promised beyond the app.
 const describe = servers => `Up to ${servers} protected servers: Apache and PHP attack detection, incident timelines with evidence, live activity and log streams, and alert notifications. Cancel anytime.`;
@@ -19,7 +19,7 @@ export const overage = [
 // never committed: this repository is public. Use different codes in test and live mode.
 export const couponEnv = ['GUARDSCALE_COUPON_CODE', 'GUARDSCALE_COUPON_PERCENT_OFF', 'GUARDSCALE_COUPON_DURATION'];
 
-// Creates or reuses a product and keeps its Checkout display (name, description, image) current. Prices are never changed here.
+// Creates or reuses a product and keeps its Checkout display (name, description, image) and included-unit metadata current. Prices are never changed here.
 async function ensureProduct(client, id, display, metadata, image) {
   let product;
   try { product = await client.products.retrieve(id); }
@@ -30,8 +30,9 @@ async function ensureProduct(client, id, display, metadata, image) {
   if (product.deleted || !product.active) throw new Error(`Unavailable product: ${id}`);
   // Checkout branding needs the logo as a Stripe file ID (logo_file); the product image needs its public link.
   const logo = product.images?.length && product.metadata?.logo_file ? undefined : await image?.();
-  if (product.name !== display.name || product.description !== display.description || logo)
-    product = await client.products.update(id, { ...display, ...(logo ? { images: [logo.url], metadata: { ...product.metadata, logo_file: logo.file } } : {}) });
+  const units = Object.fromEntries(Object.entries(metadata).filter(([key, value]) => key.startsWith('included_') && product.metadata?.[key] !== value));
+  if (product.name !== display.name || product.description !== display.description || logo || Object.keys(units).length)
+    product = await client.products.update(id, { ...display, ...(logo || Object.keys(units).length ? { metadata: { ...product.metadata, ...units, ...(logo ? { logo_file: logo.file } : {}) } } : {}), ...(logo ? { images: [logo.url] } : {}) });
   return product;
 }
 
@@ -45,7 +46,7 @@ export async function setup(client, image, env = {}) {
   const productImage = image && (async () => imageUrl ??= await (async () => { const file = (await client.files.create({ purpose: 'business_logo', file: { data: image.data, name: image.name, type: 'application/octet-stream' } })).id; return { file, url: (await client.fileLinks.create({ file })).url }; })());
   for (const plan of plans) {
     const id = `guardscale_${plan.id}_v1`;
-    await ensureProduct(client, id, { name: plan.name, description: describe(plan.servers) }, { application: 'guardscale', included_servers: String(plan.servers) }, productImage);
+    await ensureProduct(client, id, { name: plan.name, description: describe(plan.servers) }, { application: 'guardscale', included_servers: String(plan.servers), included_log_mb: String(plan.logMb) }, productImage);
     const lookup_key = `${id}_usd_monthly`;
     let price = (await client.prices.list({ lookup_keys: [lookup_key], limit: 2 })).data[0];
     if (price && (!price.active || price.product !== id || price.currency !== 'usd' ||

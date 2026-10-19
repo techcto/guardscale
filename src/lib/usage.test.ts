@@ -9,14 +9,19 @@ const saas=()=>{process.env.GUARDSCALE_DEPLOYMENT_MODE='saas'};
 const hour=(h:string,v:Partial<UsageHour>={}):UsageHour=>({hour:h,periodStart:'p',billable:true,exported:{},serverHours:0,logBytes:0,ai:{},...v});
 const paid=(orgId:string):Subscription=>({id:'sub_'+orgId,orgId,productId:'starter',stripeCustomerId:'cus_'+orgId,stripeSubscriptionId:'sub_'+orgId,status:'active',currentPeriodStart:'2026-10-01T00:00:00.000Z',currentPeriodEnd:'2026-10-31T00:00:00.000Z',updatedAt:new Date().toISOString()});
 
-test('included server-hours are the plan servers for every hour of the period; logs and AI are not metered without configuration',()=>{
+test('allowances come from the plan: server-hours for every hour of the period, included log MB, and AI only with credit weights',()=>{
  delete process.env.GUARDSCALE_LOG_MB_INCLUDED_JSON;delete process.env.GUARDSCALE_AI_CREDIT_WEIGHTS_JSON;
  const period=usagePeriod(paid('a'));
  assert.equal(period.source,'stripe_subscription');
- assert.deepEqual(allowanceFor('starter',5,period),{serverHours:5*720,logBytes:null,aiCredits:null});
+ const starter={id:'starter',serverLimit:5,logMbIncluded:10000,aiCreditsIncluded:null};
+ // Measured units come from the plan: included servers per hour and log MB; AI is unmetered without credit weights.
+ assert.deepEqual(allowanceFor(starter,period),{serverHours:5*720,logBytes:10000*MB,aiCredits:null});
+ assert.deepEqual(allowanceFor({...starter,logMbIncluded:null},period),{serverHours:3600,logBytes:null,aiCredits:null},'a plan without a log allowance leaves logs unmetered');
+ assert.deepEqual(allowanceFor({...starter,aiCreditsIncluded:40},period,{version:'v1',included_credits:{},models:{}}),{serverHours:3600,logBytes:10000*MB,aiCredits:40},'plan AI credits apply once weights exist');
  const month=usagePeriod(null,new Date('2026-02-10T00:00:00Z'));
  assert.deepEqual([month.start,month.end],['2026-02-01T00:00:00.000Z','2026-03-01T00:00:00.000Z']);
- assert.deepEqual(allowanceFor('starter',5,period,{version:'v1',included_credits:{starter:100},models:{}},{starter:500}),{serverHours:3600,logBytes:500*MB,aiCredits:100});
+ // Deployment settings still override the plan values per plan.
+ assert.deepEqual(allowanceFor(starter,period,{version:'v1',included_credits:{starter:100},models:{}},{starter:500}),{serverHours:3600,logBytes:500*MB,aiCredits:100});
 });
 
 test('overage is only the part above the allowance, rounded up on the running total, and never billed for hours without opt-in',()=>{
@@ -96,4 +101,18 @@ test('export sends one meter event per completed hour and meter, retries failure
  assert.equal(sent.length,1,'the current hour is not exported until complete');
  assert.deepEqual([sent[0].event_name,sent[0].identifier,sent[0].payload],[SERVER_METER,`${org}_${earlier}_${SERVER_METER}`,{stripe_customer_id:subscription.stripeCustomerId,value:'3'}]);
  delete process.env.GUARDSCALE_USAGE_EXPORT;delete process.env.STRIPE_SERVER_OVERAGE_PRICE_ID;
+});
+
+test('private installs never meter or cap usage, whatever the plan includes',async()=>{
+ const mode=process.env.GUARDSCALE_DEPLOYMENT_MODE;process.env.GUARDSCALE_DEPLOYMENT_MODE='on-premise';
+ try{
+  const org=randomUUID();forgetPlan(org);
+  // Usage far beyond any plan's included log MB (the Dev plan includes 1,000 MB).
+  await store.addUsage(org,usagePeriod(null).start,hourOf(),{logBytes:5000*MB},false);
+  assert.equal(await logAllowed(org),true,'logs are never capped in private mode');
+  assert.equal(await aiAllowed(org),true,'Guardian AI is never capped in private mode');
+  await recordLogBytes(org,1234);await recordServerHour(org,'srv-private');
+  assert.deepEqual(await store.usageTotals(org,usagePeriod(null).start),{serverHours:0,logBytes:5000*MB,ai:{}},'nothing new is metered in private mode');
+  assert.deepEqual(await exportUsage(org,{} as MeterClient),{status:'disabled'},'nothing is ever exported in private mode');
+ }finally{if(mode===undefined)delete process.env.GUARDSCALE_DEPLOYMENT_MODE;else process.env.GUARDSCALE_DEPLOYMENT_MODE=mode}
 });
