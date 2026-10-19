@@ -478,6 +478,8 @@ Resources:
             - {Name: GUARDSCALE_AI_MODEL_ID, Value: !Ref GuardianModelId}
             - {Name: GUARDSCALE_NOTIFICATION_MODE, Value: !Ref NotificationMode}
             - {Name: GUARDSCALE_WHATSAPP_ALERT_TEMPLATE, Value: !Ref WhatsappAlertTemplate}
+            - {Name: GUARDSCALE_WHATSAPP_ORIGINATION_ID, Value: !Ref WhatsappOriginationId}
+            - {Name: GUARDSCALE_SES_FROM, Value: !Ref SesFrom}
             - {Name: GUARDSCALE_PUBLIC_URL, Value: !Sub 'https://${HostHeader}'}
             - {Name: GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN, Value: !Ref WhatsappEventTopicArn}
             - {Name: GUARDSCALE_TABLE, Value: !Ref GuardScaleTable}

@@ -40,7 +40,7 @@ export default function SettingsConsole({saas,isRoot,initialTab}:{saas:boolean;i
   {tab==='Notifications'&&<><Heading title="Notification channels" text="Choose where GuardScale sends incident alerts and recovery updates."/>
   {settings.updatedAt===UNSAVED&&<div className="notice"><strong>Showing deployment defaults</strong><span>These values come from environment configuration (e.g. Docker/CloudFormation) and haven&apos;t been saved to this organization yet. Save once to make them explicit and editable independently of the deployment.</span></div>}
   <Toggle title="WhatsApp alerts" text="Two-way response through AWS End User Messaging Social." checked={settings.notifications.whatsappEnabled} onChange={v=>set('notifications',{whatsappEnabled:v})}/>
-  <TextField label="WhatsApp sender ID" value={settings.notifications.whatsappSenderId} placeholder="+15550100000 — test number, replace with your production sender ID" onChange={v=>set('notifications',{whatsappSenderId:v})}/>
+  <TextField label="WhatsApp sender ID" value={settings.notifications.whatsappSenderId} placeholder="AWS phone-number ID (phone-number-id-…); leave blank to use the deployment default" onChange={v=>set('notifications',{whatsappSenderId:v})}/>
   <div className="test-row">
    <input placeholder="Test phone number, e.g. +15551234567" value={testWhatsapp} onChange={e=>setTestWhatsapp(e.target.value)}/>
    <button type="button" className="button" onClick={()=>sendTest('whatsapp',testWhatsapp,settings.notifications.whatsappSenderId)}>Send test</button>

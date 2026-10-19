@@ -28,7 +28,7 @@ export type UsageHour=UsageCounts&{hour:string;periodStart:string;billable:boole
 export function defaultSettings(tenantId:string):Settings{return{
   tenantId,
   detection:{warningPercent:2,criticalPercent:10,emergencyPercent:30,trafficMultiplier:5,distributedCrawlerCorrelation:true,applicationFailureDetection:true,heartbeatStaleSeconds:180},
-  notifications:{whatsappEnabled:true,whatsappSenderId:process.env.GUARDSCALE_WHATSAPP_ORIGINATION_ID??'+15550100000',emailEnabled:true,recipients:process.env.GUARDSCALE_NOTIFICATION_RECIPIENTS??''},
+  notifications:{whatsappEnabled:true,whatsappSenderId:process.env.GUARDSCALE_WHATSAPP_ORIGINATION_ID??'',emailEnabled:true,recipients:process.env.GUARDSCALE_NOTIFICATION_RECIPIENTS??''},
   response:{allowRemoteRequests:false,dryRun:true,defaultTtlSeconds:300,maxTtlSeconds:900,autoGuardian:{enabled:false,waitSeconds:120,maxTtlSeconds:60,maxActionsPerHour:3}},
   privacy:{evidenceRetentionDays:30,maxEvidenceLines:500,removeQueryValues:true,fingerprintUserAgents:true},
   updatedAt:new Date(0).toISOString(),
