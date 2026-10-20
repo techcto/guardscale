@@ -26,8 +26,10 @@ console.log(JSON.stringify(body));
 `;
 function fixture(scenario='normal'){
  const dir=mkdtempSync(join(tmpdir(),'cft-cli-test-'));writeFileSync(join(dir,'aws'),fake,{mode:0o700});
- const env={...process.env,PATH:dir+':'+process.env.PATH,CFT_TEST_DIR:dir,CFT_TEST_PROJECT:project,CFT_TEST_SCENARIO:scenario};
- return{dir,scenario:value=>{env.CFT_TEST_SCENARIO=value},run:(extra=[],version='v0.2.6')=>spawnSync('bash',[join(root,'cmd.sh'),'cft-update',version,'--stack',project,...extra],{encoding:'utf8',env}),calls:()=>existsSync(join(dir,'calls'))?readFileSync(join(dir,'calls'),'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[],plan:()=>JSON.parse(readFileSync(join(dir,'plan'),'utf8')),close:()=>rmSync(dir,{recursive:true})};
+ const config=join(dir,'local.json');writeFileSync(config,'{}');
+ const env={...process.env,CFT_LOCAL_CONFIG:config,PATH:dir+':'+process.env.PATH,CFT_TEST_DIR:dir,CFT_TEST_PROJECT:project,CFT_TEST_SCENARIO:scenario};
+ delete env.AWS_PROFILE;
+ return{dir,config:value=>writeFileSync(config,JSON.stringify(value)),environment:(key,value)=>{env[key]=value},scenario:value=>{env.CFT_TEST_SCENARIO=value},run:(extra=[],version='v0.2.6')=>spawnSync('bash',[join(root,'cmd.sh'),'cft-update',version,'--stack',project,...extra],{encoding:'utf8',env}),calls:()=>existsSync(join(dir,'calls'))?readFileSync(join(dir,'calls'),'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[],plan:()=>JSON.parse(readFileSync(join(dir,'plan'),'utf8')),close:()=>rmSync(dir,{recursive:true})};
 }
 test('plan preserves secrets, targets UPDATE only, and never executes',()=>{
  const f=fixture();try{const r=f.run(['--plan','--profile','test-profile']);assert.equal(r.status,0,r.stderr);const p=f.plan();assert.equal(p.ChangeSetType,'UPDATE');assert.equal(p.UsePreviousTemplate,true);assert.equal(p.IncludeNestedStacks,true);assert.deepEqual(p.Parameters.find(p=>p.ParameterKey==='SessionSecret'),{ParameterKey:'SessionSecret',UsePreviousValue:true});assert.equal(p.Parameters.find(p=>p.ParameterKey==='ReleaseVersion').ParameterValue,'0.2.6');assert.ok(!JSON.stringify(p).includes('do-not-print'));assert.ok(!r.stdout.includes('do-not-print'));assert.ok(r.stdout.includes('REVIEW REQUIRED'));assert.ok(!f.calls().some(a=>a.includes('execute-change-set')));assert.ok(f.calls().every(a=>a.includes('test-profile')&&a.includes('cloudformation')))}finally{f.close()}
@@ -61,4 +63,16 @@ test('failed update waiter reports failure without destructive recovery',()=>{
 });
 test('optional template file is passed explicitly rather than using previous template',()=>{
  const f=fixture();try{const path=join(f.dir,'template.json');writeFileSync(path,'{}');assert.equal(f.run(['--plan','--template',path]).status,0);assert.ok(!f.plan().UsePreviousTemplate);assert.ok(f.calls().find(a=>a.includes('create-change-set')).includes('--template-body'))}finally{f.close()}
+});
+
+test('ignored local profile defaults are used, with environment and CLI overrides',()=>{
+ const f=fixture();try{
+  f.config({profile:'local-test-profile',region:'us-east-1'});
+  let r=f.run(['--plan']);assert.equal(r.status,0,r.stderr);assert.ok(r.stdout.includes('AWS profile: local-test-profile'));assert.ok(f.calls().every(a=>a.includes('local-test-profile')));
+  f.environment('AWS_PROFILE','environment-test-profile');r=f.run(['--plan']);assert.equal(r.status,0,r.stderr);assert.ok(r.stdout.includes('AWS profile: environment-test-profile'));
+  r=f.run(['--plan','--profile','override-test-profile']);assert.equal(r.status,0,r.stderr);assert.ok(r.stdout.includes('AWS profile: override-test-profile'));
+ }finally{f.close()}
+});
+test('local settings reject credentials before any AWS call without printing their values',()=>{
+ const f=fixture();try{f.config({accessKey:'not-a-real-key'});const r=f.run(['--plan']);assert.equal(r.status,1);assert.ok(r.stderr.includes('never put credentials'));assert.ok(!r.stderr.includes('not-a-real-key'));assert.equal(f.calls().length,0)}finally{f.close()}
 });
