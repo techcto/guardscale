@@ -15,6 +15,9 @@ PROTECT THE ORIGIN. UNDERSTAND THE INCIDENT.
 
 [Website](https://guardscale.org) · [GitHub](https://github.com/techcto/guardscale)
 
+**Before a private AWS launch:** complete the [WhatsApp/SES prerequisites](PREREQUISITES.md).
+For a no-AWS rehearsal, use the [local testing quickstart](docs/hackathon-local-testing.md).
+
 GuardScale is an AI-powered infrastructure guardian that detects attacks and application failures, alerts teams via WhatsApp and email, and lets operators safely respond in real time. It is open-source under AGPL-3.0-or-later (see `LICENSE`); a separate commercial license is available for embedding, redistribution, or operation without AGPL obligations (see `COMMERCIAL-LICENSE.md`).
 
 <a href="https://guardscale.org"><img src="assets/launch-website.svg" width="200" alt="Visit GuardScale" /></a>
@@ -33,7 +36,17 @@ GuardScale correlates behavior at the origin: aggregate velocity, unique-URL tra
 
 See the [hackathon story and submission checklist](CONTEST-README.md) and [architecture](docs/architecture.md). Target: [AWS CDS Agentic AI Partner Hackathon](https://aws-cds-partner.devpost.com/). Outbound CDS adapters exist, but The opt-in Guardian source now includes Bedrock inspection, scoped approvals and temporary protection; deployed AI/CDS evidence still requires verification. Demonstrate only verified runtime behavior; See [Guardian workflow and deployment prerequisites](docs/guardian.md). The current Phase 1 agent is detection-first and does not execute arbitrary shell commands or mutate Apache, PHP-FPM, or firewall state.
 
+Messaging registration is a launch prerequisite; verification is under **Admin → Settings → Messaging verification**. See the
+[setup and real round-trip verification guide](docs/whatsapp-setup.md).
+
 ## Try GuardScale
+
+**Local hackathon test (no release needed):** `npm run local:security`, then
+`npm run local:test:security`. Open http://localhost:8185 as `root / test`.
+See the [quick local testing guide](docs/hackathon-local-testing.md).
+
+**Update an existing deployment:** `bash cmd.sh cft-update VERSION --stack STACK`.
+Review and confirm the change set before execution; see [CFT updates](docs/cft-update.md).
 
 Open [guardscale.org](https://guardscale.org), sign in using deployment-owner credentials, and open **Nodes → Add node**. Copy the enrollment command to a supported Linux host, then confirm its heartbeat and sanitized telemetry before investigating incidents. Hosted root credentials are not the local defaults below. No anonymous incident or customer-data access is promised.
 

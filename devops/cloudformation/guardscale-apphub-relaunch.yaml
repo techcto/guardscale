@@ -140,6 +140,18 @@
     "WhatsappAlertTemplate": {
       "Type": "String",
       "Default": ""
+    },
+    "WhatsappBusinessAccountId": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^waba-[a-zA-Z0-9]+$",
+      "Description": "Registered WABA ID. With no existing topic ARN, creates and connects a stack-owned SNS topic. Never replaces a different WABA destination."
+    },
+    "WhatsappTemplateLanguage": {
+      "Type": "String",
+      "Default": "en_US",
+      "AllowedPattern": "[a-z]{2,3}(_[A-Z]{2})?",
+      "Description": "Language of the approved WhatsApp alert template."
     }
   },
   "Conditions": {
@@ -208,7 +220,41 @@
       ]
     },
     "HasWhatsappTopic": {
+      "Fn::Or": [
+        {
+          "Condition": "HasExistingWhatsappTopic"
+        },
+        {
+          "Condition": "CreateWhatsappTopic"
+        }
+      ]
+    },
+    "HasExistingWhatsappTopic": {
       "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "WhatsappEventTopicArn"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "CreateWhatsappTopic": {
+      "Fn::And": [
+        {
+          "Fn::Not": [
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "WhatsappBusinessAccountId"
+                },
+                ""
+              ]
+            }
+          ]
+        },
         {
           "Fn::Equals": [
             {
@@ -561,7 +607,11 @@
                   "Effect": "Allow",
                   "Action": [
                     "ses:SendEmail",
-                    "social-messaging:SendWhatsAppMessage"
+                    "social-messaging:SendWhatsAppMessage",
+                    "social-messaging:ListLinkedWhatsAppBusinessAccounts",
+                    "social-messaging:GetLinkedWhatsAppBusinessAccount",
+                    "social-messaging:GetLinkedWhatsAppBusinessAccountPhoneNumber",
+                    "social-messaging:ListWhatsAppMessageTemplates"
                   ],
                   "Resource": "*"
                 }
@@ -673,7 +723,15 @@
               {
                 "Name": "GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN",
                 "Value": {
-                  "Ref": "WhatsappEventTopicArn"
+                  "Fn::If": [
+                    "CreateWhatsappTopic",
+                    {
+                      "Ref": "WhatsappTopic"
+                    },
+                    {
+                      "Ref": "WhatsappEventTopicArn"
+                    }
+                  ]
                 }
               },
               {
@@ -686,6 +744,12 @@
                 "Name": "GUARDSCALE_PUBLIC_URL",
                 "Value": {
                   "Fn::Sub": "https://${AppHostHeader}"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE",
+                "Value": {
+                  "Ref": "WhatsappTemplateLanguage"
                 }
               }
             ],
@@ -819,7 +883,15 @@
               {
                 "Name": "GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN",
                 "Value": {
-                  "Ref": "WhatsappEventTopicArn"
+                  "Fn::If": [
+                    "CreateWhatsappTopic",
+                    {
+                      "Ref": "WhatsappTopic"
+                    },
+                    {
+                      "Ref": "WhatsappEventTopicArn"
+                    }
+                  ]
                 }
               },
               {
@@ -832,6 +904,12 @@
                 "Name": "GUARDSCALE_PUBLIC_URL",
                 "Value": {
                   "Fn::Sub": "https://${AppHostHeader}"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE",
+                "Value": {
+                  "Ref": "WhatsappTemplateLanguage"
                 }
               }
             ],
@@ -942,7 +1020,15 @@
               {
                 "Name": "GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN",
                 "Value": {
-                  "Ref": "WhatsappEventTopicArn"
+                  "Fn::If": [
+                    "CreateWhatsappTopic",
+                    {
+                      "Ref": "WhatsappTopic"
+                    },
+                    {
+                      "Ref": "WhatsappEventTopicArn"
+                    }
+                  ]
                 }
               },
               {
@@ -955,6 +1041,12 @@
                 "Name": "GUARDSCALE_PUBLIC_URL",
                 "Value": {
                   "Fn::Sub": "https://${AppHostHeader}"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE",
+                "Value": {
+                  "Ref": "WhatsappTemplateLanguage"
                 }
               }
             ],
@@ -1286,7 +1378,15 @@
               "Condition": {
                 "ArnEquals": {
                   "aws:SourceArn": {
-                    "Ref": "WhatsappEventTopicArn"
+                    "Fn::If": [
+                      "CreateWhatsappTopic",
+                      {
+                        "Ref": "WhatsappTopic"
+                      },
+                      {
+                        "Ref": "WhatsappEventTopicArn"
+                      }
+                    ]
                   }
                 }
               }
@@ -1300,13 +1400,172 @@
       "Condition": "HasWhatsappTopic",
       "Properties": {
         "TopicArn": {
-          "Ref": "WhatsappEventTopicArn"
+          "Fn::If": [
+            "CreateWhatsappTopic",
+            {
+              "Ref": "WhatsappTopic"
+            },
+            {
+              "Ref": "WhatsappEventTopicArn"
+            }
+          ]
         },
         "Protocol": "sqs",
         "Endpoint": {
           "Ref": "ExistingQueueArn"
         },
         "RawMessageDelivery": false
+      },
+      "DependsOn": [
+        "WhatsappQueuePolicy"
+      ]
+    },
+    "WhatsappTopic": {
+      "Type": "AWS::SNS::Topic",
+      "Condition": "CreateWhatsappTopic"
+    },
+    "WhatsappTopicPolicy": {
+      "Type": "AWS::SNS::TopicPolicy",
+      "Condition": "CreateWhatsappTopic",
+      "Properties": {
+        "Topics": [
+          {
+            "Ref": "WhatsappTopic"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "social-messaging.amazonaws.com"
+              },
+              "Action": "sns:Publish",
+              "Resource": {
+                "Ref": "WhatsappTopic"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:social-messaging:${AWS::Region}:${AWS::AccountId}:*"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "WhatsappRoutingRole": {
+      "Type": "AWS::IAM::Role",
+      "Condition": "CreateWhatsappTopic",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "guardscale-waba-routing",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "social-messaging:GetLinkedWhatsAppBusinessAccount",
+                    "social-messaging:PutWhatsAppBusinessAccountEventDestinations"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": [
+                      "arn:${AWS::Partition}:social-messaging:${AWS::Region}:${AWS::AccountId}:waba/${WabaKey}",
+                      {
+                        "WabaKey": {
+                          "Fn::Select": [
+                            1,
+                            {
+                              "Fn::Split": [
+                                "waba-",
+                                {
+                                  "Ref": "WhatsappBusinessAccountId"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "social-messaging:GetLinkedWhatsAppBusinessAccountPhoneNumber",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:social-messaging:${AWS::Region}:${AWS::AccountId}:phone-number-id/*"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "WhatsappRoutingFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Condition": "CreateWhatsappTopic",
+      "Properties": {
+        "Runtime": "python3.13",
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "WhatsappRoutingRole",
+            "Arn"
+          ]
+        },
+        "Timeout": 90,
+        "Code": {
+          "ZipFile": "\"\"\"CloudFormation-only WABA routing lifecycle. Never called by the application.\"\"\"\nimport json\nimport urllib.request\n\n\ndef reconcile(event, client):\n    props = event['ResourceProperties']\n    waba, topic = props['WabaId'], props['TopicArn']\n    try:\n        account = client.get_linked_whatsapp_business_account(id=waba)['account']\n    except Exception as error:\n        if event['RequestType'] == 'Delete' and getattr(error, 'response', {}).get('Error', {}).get('Code') == 'ResourceNotFoundException':\n            return  # Registration was already removed; no route remains to detach.\n        raise\n    destinations = account.get('eventDestinations', [])\n    if event['RequestType'] == 'Delete':\n        # Only detach the exact stack-owned topic; never touch a replacement destination.\n        if destinations and all(d['eventDestinationArn'] == topic for d in destinations):\n            client.put_whatsapp_business_account_event_destinations(id=waba, eventDestinations=[])\n        return\n    if event['RequestType'] == 'Update':\n        old = event['OldResourceProperties']\n        changed = (old['WabaId'], old['TopicArn']) != (waba, topic)\n        # A failed migration's reverse rollback is a no-op when the original route remains.\n        if changed and not (destinations and all(d['eventDestinationArn'] == topic for d in destinations)):\n            raise ValueError('WABA/topic changes require a separate reviewed routing migration.')\n    phone = client.get_linked_whatsapp_business_account_phone_number(id=props['SenderId'])\n    if phone.get('linkedWhatsAppBusinessAccountId') not in (waba, account.get('id'), account.get('arn')):\n        raise ValueError('The launch sender does not belong to this WABA.')\n    if account.get('registrationStatus') != 'COMPLETE':\n        raise ValueError('Complete WhatsApp business registration before launch.')\n    if any(d['eventDestinationArn'] != topic for d in destinations):\n        raise ValueError('WABA already routes elsewhere. Preserve its existing topic or explicitly migrate it first.')\n    if not destinations:\n        client.put_whatsapp_business_account_event_destinations(\n            id=waba, eventDestinations=[{'eventDestinationArn': topic}])\n\n\ndef handler(event, context):\n    import boto3\n    from botocore.config import Config\n    status, reason = 'SUCCESS', 'WABA routing reconciled.'\n    try:\n        reconcile(event, boto3.client('socialmessaging', config=Config(\n            connect_timeout=5, read_timeout=10, retries={'max_attempts': 2})))\n    except Exception as error:\n        status = 'FAILED'\n        # Never log the event, presigned response URL, provider body or phone details.\n        reason = str(error) if isinstance(error, ValueError) else 'AWS routing operation failed: ' + type(error).__name__\n    body = json.dumps({'Status': status, 'Reason': reason,\n        'PhysicalResourceId': event.get('PhysicalResourceId') or event['StackId'] + '/' + event['LogicalResourceId'],\n        'StackId': event['StackId'], 'RequestId': event['RequestId'],\n        'LogicalResourceId': event['LogicalResourceId'], 'NoEcho': True, 'Data': {}}).encode()\n    request = urllib.request.Request(event['ResponseURL'], data=body, method='PUT',\n        headers={'content-type': '', 'content-length': str(len(body))})\n    try:\n        with urllib.request.urlopen(request, timeout=10):\n            pass\n    except Exception:\n        raise RuntimeError('Unable to deliver CloudFormation response; retry required.') from None\n"
+        }
+      }
+    },
+    "WhatsappDestination": {
+      "Type": "Custom::GuardScaleWhatsappDestination",
+      "Condition": "CreateWhatsappTopic",
+      "DependsOn": [
+        "WhatsappTopicPolicy",
+        "WhatsappSubscription"
+      ],
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "WhatsappRoutingFunction",
+            "Arn"
+          ]
+        },
+        "ServiceTimeout": 120,
+        "WabaId": {
+          "Ref": "WhatsappBusinessAccountId"
+        },
+        "SenderId": {
+          "Ref": "WhatsappOriginationId"
+        },
+        "TopicArn": {
+          "Ref": "WhatsappTopic"
+        }
       }
     }
   },
@@ -1335,6 +1594,49 @@
     "RootUsername": {
       "Value": {
         "Ref": "RootUsername"
+      }
+    },
+    "WhatsappEventTopicArn": {
+      "Value": {
+        "Fn::If": [
+          "CreateWhatsappTopic",
+          {
+            "Ref": "WhatsappTopic"
+          },
+          {
+            "Ref": "WhatsappEventTopicArn"
+          }
+        ]
+      }
+    },
+    "WhatsappOriginationId": {
+      "Value": {
+        "Ref": "WhatsappOriginationId"
+      }
+    },
+    "SesFrom": {
+      "Value": {
+        "Ref": "SesFrom"
+      }
+    },
+    "NotificationMode": {
+      "Value": {
+        "Ref": "NotificationMode"
+      }
+    },
+    "WhatsappAlertTemplate": {
+      "Value": {
+        "Ref": "WhatsappAlertTemplate"
+      }
+    },
+    "WhatsappTemplateLanguage": {
+      "Value": {
+        "Ref": "WhatsappTemplateLanguage"
+      }
+    },
+    "AwsRegion": {
+      "Value": {
+        "Ref": "AWS::Region"
       }
     }
   }

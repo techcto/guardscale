@@ -29,7 +29,14 @@ Parameters:
   PublicUrl: {Type: String, Default: ''}
   WhatsappEventTopicArn: {Type: String, Default: ''}
   WhatsappAlertTemplate: {Type: String, Default: ''}
-Conditions: {UseTLS: {Fn::Not: [{Fn::Equals: [{Ref: CertificateArn}, '']}]}, HasGuardianModel: {Fn::Not: [{Fn::Equals: [{Ref: GuardianModelId}, '']}]}, HasWhatsappTopic: {Fn::Not: [{Fn::Equals: [{Ref: WhatsappEventTopicArn}, '']}]}}
+  WhatsappBusinessAccountId: {"Type":"String","Default":"","AllowedPattern":"^$|^waba-[a-zA-Z0-9]+$","Description":"Registered WABA ID. With no existing topic ARN, creates and connects a stack-owned SNS topic. Never replaces a different WABA destination."}
+  WhatsappTemplateLanguage: {"Type":"String","Default":"en_US","AllowedPattern":"[a-z]{2,3}(_[A-Z]{2})?","Description":"Language of the approved WhatsApp alert template."}
+Conditions:
+  UseTLS: {"Fn::Not":[{"Fn::Equals":[{"Ref":"CertificateArn"},""]}]}
+  HasGuardianModel: {"Fn::Not":[{"Fn::Equals":[{"Ref":"GuardianModelId"},""]}]}
+  HasWhatsappTopic: {"Fn::Or":[{"Condition":"HasExistingWhatsappTopic"},{"Condition":"CreateWhatsappTopic"}]}
+  HasExistingWhatsappTopic: {"Fn::Not":[{"Fn::Equals":[{"Ref":"WhatsappEventTopicArn"},""]}]}
+  CreateWhatsappTopic: {"Fn::And":[{"Fn::Not":[{"Fn::Equals":[{"Ref":"WhatsappBusinessAccountId"},""]}]},{"Fn::Equals":[{"Ref":"WhatsappEventTopicArn"},""]}]}
 Resources:
   GuardianModelPolicy:
     Type: AWS::IAM::Policy
@@ -45,27 +52,8 @@ Resources:
             Resource:
               - {Fn::Sub: 'arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-lite-v1:0'}
               - {Fn::Sub: 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.amazon.nova-lite-v1:0'}
-  WhatsappQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Condition: HasWhatsappTopic
-    Properties:
-      Queues: [{Ref: Queue}]
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal: {Service: sns.amazonaws.com}
-            Action: sqs:SendMessage
-            Resource: {Fn::GetAtt: [Queue, Arn]}
-            Condition: {ArnEquals: {'aws:SourceArn': {Ref: WhatsappEventTopicArn}}}
-  WhatsappSubscription:
-    Type: AWS::SNS::Subscription
-    Condition: HasWhatsappTopic
-    Properties:
-      TopicArn: {Ref: WhatsappEventTopicArn}
-      Protocol: sqs
-      Endpoint: {Fn::GetAtt: [Queue, Arn]}
-      RawMessageDelivery: false
+  WhatsappQueuePolicy: {"Type":"AWS::SQS::QueuePolicy","Condition":"HasWhatsappTopic","Properties":{"Queues":[{"Ref":"Queue"}],"PolicyDocument":{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"sns.amazonaws.com"},"Action":"sqs:SendMessage","Resource":{"Fn::GetAtt":["Queue","Arn"]},"Condition":{"ArnEquals":{"aws:SourceArn":{"Fn::If":["CreateWhatsappTopic",{"Ref":"WhatsappTopic"},{"Ref":"WhatsappEventTopicArn"}]}}}}]}}}
+  WhatsappSubscription: {"Type":"AWS::SNS::Subscription","Condition":"HasWhatsappTopic","Properties":{"TopicArn":{"Fn::If":["CreateWhatsappTopic",{"Ref":"WhatsappTopic"},{"Ref":"WhatsappEventTopicArn"}]},"Protocol":"sqs","Endpoint":{"Fn::GetAtt":["Queue","Arn"]},"RawMessageDelivery":false},"DependsOn":["WhatsappQueuePolicy"]}
   Cluster: {Type: 'AWS::ECS::Cluster', Properties: {ClusterName: {Fn::Sub: 'guardscale-${AWS::StackName}'}, ClusterSettings: [{Name: containerInsights, Value: enabled}]}}
   ALBSG:
     Type: 'AWS::EC2::SecurityGroup'
@@ -96,13 +84,129 @@ Resources:
     Type: 'AWS::IAM::Role'
     Properties:
       AssumeRolePolicyDocument: {Version: '2012-10-17', Statement: [{Effect: Allow, Principal: {Service: ecs-tasks.amazonaws.com}, Action: 'sts:AssumeRole'}]}
-      Policies: [{PolicyName: guardscale-data, PolicyDocument: {Version: '2012-10-17', Statement: [{Effect: Allow, Action: ['dynamodb:GetItem','dynamodb:PutItem','dynamodb:DeleteItem','dynamodb:Query','dynamodb:UpdateItem'], Resource: [{Fn::GetAtt: [GuardScaleTable, Arn]}, {Fn::Sub: '${GuardScaleTable.Arn}/index/*'}]}, {Effect: Allow, Action: ['sqs:SendMessage','sqs:ReceiveMessage','sqs:DeleteMessage','sqs:GetQueueAttributes'], Resource: {Fn::GetAtt: [Queue, Arn]}}, {Effect: Allow, Action: ['s3:GetObject','s3:PutObject'], Resource: {Fn::Sub: '${EvidenceBucket.Arn}/*'}}, {Effect: Allow, Action: ['ses:SendEmail','social-messaging:SendWhatsAppMessage'], Resource: '*'}]}}]
-  WebTask: {Type: 'AWS::ECS::TaskDefinition', Properties: {RequiresCompatibilities: [FARGATE], NetworkMode: awsvpc, Cpu: '256', Memory: '512', ExecutionRoleArn: {Fn::GetAtt: [ExecutionRole, Arn]}, TaskRoleArn: {Fn::GetAtt: [TaskRole, Arn]}, ContainerDefinitions: [{Name: web, Image: {Fn::Sub: '${ImageBase}-web:${ReleaseVersion}'}, PortMappings: [{ContainerPort: 3000}], Environment: [{Name: GUARDSCALE_WHATSAPP_ALERT_TEMPLATE, Value: {Ref: WhatsappAlertTemplate}}, {Name: AWS_REGION, Value: {Ref: 'AWS::Region'}}, {Name: GUARDSCALE_AI_MODEL_ID, Value: {Ref: GuardianModelId}}, {Name: GUARDSCALE_NOTIFICATION_MODE, Value: {Ref: NotificationMode}}, {Name: GUARDSCALE_SES_FROM, Value: {Ref: SesFrom}}, {Name: GUARDSCALE_NOTIFICATION_RECIPIENTS, Value: {Ref: NotificationRecipients}}, {Name: GUARDSCALE_WHATSAPP_ORIGINATION_ID, Value: {Ref: WhatsappOriginationId}}, {Name: GUARDSCALE_PUBLIC_URL, Value: {Ref: PublicUrl}}, {Name: GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN, Value: {Ref: WhatsappEventTopicArn}}, {Name: GUARDSCALE_TABLE, Value: {Ref: GuardScaleTable}}, {Name: GUARDSCALE_ROOT_USER, Value: {Ref: RootUsername}}, {Name: GUARDSCALE_ROOT_PASSWORD, Value: {Ref: RootPassword}}, {Name: GUARDSCALE_SESSION_SECRET, Value: {Ref: SessionSecret}}, {Name: GUARDSCALE_DEPLOYMENT_MODE, Value: {Ref: DeploymentMode}}, {Name: STRIPE_SECRET_KEY, Value: {Ref: StripeSecretKey}}, {Name: STRIPE_WEBHOOK_SECRET, Value: {Ref: StripeWebhookSecret}}, {Name: STRIPE_STARTER_PRICE_ID, Value: {Ref: StripeStarterPriceId}}, {Name: STRIPE_SCALE_PRICE_ID, Value: {Ref: StripeScalePriceId}}, {Name: GUARDSCALE_USAGE_EXPORT, Value: {Ref: UsageExport}}, {Name: STRIPE_SERVER_OVERAGE_PRICE_ID, Value: {Ref: StripeServerOveragePriceId}}, {Name: STRIPE_LOG_OVERAGE_PRICE_ID, Value: {Ref: StripeLogOveragePriceId}}, {Name: STRIPE_AI_OVERAGE_PRICE_ID, Value: {Ref: StripeAIOveragePriceId}}, {Name: GUARDSCALE_LOG_MB_INCLUDED_JSON, Value: {Ref: LogMbIncluded}}, {Name: GUARDSCALE_AI_CREDIT_WEIGHTS_JSON, Value: {Ref: AICreditWeights}}], LogConfiguration: {LogDriver: awslogs, Options: {awslogs-group: {Ref: LogGroup}, awslogs-region: {Ref: 'AWS::Region'}, awslogs-stream-prefix: web}}}]}}
-  ApiTask: {Type: 'AWS::ECS::TaskDefinition', Properties: {RequiresCompatibilities: [FARGATE], NetworkMode: awsvpc, Cpu: '256', Memory: '512', ExecutionRoleArn: {Fn::GetAtt: [ExecutionRole, Arn]}, TaskRoleArn: {Fn::GetAtt: [TaskRole, Arn]}, ContainerDefinitions: [{Name: api, Image: {Fn::Sub: '${ImageBase}-api:${ReleaseVersion}'}, PortMappings: [{ContainerPort: 3001}], Environment: [{Name: GUARDSCALE_DEPLOYMENT_MODE, Value: {Ref: DeploymentMode}}, {Name: GUARDSCALE_WHATSAPP_ALERT_TEMPLATE, Value: {Ref: WhatsappAlertTemplate}}, {Name: AWS_REGION, Value: {Ref: 'AWS::Region'}}, {Name: GUARDSCALE_AI_MODEL_ID, Value: {Ref: GuardianModelId}}, {Name: GUARDSCALE_NOTIFICATION_MODE, Value: {Ref: NotificationMode}}, {Name: GUARDSCALE_SES_FROM, Value: {Ref: SesFrom}}, {Name: GUARDSCALE_NOTIFICATION_RECIPIENTS, Value: {Ref: NotificationRecipients}}, {Name: GUARDSCALE_WHATSAPP_ORIGINATION_ID, Value: {Ref: WhatsappOriginationId}}, {Name: GUARDSCALE_PUBLIC_URL, Value: {Ref: PublicUrl}}, {Name: GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN, Value: {Ref: WhatsappEventTopicArn}}, {Name: GUARDSCALE_TABLE, Value: {Ref: GuardScaleTable}}, {Name: GUARDSCALE_QUEUE_URL, Value: {Ref: Queue}}, {Name: GUARDSCALE_EVIDENCE_BUCKET, Value: {Ref: EvidenceBucket}}, {Name: GUARDSCALE_ROOT_USER, Value: {Ref: RootUsername}}, {Name: GUARDSCALE_ROOT_PASSWORD, Value: {Ref: RootPassword}}, {Name: GUARDSCALE_SESSION_SECRET, Value: {Ref: SessionSecret}}, {Name: STRIPE_SECRET_KEY, Value: {Ref: StripeSecretKey}}, {Name: STRIPE_WEBHOOK_SECRET, Value: {Ref: StripeWebhookSecret}}, {Name: STRIPE_STARTER_PRICE_ID, Value: {Ref: StripeStarterPriceId}}, {Name: STRIPE_SCALE_PRICE_ID, Value: {Ref: StripeScalePriceId}}, {Name: GUARDSCALE_USAGE_EXPORT, Value: {Ref: UsageExport}}, {Name: STRIPE_SERVER_OVERAGE_PRICE_ID, Value: {Ref: StripeServerOveragePriceId}}, {Name: STRIPE_LOG_OVERAGE_PRICE_ID, Value: {Ref: StripeLogOveragePriceId}}, {Name: STRIPE_AI_OVERAGE_PRICE_ID, Value: {Ref: StripeAIOveragePriceId}}, {Name: GUARDSCALE_LOG_MB_INCLUDED_JSON, Value: {Ref: LogMbIncluded}}, {Name: GUARDSCALE_AI_CREDIT_WEIGHTS_JSON, Value: {Ref: AICreditWeights}}], LogConfiguration: {LogDriver: awslogs, Options: {awslogs-group: {Ref: LogGroup}, awslogs-region: {Ref: 'AWS::Region'}, awslogs-stream-prefix: api}}}]}}
-  WorkerTask: {Type: 'AWS::ECS::TaskDefinition', Properties: {RequiresCompatibilities: [FARGATE], NetworkMode: awsvpc, Cpu: '256', Memory: '512', ExecutionRoleArn: {Fn::GetAtt: [ExecutionRole, Arn]}, TaskRoleArn: {Fn::GetAtt: [TaskRole, Arn]}, ContainerDefinitions: [{Name: worker, Image: {Fn::Sub: '${ImageBase}-worker:${ReleaseVersion}'}, Environment: [{Name: GUARDSCALE_DEPLOYMENT_MODE, Value: {Ref: DeploymentMode}}, {Name: STRIPE_SECRET_KEY, Value: {Ref: StripeSecretKey}}, {Name: GUARDSCALE_USAGE_EXPORT, Value: {Ref: UsageExport}}, {Name: STRIPE_SERVER_OVERAGE_PRICE_ID, Value: {Ref: StripeServerOveragePriceId}}, {Name: STRIPE_LOG_OVERAGE_PRICE_ID, Value: {Ref: StripeLogOveragePriceId}}, {Name: STRIPE_AI_OVERAGE_PRICE_ID, Value: {Ref: StripeAIOveragePriceId}}, {Name: GUARDSCALE_LOG_MB_INCLUDED_JSON, Value: {Ref: LogMbIncluded}}, {Name: GUARDSCALE_AI_CREDIT_WEIGHTS_JSON, Value: {Ref: AICreditWeights}}, {Name: GUARDSCALE_WHATSAPP_ALERT_TEMPLATE, Value: {Ref: WhatsappAlertTemplate}}, {Name: AWS_REGION, Value: {Ref: 'AWS::Region'}}, {Name: GUARDSCALE_AI_MODEL_ID, Value: {Ref: GuardianModelId}}, {Name: GUARDSCALE_NOTIFICATION_MODE, Value: {Ref: NotificationMode}}, {Name: GUARDSCALE_SES_FROM, Value: {Ref: SesFrom}}, {Name: GUARDSCALE_NOTIFICATION_RECIPIENTS, Value: {Ref: NotificationRecipients}}, {Name: GUARDSCALE_WHATSAPP_ORIGINATION_ID, Value: {Ref: WhatsappOriginationId}}, {Name: GUARDSCALE_PUBLIC_URL, Value: {Ref: PublicUrl}}, {Name: GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN, Value: {Ref: WhatsappEventTopicArn}}, {Name: GUARDSCALE_QUEUE_URL, Value: {Ref: Queue}}, {Name: GUARDSCALE_TABLE, Value: {Ref: GuardScaleTable}}, {Name: GUARDSCALE_SESSION_SECRET, Value: {Ref: SessionSecret}}], LogConfiguration: {LogDriver: awslogs, Options: {awslogs-group: {Ref: LogGroup}, awslogs-region: {Ref: 'AWS::Region'}, awslogs-stream-prefix: worker}}}]}}
+      Policies: [{PolicyName: guardscale-data, PolicyDocument: {Version: '2012-10-17', Statement: [{Effect: Allow, Action: ['dynamodb:GetItem','dynamodb:PutItem','dynamodb:DeleteItem','dynamodb:Query','dynamodb:UpdateItem'], Resource: [{Fn::GetAtt: [GuardScaleTable, Arn]}, {Fn::Sub: '${GuardScaleTable.Arn}/index/*'}]}, {Effect: Allow, Action: ['sqs:SendMessage','sqs:ReceiveMessage','sqs:DeleteMessage','sqs:GetQueueAttributes'], Resource: {Fn::GetAtt: [Queue, Arn]}}, {Effect: Allow, Action: ['s3:GetObject','s3:PutObject'], Resource: {Fn::Sub: '${EvidenceBucket.Arn}/*'}}, {Effect: Allow, Action: ['ses:SendEmail','social-messaging:SendWhatsAppMessage','social-messaging:ListLinkedWhatsAppBusinessAccounts','social-messaging:GetLinkedWhatsAppBusinessAccount','social-messaging:GetLinkedWhatsAppBusinessAccountPhoneNumber','social-messaging:ListWhatsAppMessageTemplates'], Resource: '*'}]}}]
+  WebTask: {"Type":"AWS::ECS::TaskDefinition","Properties":{"RequiresCompatibilities":["FARGATE"],"NetworkMode":"awsvpc","Cpu":"256","Memory":"512","ExecutionRoleArn":{"Fn::GetAtt":["ExecutionRole","Arn"]},"TaskRoleArn":{"Fn::GetAtt":["TaskRole","Arn"]},"ContainerDefinitions":[{"Name":"web","Image":{"Fn::Sub":"${ImageBase}-web:${ReleaseVersion}"},"PortMappings":[{"ContainerPort":3000}],"Environment":[{"Name":"GUARDSCALE_WHATSAPP_ALERT_TEMPLATE","Value":{"Ref":"WhatsappAlertTemplate"}},{"Name":"AWS_REGION","Value":{"Ref":"AWS::Region"}},{"Name":"GUARDSCALE_AI_MODEL_ID","Value":{"Ref":"GuardianModelId"}},{"Name":"GUARDSCALE_NOTIFICATION_MODE","Value":{"Ref":"NotificationMode"}},{"Name":"GUARDSCALE_SES_FROM","Value":{"Ref":"SesFrom"}},{"Name":"GUARDSCALE_NOTIFICATION_RECIPIENTS","Value":{"Ref":"NotificationRecipients"}},{"Name":"GUARDSCALE_WHATSAPP_ORIGINATION_ID","Value":{"Ref":"WhatsappOriginationId"}},{"Name":"GUARDSCALE_PUBLIC_URL","Value":{"Ref":"PublicUrl"}},{"Name":"GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN","Value":{"Fn::If":["CreateWhatsappTopic",{"Ref":"WhatsappTopic"},{"Ref":"WhatsappEventTopicArn"}]}},{"Name":"GUARDSCALE_TABLE","Value":{"Ref":"GuardScaleTable"}},{"Name":"GUARDSCALE_ROOT_USER","Value":{"Ref":"RootUsername"}},{"Name":"GUARDSCALE_ROOT_PASSWORD","Value":{"Ref":"RootPassword"}},{"Name":"GUARDSCALE_SESSION_SECRET","Value":{"Ref":"SessionSecret"}},{"Name":"GUARDSCALE_DEPLOYMENT_MODE","Value":{"Ref":"DeploymentMode"}},{"Name":"STRIPE_SECRET_KEY","Value":{"Ref":"StripeSecretKey"}},{"Name":"STRIPE_WEBHOOK_SECRET","Value":{"Ref":"StripeWebhookSecret"}},{"Name":"STRIPE_STARTER_PRICE_ID","Value":{"Ref":"StripeStarterPriceId"}},{"Name":"STRIPE_SCALE_PRICE_ID","Value":{"Ref":"StripeScalePriceId"}},{"Name":"GUARDSCALE_USAGE_EXPORT","Value":{"Ref":"UsageExport"}},{"Name":"STRIPE_SERVER_OVERAGE_PRICE_ID","Value":{"Ref":"StripeServerOveragePriceId"}},{"Name":"STRIPE_LOG_OVERAGE_PRICE_ID","Value":{"Ref":"StripeLogOveragePriceId"}},{"Name":"STRIPE_AI_OVERAGE_PRICE_ID","Value":{"Ref":"StripeAIOveragePriceId"}},{"Name":"GUARDSCALE_LOG_MB_INCLUDED_JSON","Value":{"Ref":"LogMbIncluded"}},{"Name":"GUARDSCALE_AI_CREDIT_WEIGHTS_JSON","Value":{"Ref":"AICreditWeights"}},{"Name":"GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE","Value":{"Ref":"WhatsappTemplateLanguage"}}],"LogConfiguration":{"LogDriver":"awslogs","Options":{"awslogs-group":{"Ref":"LogGroup"},"awslogs-region":{"Ref":"AWS::Region"},"awslogs-stream-prefix":"web"}}}]}}
+  ApiTask: {"Type":"AWS::ECS::TaskDefinition","Properties":{"RequiresCompatibilities":["FARGATE"],"NetworkMode":"awsvpc","Cpu":"256","Memory":"512","ExecutionRoleArn":{"Fn::GetAtt":["ExecutionRole","Arn"]},"TaskRoleArn":{"Fn::GetAtt":["TaskRole","Arn"]},"ContainerDefinitions":[{"Name":"api","Image":{"Fn::Sub":"${ImageBase}-api:${ReleaseVersion}"},"PortMappings":[{"ContainerPort":3001}],"Environment":[{"Name":"GUARDSCALE_DEPLOYMENT_MODE","Value":{"Ref":"DeploymentMode"}},{"Name":"GUARDSCALE_WHATSAPP_ALERT_TEMPLATE","Value":{"Ref":"WhatsappAlertTemplate"}},{"Name":"AWS_REGION","Value":{"Ref":"AWS::Region"}},{"Name":"GUARDSCALE_AI_MODEL_ID","Value":{"Ref":"GuardianModelId"}},{"Name":"GUARDSCALE_NOTIFICATION_MODE","Value":{"Ref":"NotificationMode"}},{"Name":"GUARDSCALE_SES_FROM","Value":{"Ref":"SesFrom"}},{"Name":"GUARDSCALE_NOTIFICATION_RECIPIENTS","Value":{"Ref":"NotificationRecipients"}},{"Name":"GUARDSCALE_WHATSAPP_ORIGINATION_ID","Value":{"Ref":"WhatsappOriginationId"}},{"Name":"GUARDSCALE_PUBLIC_URL","Value":{"Ref":"PublicUrl"}},{"Name":"GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN","Value":{"Fn::If":["CreateWhatsappTopic",{"Ref":"WhatsappTopic"},{"Ref":"WhatsappEventTopicArn"}]}},{"Name":"GUARDSCALE_TABLE","Value":{"Ref":"GuardScaleTable"}},{"Name":"GUARDSCALE_QUEUE_URL","Value":{"Ref":"Queue"}},{"Name":"GUARDSCALE_EVIDENCE_BUCKET","Value":{"Ref":"EvidenceBucket"}},{"Name":"GUARDSCALE_ROOT_USER","Value":{"Ref":"RootUsername"}},{"Name":"GUARDSCALE_ROOT_PASSWORD","Value":{"Ref":"RootPassword"}},{"Name":"GUARDSCALE_SESSION_SECRET","Value":{"Ref":"SessionSecret"}},{"Name":"STRIPE_SECRET_KEY","Value":{"Ref":"StripeSecretKey"}},{"Name":"STRIPE_WEBHOOK_SECRET","Value":{"Ref":"StripeWebhookSecret"}},{"Name":"STRIPE_STARTER_PRICE_ID","Value":{"Ref":"StripeStarterPriceId"}},{"Name":"STRIPE_SCALE_PRICE_ID","Value":{"Ref":"StripeScalePriceId"}},{"Name":"GUARDSCALE_USAGE_EXPORT","Value":{"Ref":"UsageExport"}},{"Name":"STRIPE_SERVER_OVERAGE_PRICE_ID","Value":{"Ref":"StripeServerOveragePriceId"}},{"Name":"STRIPE_LOG_OVERAGE_PRICE_ID","Value":{"Ref":"StripeLogOveragePriceId"}},{"Name":"STRIPE_AI_OVERAGE_PRICE_ID","Value":{"Ref":"StripeAIOveragePriceId"}},{"Name":"GUARDSCALE_LOG_MB_INCLUDED_JSON","Value":{"Ref":"LogMbIncluded"}},{"Name":"GUARDSCALE_AI_CREDIT_WEIGHTS_JSON","Value":{"Ref":"AICreditWeights"}},{"Name":"GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE","Value":{"Ref":"WhatsappTemplateLanguage"}}],"LogConfiguration":{"LogDriver":"awslogs","Options":{"awslogs-group":{"Ref":"LogGroup"},"awslogs-region":{"Ref":"AWS::Region"},"awslogs-stream-prefix":"api"}}}]}}
+  WorkerTask: {"Type":"AWS::ECS::TaskDefinition","Properties":{"RequiresCompatibilities":["FARGATE"],"NetworkMode":"awsvpc","Cpu":"256","Memory":"512","ExecutionRoleArn":{"Fn::GetAtt":["ExecutionRole","Arn"]},"TaskRoleArn":{"Fn::GetAtt":["TaskRole","Arn"]},"ContainerDefinitions":[{"Name":"worker","Image":{"Fn::Sub":"${ImageBase}-worker:${ReleaseVersion}"},"Environment":[{"Name":"GUARDSCALE_DEPLOYMENT_MODE","Value":{"Ref":"DeploymentMode"}},{"Name":"STRIPE_SECRET_KEY","Value":{"Ref":"StripeSecretKey"}},{"Name":"GUARDSCALE_USAGE_EXPORT","Value":{"Ref":"UsageExport"}},{"Name":"STRIPE_SERVER_OVERAGE_PRICE_ID","Value":{"Ref":"StripeServerOveragePriceId"}},{"Name":"STRIPE_LOG_OVERAGE_PRICE_ID","Value":{"Ref":"StripeLogOveragePriceId"}},{"Name":"STRIPE_AI_OVERAGE_PRICE_ID","Value":{"Ref":"StripeAIOveragePriceId"}},{"Name":"GUARDSCALE_LOG_MB_INCLUDED_JSON","Value":{"Ref":"LogMbIncluded"}},{"Name":"GUARDSCALE_AI_CREDIT_WEIGHTS_JSON","Value":{"Ref":"AICreditWeights"}},{"Name":"GUARDSCALE_WHATSAPP_ALERT_TEMPLATE","Value":{"Ref":"WhatsappAlertTemplate"}},{"Name":"AWS_REGION","Value":{"Ref":"AWS::Region"}},{"Name":"GUARDSCALE_AI_MODEL_ID","Value":{"Ref":"GuardianModelId"}},{"Name":"GUARDSCALE_NOTIFICATION_MODE","Value":{"Ref":"NotificationMode"}},{"Name":"GUARDSCALE_SES_FROM","Value":{"Ref":"SesFrom"}},{"Name":"GUARDSCALE_NOTIFICATION_RECIPIENTS","Value":{"Ref":"NotificationRecipients"}},{"Name":"GUARDSCALE_WHATSAPP_ORIGINATION_ID","Value":{"Ref":"WhatsappOriginationId"}},{"Name":"GUARDSCALE_PUBLIC_URL","Value":{"Ref":"PublicUrl"}},{"Name":"GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN","Value":{"Fn::If":["CreateWhatsappTopic",{"Ref":"WhatsappTopic"},{"Ref":"WhatsappEventTopicArn"}]}},{"Name":"GUARDSCALE_QUEUE_URL","Value":{"Ref":"Queue"}},{"Name":"GUARDSCALE_TABLE","Value":{"Ref":"GuardScaleTable"}},{"Name":"GUARDSCALE_SESSION_SECRET","Value":{"Ref":"SessionSecret"}},{"Name":"GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE","Value":{"Ref":"WhatsappTemplateLanguage"}}],"LogConfiguration":{"LogDriver":"awslogs","Options":{"awslogs-group":{"Ref":"LogGroup"},"awslogs-region":{"Ref":"AWS::Region"},"awslogs-stream-prefix":"worker"}}}]}}
   WebService: {Type: 'AWS::ECS::Service', DependsOn: Listener, Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: WebTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}, LoadBalancers: [{ContainerName: web, ContainerPort: 3000, TargetGroupArn: {Ref: WebTarget}}]}}
   ApiService: {Type: 'AWS::ECS::Service', DependsOn: ApiRule, Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: ApiTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}, LoadBalancers: [{ContainerName: api, ContainerPort: 3001, TargetGroupArn: {Ref: ApiTarget}}]}}
   WorkerService: {Type: 'AWS::ECS::Service', Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: WorkerTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}}}
+  WhatsappTopic: {"Type":"AWS::SNS::Topic","Condition":"CreateWhatsappTopic"}
+  WhatsappTopicPolicy: {"Type":"AWS::SNS::TopicPolicy","Condition":"CreateWhatsappTopic","Properties":{"Topics":[{"Ref":"WhatsappTopic"}],"PolicyDocument":{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"social-messaging.amazonaws.com"},"Action":"sns:Publish","Resource":{"Ref":"WhatsappTopic"},"Condition":{"StringEquals":{"aws:SourceAccount":{"Ref":"AWS::AccountId"}},"ArnLike":{"aws:SourceArn":{"Fn::Sub":"arn:${AWS::Partition}:social-messaging:${AWS::Region}:${AWS::AccountId}:*"}}}}]}}}
+  WhatsappRoutingRole:
+    Type: AWS::IAM::Role
+    Condition: CreateWhatsappTopic
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: guardscale-waba-routing
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - social-messaging:GetLinkedWhatsAppBusinessAccount
+                  - social-messaging:PutWhatsAppBusinessAccountEventDestinations
+                Resource:
+                  Fn::Sub:
+                    - arn:${AWS::Partition}:social-messaging:${AWS::Region}:${AWS::AccountId}:waba/${WabaKey}
+                    - WabaKey:
+                        Fn::Select:
+                          - 1
+                          - Fn::Split:
+                              - waba-
+                              - Ref: WhatsappBusinessAccountId
+              - Effect: Allow
+                Action: social-messaging:GetLinkedWhatsAppBusinessAccountPhoneNumber
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:social-messaging:${AWS::Region}:${AWS::AccountId}:phone-number-id/*
+  WhatsappRoutingFunction:
+    Type: AWS::Lambda::Function
+    Condition: CreateWhatsappTopic
+    Properties:
+      Runtime: python3.13
+      Handler: index.handler
+      Role:
+        Fn::GetAtt:
+          - WhatsappRoutingRole
+          - Arn
+      Timeout: 90
+      Code:
+        ZipFile: |
+          """CloudFormation-only WABA routing lifecycle. Never called by the application."""
+          import json
+          import urllib.request
+
+
+          def reconcile(event, client):
+              props = event['ResourceProperties']
+              waba, topic = props['WabaId'], props['TopicArn']
+              try:
+                  account = client.get_linked_whatsapp_business_account(id=waba)['account']
+              except Exception as error:
+                  if event['RequestType'] == 'Delete' and getattr(error, 'response', {}).get('Error', {}).get('Code') == 'ResourceNotFoundException':
+                      return  # Registration was already removed; no route remains to detach.
+                  raise
+              destinations = account.get('eventDestinations', [])
+              if event['RequestType'] == 'Delete':
+                  # Only detach the exact stack-owned topic; never touch a replacement destination.
+                  if destinations and all(d['eventDestinationArn'] == topic for d in destinations):
+                      client.put_whatsapp_business_account_event_destinations(id=waba, eventDestinations=[])
+                  return
+              if event['RequestType'] == 'Update':
+                  old = event['OldResourceProperties']
+                  changed = (old['WabaId'], old['TopicArn']) != (waba, topic)
+                  # A failed migration's reverse rollback is a no-op when the original route remains.
+                  if changed and not (destinations and all(d['eventDestinationArn'] == topic for d in destinations)):
+                      raise ValueError('WABA/topic changes require a separate reviewed routing migration.')
+              phone = client.get_linked_whatsapp_business_account_phone_number(id=props['SenderId'])
+              if phone.get('linkedWhatsAppBusinessAccountId') not in (waba, account.get('id'), account.get('arn')):
+                  raise ValueError('The launch sender does not belong to this WABA.')
+              if account.get('registrationStatus') != 'COMPLETE':
+                  raise ValueError('Complete WhatsApp business registration before launch.')
+              if any(d['eventDestinationArn'] != topic for d in destinations):
+                  raise ValueError('WABA already routes elsewhere. Preserve its existing topic or explicitly migrate it first.')
+              if not destinations:
+                  client.put_whatsapp_business_account_event_destinations(
+                      id=waba, eventDestinations=[{'eventDestinationArn': topic}])
+
+
+          def handler(event, context):
+              import boto3
+              from botocore.config import Config
+              status, reason = 'SUCCESS', 'WABA routing reconciled.'
+              try:
+                  reconcile(event, boto3.client('socialmessaging', config=Config(
+                      connect_timeout=5, read_timeout=10, retries={'max_attempts': 2})))
+              except Exception as error:
+                  status = 'FAILED'
+                  # Never log the event, presigned response URL, provider body or phone details.
+                  reason = str(error) if isinstance(error, ValueError) else 'AWS routing operation failed: ' + type(error).__name__
+              body = json.dumps({'Status': status, 'Reason': reason,
+                  'PhysicalResourceId': event.get('PhysicalResourceId') or event['StackId'] + '/' + event['LogicalResourceId'],
+                  'StackId': event['StackId'], 'RequestId': event['RequestId'],
+                  'LogicalResourceId': event['LogicalResourceId'], 'NoEcho': True, 'Data': {}}).encode()
+              request = urllib.request.Request(event['ResponseURL'], data=body, method='PUT',
+                  headers={'content-type': '', 'content-length': str(len(body))})
+              try:
+                  with urllib.request.urlopen(request, timeout=10):
+                      pass
+              except Exception:
+                  raise RuntimeError('Unable to deliver CloudFormation response; retry required.') from None
+  WhatsappDestination: {"Type":"Custom::GuardScaleWhatsappDestination","Condition":"CreateWhatsappTopic","DependsOn":["WhatsappTopicPolicy","WhatsappSubscription"],"Properties":{"ServiceToken":{"Fn::GetAtt":["WhatsappRoutingFunction","Arn"]},"ServiceTimeout":120,"WabaId":{"Ref":"WhatsappBusinessAccountId"},"SenderId":{"Ref":"WhatsappOriginationId"},"TopicArn":{"Ref":"WhatsappTopic"}}}
 Outputs:
   URL: {Value: {Fn::If: [UseTLS, {Fn::Sub: 'https://${ALB.DNSName}'}, {Fn::Sub: 'http://${ALB.DNSName}'}]}}
   RootUsername: {Value: {Ref: RootUsername}}
+  WhatsappEventTopicArn: {"Value":{"Fn::If":["CreateWhatsappTopic",{"Ref":"WhatsappTopic"},{"Ref":"WhatsappEventTopicArn"}]}}
+  WhatsappOriginationId: {"Value":{"Ref":"WhatsappOriginationId"}}
+  SesFrom: {"Value":{"Ref":"SesFrom"}}
+  NotificationMode: {"Value":{"Ref":"NotificationMode"}}
+  WhatsappAlertTemplate: {"Value":{"Ref":"WhatsappAlertTemplate"}}
+  WhatsappTemplateLanguage: {"Value":{"Ref":"WhatsappTemplateLanguage"}}
+  AwsRegion: {"Value":{"Ref":"AWS::Region"}}

@@ -1,5 +1,9 @@
 # Guardian: investigate → approve → protect → verify
 
+WhatsApp sender and SES From are launch prerequisites passed through CloudFormation.
+Root administrators verify WhatsApp under **Admin → Settings → Messaging verification**.
+See the [registration, deployment and round-trip testing guide](whatsapp-setup.md).
+
 Guardian uses bounded Bedrock tool calls, not arbitrary remote shell access.
 The Linux agent is outbound-only. MCP is the integration surface; private agent
 polling carries commands to the host without opening an inbound management port.

@@ -6,6 +6,7 @@ import {processWhatsAppEnvelope} from './incident-workflow';
 import {commandsFor} from './protection-commands';
 test('WhatsApp approval requires configured sender, origination, fresh code and scoped incident',async()=>{
  process.env.GUARDSCALE_SESSION_SECRET='unit-only-secret-not-a-deployment-credential';
+ process.env.GUARDSCALE_WHATSAPP_ORIGINATION_ID='phone-123';
  const org=await store.createOrganization({name:'WhatsApp unit test',ownerId:'root',orgType:'business'}),now=new Date().toISOString();
  await store.upsertNode({tenantId:org.id,serverId:'node',agentId:'agent',displayName:'Node',tags:[],status:'healthy',createdAt:now,lastHeartbeat:now});
  await store.putIncident({tenantId:org.id,serverId:'node',agentId:'agent',incidentId:'incident',state:'review',startedAt:now,updatedAt:now,payload:{candidate_id:'a'.repeat(32)}});
