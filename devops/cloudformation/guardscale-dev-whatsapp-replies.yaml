@@ -1,0 +1,27 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: GuardScale development-only copy of WhatsApp events for a local worker. Subscribes to the existing production WhatsApp topic; never changes the WABA destination or production resources. Delete after testing.
+Parameters:
+  WhatsappEventTopicArn: {Type: String, AllowedPattern: '^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+$', Description: 'WhatsappEventTopicArn output of the production GuardScale stack.'}
+Resources:
+  # Short retention: every event on the topic is copied here, including other recipients' messages.
+  DevDeadLetterQueue: {Type: 'AWS::SQS::Queue', Properties: {MessageRetentionPeriod: 3600, SqsManagedSseEnabled: true}}
+  DevQueue: {Type: 'AWS::SQS::Queue', Properties: {MessageRetentionPeriod: 900, VisibilityTimeout: 60, SqsManagedSseEnabled: true, RedrivePolicy: {deadLetterTargetArn: {Fn::GetAtt: [DevDeadLetterQueue, Arn]}, maxReceiveCount: 5}}}
+  DevQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [{Ref: DevQueue}]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: sns.amazonaws.com}
+            Action: sqs:SendMessage
+            Resource: {Fn::GetAtt: [DevQueue, Arn]}
+            Condition: {ArnEquals: {'aws:SourceArn': {Ref: WhatsappEventTopicArn}}}
+  # The worker verifies the SNS envelope TopicArn, so raw delivery stays off, as in production.
+  DevSubscription: {Type: 'AWS::SNS::Subscription', DependsOn: DevQueuePolicy, Properties: {TopicArn: {Ref: WhatsappEventTopicArn}, Protocol: sqs, Endpoint: {Fn::GetAtt: [DevQueue, Arn]}, RawMessageDelivery: false}}
+Outputs:
+  QueueUrl: {Value: {Ref: DevQueue}}
+  QueueArn: {Value: {Fn::GetAtt: [DevQueue, Arn]}}
+  DeadLetterQueueUrl: {Value: {Ref: DevDeadLetterQueue}}
+  DeadLetterQueueArn: {Value: {Fn::GetAtt: [DevDeadLetterQueue, Arn]}}
