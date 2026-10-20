@@ -6,6 +6,8 @@ export type NodeStatus='pending'|'healthy'|'stale'|'offline';
 export type Node={tenantId:string;serverId:string;agentId:string;displayName:string;platform?:string;websiteUrls?:string[];discoveredHosts?:string[];tags:string[];status:NodeStatus;createdAt:string;lastHeartbeat:string;deletedAt?:string};
 export type IncidentRecord={tenantId:string;serverId:string;agentId:string;incidentId:string;state:string;startedAt:string;updatedAt:string;payload:unknown};
 export type GuardScaleEvent={id?:string;tenantId:string;serverId:string;agentId:string;type:string;at:string;metadata?:Record<string,string>};
+// Internal audit partition, not a fabricated enrolled server.
+export const whatsappSetupAuditId='__guardscale_whatsapp_setup__';
 export const normalizedEvents=['viewer.request','edge.cache.hit','edge.cache.miss','waf.allow','waf.block','origin.request','origin.response','origin.timeout','app.php.slow','app.php.max_children','host.cpu','host.memory','service.restart','monitor.down','protection.enabled','protection.expired'] as const;
 export type UserRole='root'|'admin'|'operator'|'viewer';
 export type GuardScaleUser={id:string;username:string;displayName:string;status:'active'|'disabled';createdAt:string;updatedAt:string};

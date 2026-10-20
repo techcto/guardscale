@@ -1,7 +1,8 @@
 import {createHmac} from 'node:crypto';
 import {SQSClient,SendMessageCommand} from '@aws-sdk/client-sqs';
 import {store} from './store';
-import {notifier} from './notifications';
+import {notifier,whatsappOrigination} from './notifications';
+import {acceptSetupReply,senderMatches} from './whatsapp-setup';
 import {approveProtection,commandsFor} from './protection-commands';
 import {assessWithGuardian,type GuardianAssessment} from './guardian';
 type Payload={candidate_id?:string;source_ip?:string;country?:string;findings?:unknown;analysis?:GuardianAssessment;notified?:string[];alertedAt?:string;alertDelivery?:'provider_accepted'|'local_only'};
@@ -44,12 +45,15 @@ export async function processWhatsAppEnvelope(envelope:unknown){
  const entry=JSON.parse(outer.whatsAppWebhookEntry) as {changes?:{value?:{messages?:{id?:string;from?:string;timestamp?:string;type?:string;text?:{body?:string}}[]}}[]};
  for(const change of entry.changes??[])for(const message of change.value?.messages??[]){
   if(message.type!=='text'||!message.from||!message.id||!Number.isFinite(Number(message.timestamp))||Math.abs(Date.now()-Number(message.timestamp)*1000)>5*60000)continue;
-  const match=/^(Protect|Watch|Dismiss)\s+([a-f0-9]{16})$/i.exec(message.text?.body?.trim()??'');if(!match)continue;
+  const body=message.text?.body?.trim()??'';
+  const setup=/^Verify\s+(\S+)$/i.exec(body);
+  if(setup){await acceptSetupReply(setup[1],message.from,(outer.context?.MetaPhoneNumberIds??[]).flatMap(v=>v.arn?[v.arn]:[]));continue}
+  const match=/^(Protect|Watch|Dismiss)\s+([a-f0-9]{16})$/i.exec(body);if(!match)continue;
   for(const org of await store.organizations()){
    const settings=await store.settings(org.id);
    if(!settings.notifications.whatsappEnabled||!settings.notifications.recipients.split(/[\s,;]+/).some(v=>!v.includes('@')&&phone(v)===phone(message.from!)))continue;
-   const origin=settings.notifications.whatsappSenderId;
-   if(!origin||!outer.context?.MetaPhoneNumberIds?.some(v=>v.arn===origin||v.arn?.endsWith('/'+origin)))continue;
+   let origin:string;try{origin=whatsappOrigination({originationId:settings.notifications.whatsappSenderId})}catch{continue}
+   if(!origin||!senderMatches(origin,(outer.context?.MetaPhoneNumberIds??[]).flatMap(v=>v.arn?[v.arn]:[])))continue;
    for(const incident of await store.incidents(org.id)){
     if(Date.now()-Date.parse(incident.startedAt)>15*60000||approvalCode(org.id,incident.incidentId)!==match[2].toLowerCase())continue;
     let confirmation='Review state updated; an existing block, if any, retains its original expiry.';

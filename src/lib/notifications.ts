@@ -12,5 +12,5 @@ export class AWSNotifier implements Notifier{
 }
 export function notifier():Notifier{return process.env.GUARDSCALE_NOTIFICATION_MODE==='aws'?new AWSNotifier():new LogNotifier()}
 // EUM Social needs the registered phone-number ID or ARN, never the phone number itself.
-export function whatsappOrigination(n:Pick<Notification,'originationId'>){const origin=n.originationId||required('GUARDSCALE_WHATSAPP_ORIGINATION_ID');if(/^\+?[\d\s()-]+$/.test(origin))throw new Error('WhatsApp sender ID must be the AWS End User Messaging Social phone-number ID (phone-number-id-…), not a phone number');return origin}
+export function whatsappOrigination(_n:Pick<Notification,'originationId'>){const origin=required('GUARDSCALE_WHATSAPP_ORIGINATION_ID');if(/^\+?[\d\s()-]+$/.test(origin))throw new Error('WhatsApp sender ID must be the AWS End User Messaging Social phone-number ID (phone-number-id-…), not a phone number');return origin}
 function required(name:string){const value=process.env[name];if(!value)throw new Error(`${name} is required`);return value}

@@ -2,7 +2,7 @@ import{randomUUID}from'node:crypto';
 import{DynamoDBClient,CreateTableCommand,UpdateTimeToLiveCommand}from'@aws-sdk/client-dynamodb';
 import{DynamoDBDocumentClient,GetCommand,PutCommand,QueryCommand,DeleteCommand,UpdateCommand,TransactWriteCommand}from'@aws-sdk/lib-dynamodb';
 import type{GuardScaleEvent,GuardScaleUser,IncidentRecord,Node,OrgMembership,Organization,OrgType,Product,Settings,Subscription,UsageCounts,UsageDelta,UsageHour}from'./model';
-import{defaultSettings}from'./model';
+import{defaultSettings,whatsappSetupAuditId}from'./model';
 import {hasPaidEntitlement} from './subscription-entitlement';
 
 const tableName=process.env.GUARDSCALE_TABLE??'guardscale-local';
@@ -135,6 +135,13 @@ export const dynamoStore={
       }
       cursor=page.LastEvaluatedKey;
     }while(cursor);
+    // Setup verification has no enrolled node record, but privacy purge must include its audit.
+    let auditCursor:Record<string,unknown>|undefined;
+    do{
+      const batch=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND sk BETWEEN :start AND :end',ExpressionAttributeValues:{':pk':`ORG#${tenant}#NODE#${whatsappSetupAuditId}`,':start':'EVENT#',':end':`EVENT#${cutoff}#\uffff`},ExclusiveStartKey:auditCursor,ConsistentRead:true}));
+      for(const event of batch.Items??[]){await client.send(new DeleteCommand({TableName:tableName,Key:{pk:event.pk,sk:event.sk}}));events++}
+      auditCursor=batch.LastEvaluatedKey;
+    }while(auditCursor);
     return{events,incidents};
   },
   async putIncident(v:IncidentRecord){

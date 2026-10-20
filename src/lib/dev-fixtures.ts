@@ -3,8 +3,8 @@ import {store} from './store';
 import {hashPassword} from './password';
 import {hourOf,usagePeriod} from './usage';
 import type {MembershipRole,Node,OrgType} from './model';
-// Synthetic data for `npm run dev` (in-memory store) and the local docker stack (DynamoDB local).
-// AWS deployments never set GUARDSCALE_DYNAMODB_ENDPOINT, so they are never seeded.
+// Synthetic fixtures are restricted to private development with in-memory or local DynamoDB storage.
+// Production builds (including local production previews) and SaaS never seed.
 export const devFixturePassword='guardscale-dev-fixture';
 type Fixture={name:string;orgType:OrgType;contactEmail?:string;members:[string,string,MembershipRole][];servers:[string,string,Node['status'],number,number][];logMb:number;aiCalls:number};// servers: name, platform, status, websites, hours since heartbeat
 const fixtures:Fixture[]=[
@@ -14,7 +14,7 @@ const fixtures:Fixture[]=[
 ];
 const USAGE_HOURS=48;
 function localDynamo(){try{return ['localhost','127.0.0.1','dynamodb'].includes(new URL(process.env.GUARDSCALE_DYNAMODB_ENDPOINT??'').hostname)}catch{return false}}
-export const devFixturesEnabled=()=>process.env.GUARDSCALE_DEPLOYMENT_MODE==='saas'&&(process.env.GUARDSCALE_TABLE?localDynamo():process.env.NODE_ENV==='development');
+export const devFixturesEnabled=()=>process.env.NODE_ENV==='development'&&process.env.GUARDSCALE_DEPLOYMENT_MODE==='on-premise'&&(!process.env.GUARDSCALE_TABLE||localDynamo());
 export async function seedDevFixtures(){
  const g=globalThis as typeof globalThis&{guardscaleDevFixtures?:boolean};
  if(!devFixturesEnabled()||g.guardscaleDevFixtures)return false;

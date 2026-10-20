@@ -21,7 +21,7 @@ export default function SettingsConsole({saas,isRoot,initialTab}:{saas:boolean;i
   setTestStatus(s=>({...s,[channel]:'Sending…'}));
   const r=await fetch('/api/v1/settings/test-notification',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({channel,destination,originationId})});
   const body=await r.json().catch(()=>({}));
-  setTestStatus(s=>({...s,[channel]:r.ok?'Test sent.':(body.error??'Unable to send test notification.')}));
+  setTestStatus(s=>({...s,[channel]:r.ok?(body.message??'Provider accepted; delivery not yet confirmed.'):(body.error??'Unable to send test notification.')}));
  }
  if(!settings)return <div className="settings-layout"><aside className="settings-tabs">{tabs.map(x=><button key={x} disabled>{x}</button>)}</aside><div className="g-card settings-panel"><p className="muted">Loading settings…</p></div></div>;
  const policy=settings.response.autoGuardian??{enabled:false,waitSeconds:120,maxTtlSeconds:60,maxActionsPerHour:3};
@@ -40,15 +40,15 @@ export default function SettingsConsole({saas,isRoot,initialTab}:{saas:boolean;i
   {tab==='Notifications'&&<><Heading title="Notification channels" text="Choose where GuardScale sends incident alerts and recovery updates."/>
   {settings.updatedAt===UNSAVED&&<div className="notice"><strong>Showing deployment defaults</strong><span>These values come from environment configuration (e.g. Docker/CloudFormation) and haven&apos;t been saved to this organization yet. Save once to make them explicit and editable independently of the deployment.</span></div>}
   <Toggle title="WhatsApp alerts" text="Two-way response through AWS End User Messaging Social." checked={settings.notifications.whatsappEnabled} onChange={v=>set('notifications',{whatsappEnabled:v})}/>
-  <TextField label="WhatsApp sender ID" value={settings.notifications.whatsappSenderId} placeholder="AWS phone-number ID (phone-number-id-…); leave blank to use the deployment default" onChange={v=>set('notifications',{whatsappSenderId:v})}/>
+  <p className="muted small">WhatsApp sender and email From address are configured at launch through CloudFormation. Manage recipients here.</p>
   <div className="test-row">
    <input placeholder="Test phone number, e.g. +15551234567" value={testWhatsapp} onChange={e=>setTestWhatsapp(e.target.value)}/>
    <button type="button" className="button" onClick={()=>sendTest('whatsapp',testWhatsapp,settings.notifications.whatsappSenderId)}>Send test</button>
    {testStatus.whatsapp&&<span className="muted small">{testStatus.whatsapp}</span>}
   </div>
   <Toggle title="Email reports" text="Deliver bounded forensic summaries through Amazon SES." checked={settings.notifications.emailEnabled} onChange={v=>set('notifications',{emailEnabled:v})}/>
-  <TextField label="Notification recipients" value={settings.notifications.recipients} placeholder="ops@example.com, oncall@example.com" onChange={v=>set('notifications',{recipients:v})}/>
-  <span className="muted small">Comma-separated — add as many recipients as you need.</span>
+  <TextField label="Notification recipients" value={settings.notifications.recipients} placeholder="ops@example.com, +15551234567" onChange={v=>set('notifications',{recipients:v})}/>
+  <span className="muted small">Comma-separated email addresses and WhatsApp numbers in international format. Only configured recipients may reply to incidents.</span>
   <div className="test-row">
    <input placeholder="Test email address" value={testEmail} onChange={e=>setTestEmail(e.target.value)}/>
    <button type="button" className="button" onClick={()=>sendTest('email',testEmail)}>Send test</button>
