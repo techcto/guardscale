@@ -81,3 +81,24 @@ These tests put a fake AWS executable in a temporary PATH. They exercise plannin
 approval, parameter preservation, busy/wrong stacks, no-op plans and waiter
 failure without contacting AWS. They do not verify image availability, live IAM
 permissions, CloudFormation template acceptance or actual application health.
+
+## Private machine defaults
+
+Save your own profile name in **Git-ignored** `devops/cft.local.json`:
+
+```json
+{"profile":"YOUR_LOCAL_PROFILE","region":"us-east-1"}
+```
+
+An optional `stack` field can save the existing stack name. No credentials are
+allowed in this file; they stay in your AWS CLI configuration. Do not commit
+personal profile names or copy another developer's defaults.
+
+Precedence: explicit flags → environment variables → local JSON → AWS defaults.
+An old `--profile` flag overrides the saved local profile, so remove it when
+using local defaults. The selected profile is printed before the first AWS call.
+Use `aws configure list-profiles` to check your local names and
+`aws sts get-caller-identity --profile YOUR_LOCAL_PROFILE` to verify login.
+The helper does not renew expired credentials or authenticate app users.
+
+`CFT_LOCAL_CONFIG` may point to a different private JSON settings file.

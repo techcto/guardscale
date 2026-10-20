@@ -1,4 +1,5 @@
 import {execFileSync} from 'node:child_process';
+import {localDeploymentDefaults} from './cft-config.mjs';
 import {mkdtempSync,writeFileSync,rmSync,statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
@@ -15,7 +16,7 @@ VERSION accepts 0.2.6 or v0.2.6. No tag, image build, or Marketplace submission 
 
   --stack NAME          Or ${project?.toUpperCase()}_STACK_NAME / CFT_STACK_NAME
   --region REGION       Or AWS_REGION / AWS_DEFAULT_REGION (default us-east-1)
-  --profile PROFILE     Or AWS_PROFILE; use your approved short-lived login
+  --profile PROFILE     Or AWS_PROFILE / ignored local settings; never commit profile names
   --plan                Create/show the change set without executing
   --approve ARN         Execute this exact previously reviewed change set
   --template FILE       Optional updated template (default: deployed template)
@@ -37,8 +38,9 @@ function options(){
   if(!valueFlags.has(flag)||!args[i+1]||args[i+1].startsWith('--'))fail('Unknown option or missing value: '+flag);
   if(opts[flag.slice(2)]!==undefined)fail('Duplicate option: '+flag);opts[flag.slice(2)]=args[++i];
  }
- opts.stack??=process.env[project.toUpperCase()+'_STACK_NAME']??process.env.CFT_STACK_NAME;
- opts.region??=process.env.AWS_REGION??process.env.AWS_DEFAULT_REGION??'us-east-1';opts.profile??=process.env.AWS_PROFILE;
+ const local=localDeploymentDefaults();
+ opts.stack??=process.env[project.toUpperCase()+'_STACK_NAME']??process.env.CFT_STACK_NAME??local.stack;
+ opts.region??=process.env.AWS_REGION??process.env.AWS_DEFAULT_REGION??local.region??'us-east-1';opts.profile??=process.env.AWS_PROFILE??local.profile;
  if(!opts.stack)fail('Set '+project.toUpperCase()+'_STACK_NAME once, or pass --stack NAME. Stack names are never guessed.');
  if(opts.plan&&opts.approve)fail('--plan and --approve cannot be combined');
  if(opts.template&&opts['template-url'])fail('Choose one template source');
@@ -69,6 +71,7 @@ async function main(){
   try{const out=execFileSync('aws',[...flags,...parts],{encoding:'utf8',maxBuffer:16*1024*1024,env:{...process.env,AWS_PAGER:'',AWS_CLI_AUTO_PROMPT:'off'},stdio:['ignore','pipe','pipe']});return out.trim()?JSON.parse(out):{}}
   catch(error){if(error.code==='ENOENT')fail('AWS CLI is required.');const code=String(error.stderr??'').match(/An error occurred \(([A-Za-z0-9_.-]+)\)/)?.[1]??(String(error.stderr??'').includes('Unable to locate credentials')?'MissingCredentials':'CliFailure');throw Error(`AWS ${parts.slice(0,2).join(' ')} failed (${code}). Check credentials, permissions and stack/change-set status. No force-update or resource cleanup was attempted.`)}
  };
+ console.log('AWS profile: '+(opts.profile??'(AWS default credential chain)')+'; Region: '+opts.region);
  const stack=aws('cloudformation','describe-stacks','--stack-name',opts.stack).Stacks?.[0];
  if(!stack)fail('Stack not found');
  if(!['CREATE_COMPLETE','UPDATE_COMPLETE','UPDATE_ROLLBACK_COMPLETE','IMPORT_COMPLETE','IMPORT_ROLLBACK_COMPLETE'].includes(stack.StackStatus))fail('Stack is not ready for an update: '+stack.StackStatus+'. Wait or resolve the existing operation first.');
