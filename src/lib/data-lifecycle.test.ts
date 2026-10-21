@@ -65,6 +65,7 @@ test('root can create customer organizations, switch, and receive isolated enrol
    const created=await createOrg(request('/api/orgs',{name}));assert.equal(created.status,201);const org=await created.json();
    assert.equal(org.name,name);assert.equal((await store.membership(org.id,'root'))?.role,'admin');
    const switched=await switchOrg(request('/api/orgs/active',{orgId:org.id}));assert.equal(switched.status,200);
+   assert.match(switched.headers.get('set-cookie')??'',/SameSite=lax/i,'session must survive the redirect back from Stripe Checkout');
    cookie=switched.headers.get('set-cookie')!.split(';')[0];
    const credentials=await enrollment(request('/api/v1/nodes/enrollment'));assert.equal(credentials.status,200);const data=await credentials.json();
    assert.equal(data.tenantId,org.id);assert.ok(data.enrollmentToken);tokens.push(data.enrollmentToken);

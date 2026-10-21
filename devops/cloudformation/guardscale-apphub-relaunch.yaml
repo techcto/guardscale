@@ -47,6 +47,24 @@
         "saas"
       ]
     },
+    "StripeSecretKey": {
+      "Type": "String",
+      "Default": "",
+      "NoEcho": true
+    },
+    "StripeWebhookSecret": {
+      "Type": "String",
+      "Default": "",
+      "NoEcho": true
+    },
+    "StripeStarterPriceId": {
+      "Type": "String",
+      "Default": ""
+    },
+    "StripeScalePriceId": {
+      "Type": "String",
+      "Default": ""
+    },
     "ExistingCluster": {
       "Type": "String",
       "Description": "Optional AppHub ECS cluster; empty preserves standalone deployment.",
@@ -751,6 +769,30 @@
                 "Value": {
                   "Ref": "WhatsappTemplateLanguage"
                 }
+              },
+              {
+                "Name": "STRIPE_SECRET_KEY",
+                "Value": {
+                  "Ref": "StripeSecretKey"
+                }
+              },
+              {
+                "Name": "STRIPE_WEBHOOK_SECRET",
+                "Value": {
+                  "Ref": "StripeWebhookSecret"
+                }
+              },
+              {
+                "Name": "STRIPE_STARTER_PRICE_ID",
+                "Value": {
+                  "Ref": "StripeStarterPriceId"
+                }
+              },
+              {
+                "Name": "STRIPE_SCALE_PRICE_ID",
+                "Value": {
+                  "Ref": "StripeScalePriceId"
+                }
               }
             ],
             "LogConfiguration": {
@@ -910,6 +952,30 @@
                 "Name": "GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE",
                 "Value": {
                   "Ref": "WhatsappTemplateLanguage"
+                }
+              },
+              {
+                "Name": "STRIPE_SECRET_KEY",
+                "Value": {
+                  "Ref": "StripeSecretKey"
+                }
+              },
+              {
+                "Name": "STRIPE_WEBHOOK_SECRET",
+                "Value": {
+                  "Ref": "StripeWebhookSecret"
+                }
+              },
+              {
+                "Name": "STRIPE_STARTER_PRICE_ID",
+                "Value": {
+                  "Ref": "StripeStarterPriceId"
+                }
+              },
+              {
+                "Name": "STRIPE_SCALE_PRICE_ID",
+                "Value": {
+                  "Ref": "StripeScalePriceId"
                 }
               }
             ],

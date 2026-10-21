@@ -13,6 +13,7 @@ export async function POST(req:NextRequest){
   const secret=process.env.GUARDSCALE_SESSION_SECRET??'';
   const token=await createSession({id:session.id,username:session.username,role,orgId,expiresAt:Date.now()+28800000},secret);
   const res=NextResponse.json({orgId,role});
-  res.cookies.set(sessionCookie,token,{httpOnly:true,sameSite:'strict',secure:isSecureRequest(req),path:'/',maxAge:28800});
+  // Lax so the session survives top-level returns from Stripe Checkout; cross-site POSTs still carry no cookie.
+  res.cookies.set(sessionCookie,token,{httpOnly:true,sameSite:'lax',secure:isSecureRequest(req),path:'/',maxAge:28800});
   return res;
 }
