@@ -10,7 +10,7 @@ export type GuardScaleEvent={id?:string;tenantId:string;serverId:string;agentId:
 export const whatsappSetupAuditId='__guardscale_whatsapp_setup__';
 export const normalizedEvents=['viewer.request','edge.cache.hit','edge.cache.miss','waf.allow','waf.block','origin.request','origin.response','origin.timeout','app.php.slow','app.php.max_children','host.cpu','host.memory','service.restart','monitor.down','protection.enabled','protection.expired'] as const;
 export type UserRole='root'|'admin'|'operator'|'viewer';
-export type GuardScaleUser={id:string;username:string;displayName:string;status:'active'|'disabled';createdAt:string;updatedAt:string};
+export type GuardScaleUser={id:string;username:string;displayName:string;email?:string;emailVerified?:boolean;verificationSentAt?:string;status:'active'|'disabled';createdAt:string;updatedAt:string};
 export type Settings={
   tenantId:string;
   detection:{warningPercent:number;criticalPercent:number;emergencyPercent:number;trafficMultiplier:number;distributedCrawlerCorrelation:boolean;applicationFailureDetection:boolean;heartbeatStaleSeconds:number};

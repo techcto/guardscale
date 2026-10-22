@@ -180,6 +180,19 @@ export const dynamoStore={
     const r=await client.send(new QueryCommand({TableName:tableName,IndexName:'GSI1',KeyConditionExpression:'gsi1pk=:pk',ExpressionAttributeValues:{':pk':`USERNAME#${username.toLowerCase()}`}}));
     return (r.Items?.[0] as GuardScaleUser)??null;
   },
+  // The EMAIL# claim and the user are written in one transaction, so two signups racing for an address cannot both win.
+  async createUser(v:GuardScaleUser,passwordHash:string):Promise<boolean>{
+    await ensureTable();
+    const email=v.email?.toLowerCase();
+    try{
+      await client.send(new TransactWriteCommand({TransactItems:[
+        {Put:{TableName:tableName,Item:{pk:`USER#${v.id}`,sk:`USER#${v.id}`,gsi1pk:`USERNAME#${v.username.toLowerCase()}`,gsi1sk:`USERNAME#${v.username.toLowerCase()}`,...v},ConditionExpression:'attribute_not_exists(pk)'}},
+        {Put:{TableName:tableName,Item:{pk:`USER#${v.id}`,sk:'PASSWORD',hash:passwordHash}}},
+        ...(email?[{Put:{TableName:tableName,Item:{pk:`EMAIL#${email}`,sk:`EMAIL#${email}`,userId:v.id},ConditionExpression:'attribute_not_exists(pk)'}}]:[]),
+      ]}));
+      return true;
+    }catch(e){if(e instanceof Error&&e.name==='TransactionCanceledException'&&/ConditionalCheckFailed/.test(e.message))return false;throw e}
+  },
   async userById(id:string):Promise<GuardScaleUser|null>{
     await ensureTable();
     const r=await client.send(new GetCommand({TableName:tableName,Key:{pk:`USER#${id}`,sk:`USER#${id}`}}));
@@ -201,6 +214,9 @@ export const dynamoStore={
     if(!existing.Item)return false;
     await client.send(new DeleteCommand({TableName:tableName,Key:{pk:`USER#${id}`,sk:`USER#${id}`}}));
     await client.send(new DeleteCommand({TableName:tableName,Key:{pk:`USER#${id}`,sk:'PASSWORD'}}));
+    // Release the address only if this user still holds it.
+    const email=(existing.Item.email as string|undefined)?.toLowerCase();
+    if(email)await client.send(new DeleteCommand({TableName:tableName,Key:{pk:`EMAIL#${email}`,sk:`EMAIL#${email}`},ConditionExpression:'userId=:id',ExpressionAttributeValues:{':id':id}})).catch(e=>{if(!(e instanceof Error&&e.name==='ConditionalCheckFailedException'))throw e});
     return true;
   },
   async settings(tenant:string):Promise<Settings>{
