@@ -78,6 +78,8 @@ For local development, the compose defaults are username `root` and password `gu
 
 Stripe checkout is disabled until `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_STARTER_PRICE_ID`, and `STRIPE_SCALE_PRICE_ID` are configured. Card data is handled by Stripe Checkout and is never stored by GuardScale.
 
+For production credentials, environment separation, plan synchronization and rotation, follow the [Stripe setup guide](devops/stripe/README.md). CloudFormation injects credentials from Secrets Manager; local Compose always uses sandbox billing.
+
 Check the local stack and follow service logs:
 
 ```bash

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setup } from './setup-plans.mjs';
+import pricing from '../../src/lib/billing-pricing.json' with {type:'json'};
 
 function fakeStripe() {
   const products = new Map(), prices = [], updates = [], uploads = [], coupons = new Map(), promotions = [], meters = [];
@@ -40,6 +41,17 @@ test('setup reuses plans without duplicating resources', async () => {
   assert.equal(products.size, 2);
   assert.equal(prices.length, 2);
   assert.deepEqual(prices.map(p => p.unit_amount), [4900, 19900]);
+});
+
+test('approved decimal overage rates match their units and AI allowances',async()=>{
+ const {client,prices,products}=fakeStripe();
+ const env={GUARDSCALE_SERVER_HOUR_CENTS:pricing.serverHourCents,GUARDSCALE_LOG_MB_CENTS:pricing.logMiBCents,GUARDSCALE_AI_CREDIT_CENTS:pricing.aiCreditCents};
+ const first=await setup(client,undefined,env);assert.deepEqual(await setup(client,undefined,env),first);
+ assert.deepEqual(prices.filter(p=>p.recurring.usage_type==='metered').map(p=>p.unit_amount_decimal),['2','0.15','0.3']);
+ assert.equal(products.get('guardscale_starter_v1').metadata.included_ai_credits,'1000');
+ assert.equal(products.get('guardscale_scale_v1').metadata.included_ai_credits,'5000');
+ assert.match(products.get('guardscale_overage_log_mb_v1').description,/1,048,576/);
+ assert.match(products.get('guardscale_overage_ai_credits_v1').description,/\$0.001/);
 });
 
 test('products get Checkout names, descriptions and one uploaded logo, updated in place on rerun', async () => {
@@ -129,7 +141,7 @@ test('plan products carry their included units, and reruns add missing unit meta
   // A product created before log MB was attached gains it on the next run; other metadata is kept.
   const old = products.get('guardscale_starter_v1'); products.set(old.id, { ...old, metadata: { application: 'guardscale', included_servers: '5', logo_file: 'file_old' } });
   updates.length = 0; await setup(client);
-  assert.deepEqual(products.get('guardscale_starter_v1').metadata, { application: 'guardscale', included_servers: '5', logo_file: 'file_old', included_log_mb: '10000' });
+  assert.deepEqual(products.get('guardscale_starter_v1').metadata, { application: 'guardscale', included_servers: '5', logo_file: 'file_old', included_log_mb: '10000', included_ai_credits: '1000' });
   assert.deepEqual(updates, ['guardscale_starter_v1']);
   updates.length = 0; await setup(client);
   assert.deepEqual(updates, [], 'nothing to change on a current rerun');
