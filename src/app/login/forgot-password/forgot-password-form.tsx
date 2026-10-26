@@ -15,7 +15,7 @@ export default function ForgotPasswordForm(){
   }
   if(sent)return <div className="notice"><strong>Check your email</strong><span>If that account exists, a password reset link has been sent and expires in 15 minutes.</span>{devLink&&<span className="muted small">Local/log notification mode — reset link: <a href={devLink}>{devLink}</a></span>}</div>;
   return <form className="login-form" onSubmit={submit}>
-    <label>Username<input name="username" autoComplete="username" required autoFocus/></label>
+    <label>Email<input name="username" type="email" autoComplete="email" required autoFocus/></label>
     <button className="button primary" disabled={busy}>{busy?'Please wait…':'Send reset link'}</button>
   </form>;
 }

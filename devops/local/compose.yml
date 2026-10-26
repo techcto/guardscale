@@ -8,6 +8,7 @@ services:
     environment:
       GUARDSCALE_LOCAL_FIXTURE: 'true'
       GUARDSCALE_DEPLOYMENT_MODE: saas
+      GUARDSCALE_LOCAL_REPLAY: 'true'
       GUARDSCALE_ROOT_USER: root
       GUARDSCALE_DYNAMODB_ENDPOINT: http://database:8000
       GUARDSCALE_TABLE: guardscale-local-fixture

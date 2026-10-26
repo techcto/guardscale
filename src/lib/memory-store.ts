@@ -2,7 +2,7 @@ import{randomUUID}from'node:crypto';
 import type{GuardScaleEvent,GuardScaleUser,IncidentRecord,Node,OrgMembership,Organization,OrgType,Product,Settings,Subscription,UsageCounts,UsageDelta,UsageHour}from'./model';
 import{defaultSettings}from'./model';
 import {hasPaidEntitlement} from './subscription-entitlement';
-type State={orgs:Map<string,Organization>;singletonOrgId?:string;memberships:Map<string,OrgMembership>;nodes:Map<string,Node>;incidents:Map<string,IncidentRecord>;events:Map<string,GuardScaleEvent[]>;users:Map<string,GuardScaleUser>;passwords:Map<string,string>;subscriptions:Map<string,Subscription>;settings:Map<string,Settings>;usage:Map<string,UsageHour>;claims:Set<string>};
+type State={orgs:Map<string,Organization>;singletonOrgId?:string;memberships:Map<string,OrgMembership>;nodes:Map<string,Node>;incidents:Map<string,IncidentRecord>;events:Map<string,GuardScaleEvent[]>;users:Map<string,GuardScaleUser>;passwords:Map<string,string>;emails?:Map<string,string>;subscriptions:Map<string,Subscription>;settings:Map<string,Settings>;usage:Map<string,UsageHour>;claims:Set<string>};
 const g=globalThis as typeof globalThis&{guardscaleState?:State};
 export const state:State=g.guardscaleState??={orgs:new Map(),memberships:new Map(),nodes:new Map(),incidents:new Map(),events:new Map(),users:new Map(),passwords:new Map(),subscriptions:new Map(),settings:new Map(),usage:new Map(),claims:new Set()};
 g.guardscaleState=state;
@@ -23,8 +23,18 @@ export const memoryStore={
     state.singletonOrgId=org.id;
     return org;
   },
+  async singleDeploymentOrgId():Promise<string|null>{return state.singletonOrgId&&state.orgs.has(state.singletonOrgId)?state.singletonOrgId:null},
   async organizationById(id:string){return state.orgs.get(id)??null},
   async organizations(){return[...state.orgs.values()]},
+  async putOrganization(v:Organization){state.orgs.set(v.id,v)},
+  async deleteOrganization(id:string){
+    for(const[k,m]of state.memberships)if(m.orgId===id)state.memberships.delete(k);
+    for(const map of[state.nodes,state.incidents,state.events,state.usage])for(const k of map.keys())if(k.startsWith(id+'\0'))map.delete(k);
+    for(const k of state.claims)if(k.startsWith(id+'\0'))state.claims.delete(k);
+    for(const[k,v]of state.subscriptions)if(v.orgId===id)state.subscriptions.delete(k);
+    state.settings.delete(id);
+    return state.orgs.delete(id);
+  },
   async putMembership(v:OrgMembership){state.memberships.set(membershipKey(v.orgId,v.userId),v)},
   async membership(orgId:string,userId:string){return state.memberships.get(membershipKey(orgId,userId))??null},
   async membersOfOrg(orgId:string){
@@ -51,9 +61,13 @@ export const memoryStore={
   async eventsForNode(tenant:string,serverId:string,limit=200){return(state.events.get(key(tenant,serverId))??[]).slice(-limit).reverse()},
   async userByName(username:string){return[...state.users.values()].find(x=>x.username.toLowerCase()===username.toLowerCase())??null},
   async userById(id:string){return state.users.get(id)??null},
+  async reserveVerificationEmail(id:string,email:string,sentAt:string,cutoff:string){const user=state.users.get(id);if(!user||user.email!==email||user.emailVerified!==false||user.verificationSentAt&&user.verificationSentAt>cutoff)return false;state.users.set(id,{...user,verificationSentAt:sentAt});return true;},
+  async releaseVerificationEmail(id:string,sentAt:string){const user=state.users.get(id);if(user?.verificationSentAt===sentAt){const next={...user};delete next.verificationSentAt;state.users.set(id,next);}},
+  async verifyUserEmail(id:string,email:string){const user=state.users.get(id);if(!user||user.email!==email||user.emailVerified!==false||user.status!=='active')return false;state.users.set(id,{...user,emailVerified:true,updatedAt:new Date().toISOString()});return true;},
   async putUser(v:GuardScaleUser,passwordHash?:string){state.users.set(v.id,v);if(passwordHash)state.passwords.set(v.id,passwordHash)},
   async password(id:string){return state.passwords.get(id)??null},
-  async deleteUser(id:string){state.passwords.delete(id);return state.users.delete(id)},
+  async createUser(v:GuardScaleUser,passwordHash:string){const emails=state.emails??=new Map(),email=v.email?.toLowerCase();if(state.users.has(v.id)||(email&&emails.has(email)))return false;if(email)emails.set(email,v.id);state.users.set(v.id,v);state.passwords.set(v.id,passwordHash);return true},
+  async deleteUser(id:string){const email=state.users.get(id)?.email?.toLowerCase();if(email&&state.emails?.get(email)===id)state.emails.delete(email);state.passwords.delete(id);return state.users.delete(id)},
   async settings(tenant:string){return state.settings.get(tenant)??defaultSettings(tenant)},
   async putSettings(tenant:string,v:Settings){state.settings.set(tenant,v)},
   async products():Promise<Product[]>{return[{id:'dev',name:'Dev',description:'Free tier for a single personal workspace.',stripePriceId:'',monthlyPrice:0,serverLimit:1,logMbIncluded:1000,aiCreditsIncluded:null,active:true},{id:'starter',name:'Starter',description:'Detection and alerting for a small server fleet.',stripePriceId:process.env.STRIPE_STARTER_PRICE_ID??'',monthlyPrice:49,serverLimit:5,logMbIncluded:10000,aiCreditsIncluded:null,active:true},{id:'scale',name:'Scale',description:'Response automation and expanded infrastructure coverage.',stripePriceId:process.env.STRIPE_SCALE_PRICE_ID??'',monthlyPrice:199,serverLimit:50,logMbIncluded:100000,aiCreditsIncluded:null,active:true}]},

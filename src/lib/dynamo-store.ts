@@ -8,9 +8,13 @@ import {hasPaidEntitlement} from './subscription-entitlement';
 const tableName=process.env.GUARDSCALE_TABLE??'guardscale-local';
 const client=DynamoDBDocumentClient.from(new DynamoDBClient({endpoint:process.env.GUARDSCALE_DYNAMODB_ENDPOINT}),{marshallOptions:{removeUndefinedValues:true}});
 
+// Only a local DynamoDB table is ever created by the app; AWS tables and indexes stay CloudFormation-managed.
+export function isLocalDynamoEndpoint(endpoint=process.env.GUARDSCALE_DYNAMODB_ENDPOINT){
+  try{return ['localhost','127.0.0.1','[::1]','dynamodb','database'].includes(new URL(endpoint??'').hostname)}catch{return false}
+}
 let tableReady:Promise<void>|null=null;
 function ensureTable(){
-  if(!process.env.GUARDSCALE_DYNAMODB_ENDPOINT)return Promise.resolve();
+  if(!isLocalDynamoEndpoint())return Promise.resolve();
   if(!tableReady)tableReady=(async()=>{
     try{
       await client.send(new CreateTableCommand({
@@ -61,6 +65,11 @@ export const dynamoStore={
     const finalOrg=await dynamoStore.organizationById(final.Item?.orgId as string);
     return finalOrg??org;
   },
+  async singleDeploymentOrgId():Promise<string|null>{
+    await ensureTable();
+    const pointer=await client.send(new GetCommand({TableName:tableName,Key:{pk:SINGLETON_PK,sk:SINGLETON_SK},ConsistentRead:true}));
+    return typeof pointer.Item?.orgId==='string'?pointer.Item.orgId:null;
+  },
   async organizationById(id:string):Promise<Organization|null>{
     await ensureTable();
     const r=await client.send(new GetCommand({TableName:tableName,Key:{pk:`ORG#${id}`,sk:`ORG#${id}`}}));
@@ -71,6 +80,30 @@ export const dynamoStore={
     const rows:Organization[]=[];let cursor:Record<string,unknown>|undefined;
     do{const r=await client.send(new QueryCommand({TableName:tableName,IndexName:'GSI1',KeyConditionExpression:'gsi1pk=:pk',ExpressionAttributeValues:{':pk':'ORG'},ExclusiveStartKey:cursor}));rows.push(...(r.Items??[]) as Organization[]);cursor=r.LastEvaluatedKey}while(cursor);
     return rows;
+  },
+  async putOrganization(v:Organization){
+    await ensureTable();
+    await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${v.id}`,sk:`ORG#${v.id}`,gsi1pk:'ORG',gsi1sk:`${v.createdAt}#${v.id}`,...v}}));
+  },
+  // Sweeps the whole ORG# partition, so record types added later are covered too. Memberships go first to cut access
+  // immediately; the organization row goes last so an interrupted run stays listed and can be retried.
+  async deleteOrganization(id:string):Promise<boolean>{
+    await ensureTable();
+    const sweep=async(pk:string)=>{
+      const items:Record<string,string>[]=[];let start:Record<string,unknown>|undefined;
+      do{const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk',ExpressionAttributeValues:{':pk':pk},ProjectionExpression:'pk,sk,serverId',ExclusiveStartKey:start,ConsistentRead:true}));items.push(...(r.Items??[]) as Record<string,string>[]);start=r.LastEvaluatedKey}while(start);
+      return items;
+    };
+    const rank=(sk:string)=>sk.startsWith('MEMBER#')?0:sk===`ORG#${id}`?2:1;
+    const items=(await sweep(`ORG#${id}`)).sort((a,b)=>rank(a.sk)-rank(b.sk));
+    if(!items.some(v=>v.sk===`ORG#${id}`))return false;
+    // The WhatsApp setup audit is stored as events of a pseudo-server without a NODE# record.
+    for(const event of await sweep(`ORG#${id}#NODE#${whatsappSetupAuditId}`))await client.send(new DeleteCommand({TableName:tableName,Key:{pk:event.pk,sk:event.sk}}));
+    for(const item of items){
+      if(item.sk.startsWith('NODE#'))for(const event of await sweep(`ORG#${id}#NODE#${item.serverId}`))await client.send(new DeleteCommand({TableName:tableName,Key:{pk:event.pk,sk:event.sk}}));
+      await client.send(new DeleteCommand({TableName:tableName,Key:{pk:item.pk,sk:item.sk}}));
+    }
+    return true;
   },
   async putMembership(v:OrgMembership){
     await ensureTable();
@@ -180,11 +213,27 @@ export const dynamoStore={
     const r=await client.send(new QueryCommand({TableName:tableName,IndexName:'GSI1',KeyConditionExpression:'gsi1pk=:pk',ExpressionAttributeValues:{':pk':`USERNAME#${username.toLowerCase()}`}}));
     return (r.Items?.[0] as GuardScaleUser)??null;
   },
+  // The EMAIL# claim and the user are written in one transaction, so two signups racing for an address cannot both win.
+  async createUser(v:GuardScaleUser,passwordHash:string):Promise<boolean>{
+    await ensureTable();
+    const email=v.email?.toLowerCase();
+    try{
+      await client.send(new TransactWriteCommand({TransactItems:[
+        {Put:{TableName:tableName,Item:{pk:`USER#${v.id}`,sk:`USER#${v.id}`,gsi1pk:`USERNAME#${v.username.toLowerCase()}`,gsi1sk:`USERNAME#${v.username.toLowerCase()}`,...v},ConditionExpression:'attribute_not_exists(pk)'}},
+        {Put:{TableName:tableName,Item:{pk:`USER#${v.id}`,sk:'PASSWORD',hash:passwordHash}}},
+        ...(email?[{Put:{TableName:tableName,Item:{pk:`EMAIL#${email}`,sk:`EMAIL#${email}`,userId:v.id},ConditionExpression:'attribute_not_exists(pk)'}}]:[]),
+      ]}));
+      return true;
+    }catch(e){if(e instanceof Error&&e.name==='TransactionCanceledException'&&/ConditionalCheckFailed/.test(e.message))return false;throw e}
+  },
   async userById(id:string):Promise<GuardScaleUser|null>{
     await ensureTable();
     const r=await client.send(new GetCommand({TableName:tableName,Key:{pk:`USER#${id}`,sk:`USER#${id}`}}));
     return (r.Item as GuardScaleUser)??null;
   },
+  async reserveVerificationEmail(id:string,email:string,sentAt:string,cutoff:string){await ensureTable();try{await client.send(new UpdateCommand({TableName:tableName,Key:{pk:`USER#${id}`,sk:`USER#${id}`},UpdateExpression:'SET verificationSentAt=:sent',ConditionExpression:'email=:email AND emailVerified=:no AND (attribute_not_exists(verificationSentAt) OR verificationSentAt<=:cutoff)',ExpressionAttributeValues:{':email':email,':no':false,':sent':sentAt,':cutoff':cutoff}}));return true;}catch(e){if(e instanceof Error&&e.name==='ConditionalCheckFailedException')return false;throw e;}},
+  async releaseVerificationEmail(id:string,sentAt:string){await ensureTable();try{await client.send(new UpdateCommand({TableName:tableName,Key:{pk:`USER#${id}`,sk:`USER#${id}`},UpdateExpression:'REMOVE verificationSentAt',ConditionExpression:'verificationSentAt=:sent',ExpressionAttributeValues:{':sent':sentAt}}));}catch(e){if(!(e instanceof Error&&e.name==='ConditionalCheckFailedException'))throw e;}},
+  async verifyUserEmail(id:string,email:string){await ensureTable();try{await client.send(new UpdateCommand({TableName:tableName,Key:{pk:`USER#${id}`,sk:`USER#${id}`},UpdateExpression:'SET emailVerified=:yes, updatedAt=:now',ConditionExpression:'email=:email AND emailVerified=:no AND #status=:active',ExpressionAttributeNames:{'#status':'status'},ExpressionAttributeValues:{':email':email,':no':false,':yes':true,':active':'active',':now':new Date().toISOString()}}));return true;}catch(e){if(e instanceof Error&&e.name==='ConditionalCheckFailedException')return false;throw e;}},
   async putUser(v:GuardScaleUser,passwordHash?:string){
     await ensureTable();
     await client.send(new PutCommand({TableName:tableName,Item:{pk:`USER#${v.id}`,sk:`USER#${v.id}`,gsi1pk:`USERNAME#${v.username.toLowerCase()}`,gsi1sk:`USERNAME#${v.username.toLowerCase()}`,...v}}));
@@ -201,6 +250,9 @@ export const dynamoStore={
     if(!existing.Item)return false;
     await client.send(new DeleteCommand({TableName:tableName,Key:{pk:`USER#${id}`,sk:`USER#${id}`}}));
     await client.send(new DeleteCommand({TableName:tableName,Key:{pk:`USER#${id}`,sk:'PASSWORD'}}));
+    // Release the address only if this user still holds it.
+    const email=(existing.Item.email as string|undefined)?.toLowerCase();
+    if(email)await client.send(new DeleteCommand({TableName:tableName,Key:{pk:`EMAIL#${email}`,sk:`EMAIL#${email}`},ConditionExpression:'userId=:id',ExpressionAttributeValues:{':id':id}})).catch(e=>{if(!(e instanceof Error&&e.name==='ConditionalCheckFailedException'))throw e});
     return true;
   },
   async settings(tenant:string):Promise<Settings>{
