@@ -49,13 +49,17 @@
     },
     "StripeSecretKey": {
       "Type": "String",
+      "NoEcho": true,
       "Default": "",
-      "NoEcho": true
+      "AllowedPattern": "^$|^(sk|rk)_(live|test)_[a-zA-Z0-9]+$",
+      "Description": "Optional initial Stripe secret key. Stored in a retained Secrets Manager secret, never a task definition environment value. Prefer an existing secret ARN for enterprise installs."
     },
     "StripeWebhookSecret": {
       "Type": "String",
+      "NoEcho": true,
       "Default": "",
-      "NoEcho": true
+      "AllowedPattern": "^$|^whsec_[a-zA-Z0-9]+$",
+      "Description": "Stripe webhook signing secret paired with StripeSecretKey. Stored in Secrets Manager."
     },
     "StripeStarterPriceId": {
       "Type": "String",
@@ -174,6 +178,33 @@
       "Default": "en_US",
       "AllowedPattern": "[a-z]{2,3}(_[A-Z]{2})?",
       "Description": "Language of the approved WhatsApp alert template."
+    },
+    "StripeCredentialsSecretArn": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^arn:aws[a-z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[a-zA-Z0-9/_+=.@-]+$",
+      "Description": "Optional existing same-account, same-region Stripe JSON secret ARN. Keys: secret_key and webhook_secret. Leave raw Stripe parameters empty when supplied."
+    },
+    "StripeCredentialsKmsKeyArn": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^arn:aws[a-z-]*:kms:[a-z0-9-]+:[0-9]{12}:key/[a-zA-Z0-9-]+$",
+      "Description": "Optional customer-managed KMS key ARN for the Stripe secret. Key policy must permit the task execution role to decrypt."
+    },
+    "StripeCredentialsRevision": {
+      "Type": "String",
+      "Default": "1",
+      "AllowedPattern": "[a-zA-Z0-9.-]+",
+      "Description": "Increment after rotating Stripe credentials to roll tasks through a reviewed CloudFormation change set."
+    },
+    "StripeMode": {
+      "Type": "String",
+      "Default": "live",
+      "AllowedValues": [
+        "live",
+        "sandbox"
+      ],
+      "Description": "Stripe environment. Use live keys in production and sandbox keys only in isolated test deployments."
     }
   },
   "Conditions": {
@@ -284,6 +315,195 @@
             },
             ""
           ]
+        }
+      ]
+    },
+    "UseExternalStripeSecret": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "StripeCredentialsSecretArn"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "CreateStripeSecret": {
+      "Fn::And": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "StripeCredentialsSecretArn"
+            },
+            ""
+          ]
+        },
+        {
+          "Fn::Not": [
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "StripeSecretKey"
+                },
+                ""
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "UseStripeCredentials": {
+      "Fn::Or": [
+        {
+          "Fn::Not": [
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "StripeCredentialsSecretArn"
+                },
+                ""
+              ]
+            }
+          ]
+        },
+        {
+          "Fn::Not": [
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "StripeSecretKey"
+                },
+                ""
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "UseStripeKmsKey": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "StripeCredentialsKmsKeyArn"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "UseStripeKmsAccess": {
+      "Fn::And": [
+        {
+          "Fn::Not": [
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "StripeCredentialsKmsKeyArn"
+                },
+                ""
+              ]
+            }
+          ]
+        },
+        {
+          "Fn::Or": [
+            {
+              "Fn::Not": [
+                {
+                  "Fn::Equals": [
+                    {
+                      "Ref": "StripeCredentialsSecretArn"
+                    },
+                    ""
+                  ]
+                }
+              ]
+            },
+            {
+              "Fn::Not": [
+                {
+                  "Fn::Equals": [
+                    {
+                      "Ref": "StripeSecretKey"
+                    },
+                    ""
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "Rules": {
+    "StripeCredentialSource": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Or": [
+              {
+                "Fn::And": [
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "StripeSecretKey"
+                      },
+                      ""
+                    ]
+                  },
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "StripeWebhookSecret"
+                      },
+                      ""
+                    ]
+                  }
+                ]
+              },
+              {
+                "Fn::And": [
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "StripeCredentialsSecretArn"
+                      },
+                      ""
+                    ]
+                  },
+                  {
+                    "Fn::Not": [
+                      {
+                        "Fn::Equals": [
+                          {
+                            "Ref": "StripeSecretKey"
+                          },
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "Fn::Not": [
+                      {
+                        "Fn::Equals": [
+                          {
+                            "Ref": "StripeWebhookSecret"
+                          },
+                          ""
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "AssertDescription": "Supply both raw Stripe credentials or an existing secret ARN, never partial credentials or both sources."
         }
       ]
     }
@@ -561,6 +781,80 @@
         },
         "ManagedPolicyArns": [
           "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+        ],
+        "Policies": [
+          {
+            "Fn::If": [
+              "UseStripeCredentials",
+              {
+                "PolicyName": "stripe-credentials-read",
+                "PolicyDocument": {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                    {
+                      "Effect": "Allow",
+                      "Action": "secretsmanager:GetSecretValue",
+                      "Resource": {
+                        "Fn::If": [
+                          "UseExternalStripeSecret",
+                          {
+                            "Ref": "StripeCredentialsSecretArn"
+                          },
+                          {
+                            "Ref": "StripeCredentials"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "Ref": "AWS::NoValue"
+              }
+            ]
+          },
+          {
+            "Fn::If": [
+              "UseStripeKmsAccess",
+              {
+                "PolicyName": "stripe-key-decrypt",
+                "PolicyDocument": {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                    {
+                      "Effect": "Allow",
+                      "Action": "kms:Decrypt",
+                      "Resource": {
+                        "Ref": "StripeCredentialsKmsKeyArn"
+                      },
+                      "Condition": {
+                        "StringEquals": {
+                          "kms:ViaService": {
+                            "Fn::Sub": "secretsmanager.${AWS::Region}.${AWS::URLSuffix}"
+                          },
+                          "kms:EncryptionContext:SecretARN": {
+                            "Fn::If": [
+                              "UseExternalStripeSecret",
+                              {
+                                "Ref": "StripeCredentialsSecretArn"
+                              },
+                              {
+                                "Ref": "StripeCredentials"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "Ref": "AWS::NoValue"
+              }
+            ]
+          }
         ]
       }
     },
@@ -775,18 +1069,6 @@
                 }
               },
               {
-                "Name": "STRIPE_SECRET_KEY",
-                "Value": {
-                  "Ref": "StripeSecretKey"
-                }
-              },
-              {
-                "Name": "STRIPE_WEBHOOK_SECRET",
-                "Value": {
-                  "Ref": "StripeWebhookSecret"
-                }
-              },
-              {
                 "Name": "STRIPE_STARTER_PRICE_ID",
                 "Value": {
                   "Ref": "StripeStarterPriceId"
@@ -796,6 +1078,18 @@
                 "Name": "STRIPE_SCALE_PRICE_ID",
                 "Value": {
                   "Ref": "StripeScalePriceId"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_STRIPE_CREDENTIALS_REVISION",
+                "Value": {
+                  "Ref": "StripeCredentialsRevision"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_STRIPE_MODE",
+                "Value": {
+                  "Ref": "StripeMode"
                 }
               }
             ],
@@ -810,7 +1104,69 @@
                 },
                 "awslogs-stream-prefix": "web"
               }
-            }
+            },
+            "Secrets": [
+              {
+                "Fn::If": [
+                  "UseStripeCredentials",
+                  {
+                    "Name": "STRIPE_SECRET_KEY",
+                    "ValueFrom": {
+                      "Fn::Join": [
+                        "",
+                        [
+                          {
+                            "Fn::If": [
+                              "UseExternalStripeSecret",
+                              {
+                                "Ref": "StripeCredentialsSecretArn"
+                              },
+                              {
+                                "Ref": "StripeCredentials"
+                              }
+                            ]
+                          },
+                          ":secret_key::"
+                        ]
+                      ]
+                    }
+                  },
+                  {
+                    "Ref": "AWS::NoValue"
+                  }
+                ]
+              },
+              {
+                "Fn::If": [
+                  "UseStripeCredentials",
+                  {
+                    "Name": "STRIPE_WEBHOOK_SECRET",
+                    "ValueFrom": {
+                      "Fn::Join": [
+                        "",
+                        [
+                          {
+                            "Fn::If": [
+                              "UseExternalStripeSecret",
+                              {
+                                "Ref": "StripeCredentialsSecretArn"
+                              },
+                              {
+                                "Ref": "StripeCredentials"
+                              }
+                            ]
+                          },
+                          ":webhook_secret::"
+                        ]
+                      ]
+                    }
+                  },
+                  {
+                    "Ref": "AWS::NoValue"
+                  }
+                ]
+              }
+            ]
           }
         ]
       }
@@ -959,18 +1315,6 @@
                 }
               },
               {
-                "Name": "STRIPE_SECRET_KEY",
-                "Value": {
-                  "Ref": "StripeSecretKey"
-                }
-              },
-              {
-                "Name": "STRIPE_WEBHOOK_SECRET",
-                "Value": {
-                  "Ref": "StripeWebhookSecret"
-                }
-              },
-              {
                 "Name": "STRIPE_STARTER_PRICE_ID",
                 "Value": {
                   "Ref": "StripeStarterPriceId"
@@ -980,6 +1324,18 @@
                 "Name": "STRIPE_SCALE_PRICE_ID",
                 "Value": {
                   "Ref": "StripeScalePriceId"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_STRIPE_CREDENTIALS_REVISION",
+                "Value": {
+                  "Ref": "StripeCredentialsRevision"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_STRIPE_MODE",
+                "Value": {
+                  "Ref": "StripeMode"
                 }
               }
             ],
@@ -994,7 +1350,69 @@
                 },
                 "awslogs-stream-prefix": "api"
               }
-            }
+            },
+            "Secrets": [
+              {
+                "Fn::If": [
+                  "UseStripeCredentials",
+                  {
+                    "Name": "STRIPE_SECRET_KEY",
+                    "ValueFrom": {
+                      "Fn::Join": [
+                        "",
+                        [
+                          {
+                            "Fn::If": [
+                              "UseExternalStripeSecret",
+                              {
+                                "Ref": "StripeCredentialsSecretArn"
+                              },
+                              {
+                                "Ref": "StripeCredentials"
+                              }
+                            ]
+                          },
+                          ":secret_key::"
+                        ]
+                      ]
+                    }
+                  },
+                  {
+                    "Ref": "AWS::NoValue"
+                  }
+                ]
+              },
+              {
+                "Fn::If": [
+                  "UseStripeCredentials",
+                  {
+                    "Name": "STRIPE_WEBHOOK_SECRET",
+                    "ValueFrom": {
+                      "Fn::Join": [
+                        "",
+                        [
+                          {
+                            "Fn::If": [
+                              "UseExternalStripeSecret",
+                              {
+                                "Ref": "StripeCredentialsSecretArn"
+                              },
+                              {
+                                "Ref": "StripeCredentials"
+                              }
+                            ]
+                          },
+                          ":webhook_secret::"
+                        ]
+                      ]
+                    }
+                  },
+                  {
+                    "Ref": "AWS::NoValue"
+                  }
+                ]
+              }
+            ]
           }
         ]
       }
@@ -1117,6 +1535,12 @@
                 "Name": "GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE",
                 "Value": {
                   "Ref": "WhatsappTemplateLanguage"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_STRIPE_MODE",
+                "Value": {
+                  "Ref": "StripeMode"
                 }
               }
             ],
@@ -1784,6 +2208,31 @@
           "Ref": "WhatsappTopic"
         }
       }
+    },
+    "StripeCredentials": {
+      "Type": "AWS::SecretsManager::Secret",
+      "Condition": "CreateStripeSecret",
+      "DeletionPolicy": "RetainExceptOnCreate",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Description": {
+          "Fn::Sub": "${AWS::StackName} Stripe credentials; separate live and sandbox deployments"
+        },
+        "KmsKeyId": {
+          "Fn::If": [
+            "UseStripeKmsKey",
+            {
+              "Ref": "StripeCredentialsKmsKeyArn"
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "SecretString": {
+          "Fn::Sub": "{\"secret_key\":\"${StripeSecretKey}\",\"webhook_secret\":\"${StripeWebhookSecret}\"}"
+        }
+      }
     }
   },
   "Outputs": {
@@ -1854,6 +2303,21 @@
     "AwsRegion": {
       "Value": {
         "Ref": "AWS::Region"
+      }
+    },
+    "StripeCredentialsSecretArn": {
+      "Condition": "UseStripeCredentials",
+      "Description": "Stripe secret ARN only; values are never output.",
+      "Value": {
+        "Fn::If": [
+          "UseExternalStripeSecret",
+          {
+            "Ref": "StripeCredentialsSecretArn"
+          },
+          {
+            "Ref": "StripeCredentials"
+          }
+        ]
       }
     }
   }
