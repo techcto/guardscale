@@ -1,0 +1,34 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {NextRequest} from 'next/server';
+import {POST as signup} from '../app/api/auth/signup/route';
+import {POST as login} from '../app/api/auth/login/route';
+import {POST as forgot} from '../app/api/auth/forgot-password/route';
+import {POST as reset} from '../app/api/auth/reset-password/route';
+import {POST as verify} from '../app/api/auth/verify-email/route';
+import {POST as resend} from '../app/api/auth/verify-email/resend/route';
+import {POST as addUser} from '../app/api/v1/users/route';
+import {store} from './store';
+import {createSession} from './session';
+const prefix='GUARDSCALE',cookieName='guardscale_session',password='email-identity-password-123';
+process.env[prefix+'_DEPLOYMENT_MODE']='saas';process.env[prefix+'_SESSION_SECRET']='synthetic-email-identity-session-secret';process.env[prefix+'_ROOT_USER']='root';process.env[prefix+'_ROOT_PASSWORD']='synthetic-root-password-123';
+const post=(path:string,body:unknown,cookie?:string)=>new NextRequest('http://localhost'+path,{method:'POST',headers:{host:'localhost',origin:'http://localhost','content-type':'application/json',...(cookie?{cookie}:{})},body:JSON.stringify(body)});
+const token=(url:string)=>new URL(url).searchParams.get('token');
+test('email is the only regular identity across signup, verification, login, resend and recovery',async()=>{
+ const email='clean-person@example.com';const response=await signup(post('/api/auth/signup',{displayName:'Clean person',email:' Clean-Person@Example.COM ',username:'ignored-alias',password}));assert.equal(response.status,201);const body=await response.json();assert.equal(body.username,email);assert.equal(response.headers.get('set-cookie'),null);assert.equal(await store.userByName('ignored-alias'),null);
+ assert.equal((await login(post('/api/auth/login',{email,password}))).status,403);assert.equal((await login(post('/api/auth/login',{username:'ignored-alias',password}))).status,401);
+ assert.equal((await resend(post('/api/auth/verify-email/resend',{email}))).status,409);
+ assert.equal((await verify(post('/api/auth/verify-email',{token:token(body.verifyLink)}))).status,200);
+ assert.equal((await login(post('/api/auth/login',{email:email.toUpperCase(),password}))).status,200);
+ const recovery=await forgot(post('/api/auth/forgot-password',{email}));const resetLink=(await recovery.json()).resetLink;assert.ok(resetLink);const replacement='replacement-password-123';
+ assert.equal((await reset(post('/api/auth/reset-password',{token:token(resetLink),password:replacement}))).status,200);assert.equal((await login(post('/api/auth/login',{email,password:replacement}))).status,200);assert.equal((await login(post('/api/auth/login',{email,password}))).status,401);
+ assert.equal((await signup(post('/api/auth/signup',{displayName:'Duplicate',email:email.toUpperCase(),password}))).status,409);
+ const longEmail='a'.repeat(60)+'@example.com';assert.equal((await signup(post('/api/auth/signup',{displayName:'Long email',email:longEmail,password}))).status,201);assert.equal((await resend(post('/api/auth/verify-email/resend',{email:longEmail}))).status,409);
+});
+test('root remains a username login and Add user derives the username from email',async()=>{
+ const root=await login(post('/api/auth/login',{username:'root',password:process.env[prefix+'_ROOT_PASSWORD']}));assert.equal(root.status,200);assert.equal((await root.json()).role,'root');assert.equal((await login(post('/api/auth/login',{username:'root',password:'wrong'}))).status,401);
+ const org=await store.createOrganization({name:'Identity test workspace',ownerId:'root',orgType:'personal'});const cookie=cookieName+'='+await createSession({id:'root',username:'root',role:'root',orgId:org.id,expiresAt:Date.now()+60000},process.env[prefix+'_SESSION_SECRET']!);
+ const r=await addUser(post('/api/v1/users',{displayName:'Team member',email:' Team.Member@Example.COM ',username:'ignored',password,role:'viewer'},cookie));assert.equal(r.status,201);const member=await r.json();assert.equal(member.username,'team.member@example.com');assert.equal((await store.userById(member.id))?.emailVerified,false);assert.equal((await login(post('/api/auth/login',{email:member.username,password}))).status,403);
+ assert.equal((await addUser(post('/api/v1/users',{displayName:'Missing email',username:'regular',password,role:'viewer'},cookie))).status,400);
+ assert.deepEqual(await (await forgot(post('/api/auth/forgot-password',{username:'root'}))).json(),{status:'ok'});
+});

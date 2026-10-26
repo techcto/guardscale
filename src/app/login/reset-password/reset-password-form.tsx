@@ -1,6 +1,7 @@
 'use client';
 import {FormEvent, useState} from 'react';
 import {useRouter, useSearchParams} from 'next/navigation';
+import Link from 'next/link';
 
 export default function ResetPasswordForm(){
   const router=useRouter(),token=useSearchParams().get('token')??'';
@@ -15,11 +16,11 @@ export default function ResetPasswordForm(){
     if(!res.ok){setError((await res.json()).error??'Unable to reset password');return}
     router.replace('/login');
   }
-  if(!token)return <p className="form-error">This reset link is missing its token. Request a new one.</p>;
+  if(!token)return <p className="form-error">This reset link is missing its token. <Link href="/login/forgot-password">Request a new one.</Link></p>;
   return <form className="login-form" onSubmit={submit}>
     <label>New password<input name="password" type="password" minLength={12} autoComplete="new-password" required autoFocus/></label>
     <span className="muted small">Use at least 12 characters.</span>
-    {error&&<p className="form-error" role="alert">{error}</p>}
+    {error&&<p className="form-error" role="alert">{error} <Link href="/login/forgot-password">Request a new link.</Link></p>}
     <button className="button primary" disabled={busy}>{busy?'Please wait…':'Set new password'}</button>
   </form>;
 }

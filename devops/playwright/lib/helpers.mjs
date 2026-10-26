@@ -25,22 +25,30 @@ export function makeShot(outDir) {
 export async function login(page, username, password) {
   await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded' });
   const form = page.locator('form.login-form');
-  await form.getByLabel('Username').fill(username);
+  await form.getByLabel('Email (or root username)').fill(username);
   await form.getByLabel('Password').fill(password);
   await form.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000, waitUntil: 'domcontentloaded' });
 }
 
-export async function signup(page, { displayName, username, password }) {
+// Signup ends at "Verify your email" without a session. Outside AWS notification mode the API returns the
+// verification link, which is returned here so a journey can open it like the emailed link.
+export async function signup(page, { displayName, email, password }) {
   await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Create account' }).click();
   const form = page.locator('form.login-form');
   await form.getByLabel('Display name').fill(displayName);
-  await form.getByLabel('Username').fill(username);
+  await form.getByLabel('Email', { exact: true }).fill(email);
   await form.getByLabel('Password').fill(password);
+  const created = page.waitForResponse((r) => r.url().endsWith('/api/auth/signup'));
   await form.getByRole('button', { name: 'Create workspace' }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000, waitUntil: 'domcontentloaded' });
+  const response = await created;
+  if (response.status() !== 201) throw new Error(`signup failed: ${response.status()} ${await response.text()}`);
+  await page.locator('.notice', { hasText: 'Verify your email' }).waitFor();
+  return (await response.json()).verifyLink;
 }
+
+export const randomEmail = (prefix = 'qa') => `${randomUsername(prefix)}@example.com`;
 
 export function randomUsername(prefix = 'qa') {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;

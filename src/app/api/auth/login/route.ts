@@ -1,2 +1,20 @@
-import{NextRequest,NextResponse}from'next/server';import{createSession,isSecureRequest,sessionCookie}from'@/lib/session';import{verifyLaunchPassword,verifyPassword}from'@/lib/password';import{store}from'@/lib/store';import{defaultActiveOrgForRoot,defaultActiveOrgForUser}from'@/lib/org-resolve';
-export async function POST(req:NextRequest){const {username,password}=await req.json() as {username?:string;password?:string};const root=process.env.GUARDSCALE_ROOT_USER,expected=process.env.GUARDSCALE_ROOT_PASSWORD,secret=process.env.GUARDSCALE_SESSION_SECRET;if(!secret)return NextResponse.json({error:'Login is not configured'},{status:503});let identity:{id:string;username:string;role:'root'|'admin'|'operator'|'viewer';orgId:string}|null=null;if(root&&expected&&username===root&&password&&verifyLaunchPassword(password,expected,secret)){identity={id:'root',username:root,role:'root',orgId:await defaultActiveOrgForRoot()}}else if(username&&password){const user=await store.userByName(username),hash=user&&await store.password(user.id);if(user&&hash&&user.status==='active'&&verifyPassword(password,hash)){const active=await defaultActiveOrgForUser(user.id);if(active)identity={id:user.id,username:user.username,role:active.role,orgId:active.orgId}}}if(!identity)return NextResponse.json({error:'Invalid username or password'},{status:401});const token=await createSession({...identity,expiresAt:Date.now()+28800000},secret),res=NextResponse.json(identity);res.cookies.set(sessionCookie,token,{httpOnly:true,sameSite:'lax',secure:isSecureRequest(req),path:'/',maxAge:28800});return res}
+import {NextRequest,NextResponse} from 'next/server';
+import {createSession,isSecureRequest,sessionCookie} from '@/lib/session';
+import {verifyLaunchPassword,verifyPassword} from '@/lib/password';
+import {store} from '@/lib/store';
+import {defaultActiveOrgForRoot,defaultActiveOrgForUser} from '@/lib/org-resolve';
+import {verificationPending} from '@/lib/email-verification';
+import {userForIdentifier,accountIdentifier} from '@/lib/account-identity';
+import {readBody} from '@/lib/read-body';
+export async function POST(req:NextRequest){
+ let input;try{input=JSON.parse(await readBody(req,8192));if(!input||typeof input!=='object')throw Error();}catch{return NextResponse.json({error:'Invalid login request'},{status:400});}
+ const username=accountIdentifier(input.email??input.username),password=typeof input.password==='string'&&input.password.length<=256?input.password:undefined;
+ const root=process.env.GUARDSCALE_ROOT_USER,expected=process.env.GUARDSCALE_ROOT_PASSWORD,secret=process.env.GUARDSCALE_SESSION_SECRET;
+ if(!secret)return NextResponse.json({error:'Login is not configured'},{status:503});
+ let identity:{id:string;username:string;role:'root'|'admin'|'operator'|'viewer';orgId:string}|null=null;
+ if(root&&expected&&username===root&&password&&verifyLaunchPassword(password,expected,secret))identity={id:'root',username:root,role:'root',orgId:await defaultActiveOrgForRoot()};
+ else if(username&&password){const user=await userForIdentifier(username),hash=user&&await store.password(user.id);if(user&&hash&&user.status==='active'&&verifyPassword(password,hash)){if(verificationPending(user))return NextResponse.json({error:'Verify your email before signing in.',unverified:true},{status:403});const active=await defaultActiveOrgForUser(user.id);if(active)identity={id:user.id,username:user.username,role:active.role,orgId:active.orgId};}}
+ if(!identity)return NextResponse.json({error:'Invalid email or password'},{status:401});
+ const token=await createSession({...identity,expiresAt:Date.now()+28800000},secret),res=NextResponse.json(identity);
+ res.cookies.set(sessionCookie,token,{httpOnly:true,sameSite:'lax',secure:isSecureRequest(req),path:'/',maxAge:28800});return res;
+}

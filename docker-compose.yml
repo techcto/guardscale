@@ -8,6 +8,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      GUARDSCALE_LOCAL_REPLAY: 'true'
       GUARDSCALE_API_BASE_URL: http://guardscale-api:3001
       GUARDSCALE_DEPLOYMENT_MODE: ${GUARDSCALE_DEPLOYMENT_MODE:-on-premise}
       GUARDSCALE_ROOT_USER: ${GUARDSCALE_ROOT_USER:-root}

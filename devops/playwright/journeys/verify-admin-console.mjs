@@ -3,7 +3,7 @@
 // Requires a SaaS-mode deployment (the directory and usage metering do not exist in private mode).
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { BASE_URL, ROOT_USERNAME, ROOT_PASSWORD, login, makeShot, randomUsername } from '../lib/helpers.mjs';
+import { BASE_URL, ROOT_USERNAME, ROOT_PASSWORD, login, makeShot, randomEmail, randomUsername } from '../lib/helpers.mjs';
 
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH });
@@ -27,8 +27,15 @@ import { BASE_URL, ROOT_USERNAME, ROOT_PASSWORD, login, makeShot, randomUsername
     assert.equal(created.status(), 201, await created.text());
     const orgId = (await created.json()).id;
     assert.equal((await api.post(`${BASE_URL}/api/orgs/active`, { data: { orgId } })).status(), 200);
-    const username = randomUsername('viewer'), password = `pw-${randomUsername('p')}`;
-    const member = await api.post(`${BASE_URL}/api/v1/users`, { data: { username, displayName: 'Playwright Admin Viewer', password, role: 'viewer' } });
+    // SaaS accounts verify their email before signing in; Add user then admits the account by email.
+    const username = randomEmail('viewer'), password = `pw-${randomUsername('p')}`;
+    const seed = await browser.newContext();
+    const signedUp = await seed.request.post(`${BASE_URL}/api/auth/signup`, { data: { email: username, displayName: 'Playwright Admin Viewer', password } });
+    assert.equal(signedUp.status(), 201, await signedUp.text());
+    const { verifyLink } = await signedUp.json();
+    assert.equal((await seed.request.post(`${BASE_URL}/api/auth/verify-email`, { data: { token: new URL(verifyLink).searchParams.get('token') } })).status(), 200);
+    await seed.close();
+    const member = await api.post(`${BASE_URL}/api/v1/users`, { headers: { Origin: BASE_URL }, data: { email: username, role: 'viewer' } });
     assert.equal(member.status(), 201, await member.text());
     const userId = (await member.json()).id;
     const { tenantId, enrollmentToken } = await (await api.get(`${BASE_URL}/api/v1/nodes/enrollment`)).json();
