@@ -201,6 +201,42 @@
         "sandbox"
       ],
       "Description": "Stripe environment. Use live keys in production and sandbox keys only in isolated test deployments."
+    },
+    "UsageExport": {
+      "Type": "String",
+      "Default": "disabled",
+      "AllowedValues": [
+        "disabled",
+        "enabled"
+      ],
+      "Description": "Enable opted-in measured overage export. Workspace opt-in is still required."
+    },
+    "StripeServerOveragePriceId": {
+      "Type": "String",
+      "Default": ""
+    },
+    "StripeLogOveragePriceId": {
+      "Type": "String",
+      "Default": ""
+    },
+    "StripeAIOveragePriceId": {
+      "Type": "String",
+      "Default": ""
+    },
+    "LogMbIncluded": {
+      "Type": "String",
+      "Default": "",
+      "Description": "Optional per-plan MiB allowance JSON; empty uses the application catalog."
+    },
+    "AICreditWeights": {
+      "Type": "String",
+      "Default": "",
+      "Description": "Versioned model token-to-credit weights. One credit represents $0.001 of inference cost; unconfigured models are never billed."
+    },
+    "BlockedSignupDomains": {
+      "Type": "String",
+      "Default": "",
+      "Description": "Optional comma-separated signup domain blocklist. Domain and subdomains are blocked for public registration; empty permits all valid email domains."
     }
   },
   "Conditions": {
@@ -1087,6 +1123,48 @@
                 "Value": {
                   "Ref": "StripeMode"
                 }
+              },
+              {
+                "Name": "GUARDSCALE_USAGE_EXPORT",
+                "Value": {
+                  "Ref": "UsageExport"
+                }
+              },
+              {
+                "Name": "STRIPE_SERVER_OVERAGE_PRICE_ID",
+                "Value": {
+                  "Ref": "StripeServerOveragePriceId"
+                }
+              },
+              {
+                "Name": "STRIPE_LOG_OVERAGE_PRICE_ID",
+                "Value": {
+                  "Ref": "StripeLogOveragePriceId"
+                }
+              },
+              {
+                "Name": "STRIPE_AI_OVERAGE_PRICE_ID",
+                "Value": {
+                  "Ref": "StripeAIOveragePriceId"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_LOG_MB_INCLUDED_JSON",
+                "Value": {
+                  "Ref": "LogMbIncluded"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_AI_CREDIT_WEIGHTS_JSON",
+                "Value": {
+                  "Ref": "AICreditWeights"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_BLOCKED_SIGNUP_DOMAINS",
+                "Value": {
+                  "Ref": "BlockedSignupDomains"
+                }
               }
             ],
             "LogConfiguration": {
@@ -1333,6 +1411,48 @@
                 "Value": {
                   "Ref": "StripeMode"
                 }
+              },
+              {
+                "Name": "GUARDSCALE_USAGE_EXPORT",
+                "Value": {
+                  "Ref": "UsageExport"
+                }
+              },
+              {
+                "Name": "STRIPE_SERVER_OVERAGE_PRICE_ID",
+                "Value": {
+                  "Ref": "StripeServerOveragePriceId"
+                }
+              },
+              {
+                "Name": "STRIPE_LOG_OVERAGE_PRICE_ID",
+                "Value": {
+                  "Ref": "StripeLogOveragePriceId"
+                }
+              },
+              {
+                "Name": "STRIPE_AI_OVERAGE_PRICE_ID",
+                "Value": {
+                  "Ref": "StripeAIOveragePriceId"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_LOG_MB_INCLUDED_JSON",
+                "Value": {
+                  "Ref": "LogMbIncluded"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_AI_CREDIT_WEIGHTS_JSON",
+                "Value": {
+                  "Ref": "AICreditWeights"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_BLOCKED_SIGNUP_DOMAINS",
+                "Value": {
+                  "Ref": "BlockedSignupDomains"
+                }
               }
             ],
             "LogConfiguration": {
@@ -1537,6 +1657,42 @@
                 "Name": "GUARDSCALE_STRIPE_MODE",
                 "Value": {
                   "Ref": "StripeMode"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_USAGE_EXPORT",
+                "Value": {
+                  "Ref": "UsageExport"
+                }
+              },
+              {
+                "Name": "STRIPE_SERVER_OVERAGE_PRICE_ID",
+                "Value": {
+                  "Ref": "StripeServerOveragePriceId"
+                }
+              },
+              {
+                "Name": "STRIPE_LOG_OVERAGE_PRICE_ID",
+                "Value": {
+                  "Ref": "StripeLogOveragePriceId"
+                }
+              },
+              {
+                "Name": "STRIPE_AI_OVERAGE_PRICE_ID",
+                "Value": {
+                  "Ref": "StripeAIOveragePriceId"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_LOG_MB_INCLUDED_JSON",
+                "Value": {
+                  "Ref": "LogMbIncluded"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_AI_CREDIT_WEIGHTS_JSON",
+                "Value": {
+                  "Ref": "AICreditWeights"
                 }
               }
             ],

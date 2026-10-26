@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import Stripe from 'stripe';
+import pricing from '../../src/lib/billing-pricing.json' with {type:'json'};
 
 export const plans = [
-  { id: 'starter', name: 'GuardScale Starter', cents: 4900, servers: 5, logMb: 10000, env: 'STRIPE_STARTER_PRICE_ID' },
-  { id: 'scale', name: 'GuardScale Scale', cents: 19900, servers: 50, logMb: 100000, env: 'STRIPE_SCALE_PRICE_ID' },
+  { id: 'starter', name: 'GuardScale Starter', cents: 4900, servers: 5, logMb: 10000, aiCredits: pricing.includedAiCredits.starter, env: 'STRIPE_STARTER_PRICE_ID' },
+  { id: 'scale', name: 'GuardScale Scale', cents: 19900, servers: 50, logMb: 100000, aiCredits: pricing.includedAiCredits.scale, env: 'STRIPE_SCALE_PRICE_ID' },
 ];
 // Shown in the Checkout order summary. Keep descriptions factual: what the plan includes, nothing promised beyond the app.
 const describe = servers => `Up to ${servers} protected servers: Apache and PHP attack detection, incident timelines with evidence, live activity and log streams, and alert notifications. Cancel anytime.`;
@@ -12,8 +13,8 @@ export const meters = ['guardscale_server_hours_v1', 'guardscale_log_mb_v1', 'gu
 // Per-unit overage prices on the meters, created only when an amount (USD cents, decimals allowed) is supplied at run time.
 export const overage = [
   { id: 'server_hours', name: 'GuardScale extra server-hours', description: 'Per server-hour beyond the servers in your plan, only after you opt in. Billed monthly in arrears.', meter: 'guardscale_server_hours_v1', env: 'STRIPE_SERVER_OVERAGE_PRICE_ID', amountEnv: 'GUARDSCALE_SERVER_HOUR_CENTS' },
-  { id: 'log_mb', name: 'GuardScale log ingestion', description: 'Per MB of log events ingested beyond your plan allowance, 7-day retention included, only after you opt in. Billed monthly in arrears.', meter: 'guardscale_log_mb_v1', env: 'STRIPE_LOG_OVERAGE_PRICE_ID', amountEnv: 'GUARDSCALE_LOG_MB_CENTS' },
-  { id: 'ai_credits', name: 'GuardScale Guardian AI credits', description: 'Per Guardian AI credit beyond your plan allowance, only after you opt in. Billed monthly in arrears.', meter: 'guardscale_ai_credits_v1', env: 'STRIPE_AI_OVERAGE_PRICE_ID', amountEnv: 'GUARDSCALE_AI_CREDIT_CENTS' },
+  { id: 'log_mb', name: 'GuardScale log ingestion', description: 'Per MiB (1,048,576 bytes) of log events beyond your allowance, including accounting overhead and 7-day retention, only after opt-in. Billed monthly in arrears.', meter: 'guardscale_log_mb_v1', env: 'STRIPE_LOG_OVERAGE_PRICE_ID', amountEnv: 'GUARDSCALE_LOG_MB_CENTS' },
+  { id: 'ai_credits', name: 'GuardScale Guardian AI credits', description: 'Per credit beyond your allowance; one credit represents $0.001 of model inference cost using versioned token weights. Opt-in only; billed monthly in arrears.', meter: 'guardscale_ai_credits_v1', env: 'STRIPE_AI_OVERAGE_PRICE_ID', amountEnv: 'GUARDSCALE_AI_CREDIT_CENTS' },
 ];
 // Optional percent-off coupon with one customer-facing promotion code, redeemed on Stripe Checkout. Supplied at run time,
 // never committed: this repository is public. Use different codes in test and live mode.
@@ -46,7 +47,7 @@ export async function setup(client, image, env = {}) {
   const productImage = image && (async () => imageUrl ??= await (async () => { const file = (await client.files.create({ purpose: 'business_logo', file: { data: image.data, name: image.name, type: 'application/octet-stream' } })).id; return { file, url: (await client.fileLinks.create({ file })).url }; })());
   for (const plan of plans) {
     const id = `guardscale_${plan.id}_v1`;
-    await ensureProduct(client, id, { name: plan.name, description: describe(plan.servers) }, { application: 'guardscale', included_servers: String(plan.servers), included_log_mb: String(plan.logMb) }, productImage);
+    await ensureProduct(client, id, { name: plan.name, description: describe(plan.servers) }, { application: 'guardscale', included_servers: String(plan.servers), included_log_mb: String(plan.logMb), included_ai_credits: String(plan.aiCredits) }, productImage);
     const lookup_key = `${id}_usd_monthly`;
     let price = (await client.prices.list({ lookup_keys: [lookup_key], limit: 2 })).data[0];
     if (price && (!price.active || price.product !== id || price.currency !== 'usd' ||

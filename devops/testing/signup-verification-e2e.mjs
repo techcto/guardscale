@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {chromium} from '@playwright/test';
 // Synthetic data only: run against a local SaaS-mode app with a non-AWS notification mode, so signup and resend return the
-// verification link instead of emailing it. GuardScale has no account deletion API, so signed-up accounts stay in the
-// fixture's in-memory DynamoDB until it stops; the cleanup below removes what the API can (the legacy membership).
+// verification link instead of emailing it. Cleanup removes test accounts through the product's deletion APIs.
 const base=process.env.GUARDSCALE_TEST_URL||'http://localhost:8183';
 if(!['localhost','127.0.0.1'].includes(new URL(base).hostname))throw new Error('This synthetic signup test is local-only');
 const shots=process.env.GUARDSCALE_TEST_SCREENSHOTS;

@@ -3,11 +3,22 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {memoryStore as store} from './memory-store';
 import type {Subscription,UsageHour} from './model';
-import {AI_METER,LOG_METER,MB,SERVER_METER,allowanceFor,aiAllowed,exportUsage,forgetPlan,hourOf,logAllowed,logEntryBytes,measureGuardian,overageByHour,recordLogBytes,recordServerHour,serverLimitFor,usagePeriod,validateBilling,type MeterClient} from './usage';
+import {AI_METER,LOG_METER,MB,SERVER_METER,allowanceFor,aiAllowed,aiCredits,exportUsage,forgetPlan,hourOf,logAllowed,logEntryBytes,measureGuardian,overageByHour,recordLogBytes,recordServerHour,serverLimitFor,usagePeriod,validateBilling,type MeterClient} from './usage';
 
 const saas=()=>{process.env.GUARDSCALE_DEPLOYMENT_MODE='saas'};
 const hour=(h:string,v:Partial<UsageHour>={}):UsageHour=>({hour:h,periodStart:'p',billable:true,exported:{},serverHours:0,logBytes:0,ai:{},...v});
 const paid=(orgId:string):Subscription=>({id:'sub_'+orgId,orgId,productId:'starter',stripeCustomerId:'cus_'+orgId,stripeSubscriptionId:'sub_'+orgId,status:'active',currentPeriodStart:'2026-10-01T00:00:00.000Z',currentPeriodEnd:'2026-10-31T00:00:00.000Z',updatedAt:new Date().toISOString()});
+
+test('approved plan credits and model-cost weights preserve fractional usage',async()=>{
+ const products=await store.products();
+ assert.deepEqual(products.map(p=>[p.id,p.aiCreditsIncluded]),[['dev',0],['starter',1000],['scale',5000]]);
+ // Synthetic rates demonstrate conversion, not a price claim about an actual model.
+ const weights={version:'cost-v1',included_credits:{},models:{example:{input_per_1k:0.3,output_per_1k:1.2}}};
+ const measured=aiCredits({example:{calls:1,inputTokens:1000,outputTokens:500,unknownCalls:0}},weights);
+ assert.ok(Math.abs(measured.credits-0.9)<1e-10);assert.equal(measured.unpriced,0);
+ const unknown=aiCredits({other:{calls:2,inputTokens:100000,outputTokens:100000,unknownCalls:0}},weights);
+ assert.deepEqual(unknown,{credits:0,unpriced:2});
+});
 
 test('allowances come from the plan: server-hours for every hour of the period, included log MB, and AI only with credit weights',()=>{
  delete process.env.GUARDSCALE_LOG_MB_INCLUDED_JSON;delete process.env.GUARDSCALE_AI_CREDIT_WEIGHTS_JSON;
