@@ -1,2 +1,2 @@
 import Stripe from'stripe';
-export function stripe(){const key=process.env.STRIPE_SECRET_KEY;if(!key)throw new Error('Stripe is not configured');return new Stripe(key)}
+export function stripe(){const key=process.env.STRIPE_SECRET_KEY;if(!key)throw new Error('Stripe is not configured');const mode=process.env.GUARDSCALE_STRIPE_MODE;if(mode==='sandbox'&&!/^(sk|rk)_test_/.test(key)||mode==='live'&&!/^(sk|rk)_live_/.test(key))throw new Error('Stripe key does not match the configured billing environment');if(mode&&mode!=='sandbox'&&mode!=='live')throw new Error('Invalid Stripe billing environment');return new Stripe(key,{timeout:20000,maxNetworkRetries:1})}
