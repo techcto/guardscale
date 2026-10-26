@@ -21,8 +21,8 @@ For a no-AWS rehearsal, use the [local testing quickstart](docs/hackathon-local-
 GuardScale is an AI-powered infrastructure guardian that detects attacks and application failures, alerts teams via WhatsApp and email, and lets operators safely respond in real time. It is open-source under AGPL-3.0-or-later (see `LICENSE`); a separate commercial license is available for embedding, redistribution, or operation without AGPL obligations (see `COMMERCIAL-LICENSE.md`).
 
 <a href="https://guardscale.org"><img src="assets/launch-website.svg" width="200" alt="Visit GuardScale" /></a>
-<a href="https://aws.amazon.com/marketplace/pp/prodview-rhtryiryciphg"><img src="assets/launch-marketplace.svg" width="200" alt="Subscribe to GuardScale on AWS Marketplace" /></a>
-<a href="https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=https://guardscale.s3.us-east-1.amazonaws.com/cloudformation/guardscale.yaml&amp;stackName=guardscale"><img src="assets/launch-aws.svg" width="200" alt="Launch GuardScale with AWS CloudFormation" /></a>
+
+**AWS Marketplace: coming soon.** Public subscription and one-click launch links are disabled until the listing is live. Private deployment templates and setup instructions remain available below.
 
 ## The Problem
 
@@ -136,7 +136,7 @@ The command is reusable across a fleet. On EC2, the installer uses IMDSv2 to der
 
 ## AWS Marketplace And Deployment
 
-[Subscribe on AWS Marketplace](https://aws.amazon.com/marketplace/pp/prodview-rhtryiryciphg) before launching subscription-gated container images. The **LAUNCH AWS** button opens the standalone template in the CloudFormation console; review the network, certificate, credentials, costs, and change set before submitting. It does not subscribe or deploy automatically.
+The AWS Marketplace listing is not publicly live. Release tooling and private deployment templates are implemented; public buyer checkout and a new-buyer Marketplace installation are not claimed. Private installations require authorized container access. Review network, certificate, credentials, costs and the CloudFormation change set before installing.
 
 
 Install, update, and delete application infrastructure only through formal CloudFormation templates and reviewed change sets. Do not delete individual AWS resources manually. Standalone installations and AppHub installations remain independent deployment choices.
