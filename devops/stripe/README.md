@@ -41,9 +41,11 @@ not invent test keys. Populate the real values, select the matching output ARN
 as `StripeCredentialsSecretArn`, and apply a reviewed update. Billing remains
 unconfigured until real keys, price IDs and webhook verification are ready.
 
-For existing secrets formerly owned by a separate stack, follow the
-[retain-and-import migration](../cloudformation/STRIPE-OWNERSHIP.md). Never delete
-the secrets themselves or recreate them under new ARNs to consolidate ownership.
+For credentials formerly held by a separate stack, follow the
+[main-stack copy-and-switch migration](../cloudformation/STRIPE-OWNERSHIP.md).
+Create the new main-stack secret containers, populate and verify them, then change
+the active ARN and credential revision through a reviewed update. Retire the old
+resources only after all tasks have switched successfully.
 
 In AWS Secrets Manager, edit the matching secret's key/value fields:
 

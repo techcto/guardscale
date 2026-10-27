@@ -28,6 +28,7 @@ jobs:
       - name: Check messaging templates and guarded email activation
         run: |
           node --test devops/cloudformation/messaging.test.cjs
+          node --test devops/stripe/secrets.test.mjs
           python3 devops/cloudformation/email-rule-activation.test.py
       - run: npm run build
       - name: Reject secrets and identifiable fixture data
