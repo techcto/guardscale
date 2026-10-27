@@ -1,5 +1,24 @@
 # Local real-tool security tests
 
+## Why these tools are included
+
+GuardScale was developed after our team responded to a real attack involving
+automated scanning tools including ffuf and Nuclei. AI helped us investigate the
+incident and connect request activity with application and origin-server behavior.
+We then built GuardScale around evidence collection, further inspection, operator
+communication and bounded response.
+
+The submodules let us reproduce relevant behavior on infrastructure we own and
+are authorized to test. Their presence is for defensive development and evaluation;
+the monitored-host agent does not install or run scanners. Tool identification
+does not by itself prove intent or identify an attacker.
+
+## Reproduce locally
+
+For an isolated local target reporting into the production control plane, see
+[production-connected local testing](../../docs/production-testing.md#local-target-production-control-plane).
+The commands below use the independent local regression lab instead.
+
 The ffuf and nuclei sources are Git submodules, pinned by the parent repository:
 
 - `submodules/ffuf`: `8162f48742ff140cafd0d8eb4f071714befccef5`

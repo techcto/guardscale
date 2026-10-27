@@ -4,6 +4,12 @@
 
 ## The problem and users
 
+The project began with our experience of a real attack involving automated tools
+including ffuf and Nuclei. We used AI to help diagnose the request activity and
+application/origin behavior, then developed GuardScale to turn that investigation
+and response process into an operator-controlled workflow. This is the team's
+origin account, not a claim that an HTTP fingerprint proves an attacker's identity.
+
 Small operations teams need to understand origin pressure without correlating
 several consoles while their application is failing. GuardScale is designed for
 operators of Linux web applications: it correlates bounded host observations,
@@ -123,6 +129,22 @@ require the [receiving infrastructure](email-replies.md), valid DNS and a comple
 real inbox-to-worker test.
 
 ## Evaluation and limitations
+
+### Ethical hacking and reproduction
+
+The incident motivated the solution; our controlled lab helps us test it.
+Pinned ffuf and Nuclei submodules generate bounded requests against our own local
+PHP/Apache fixture. The tools run in an isolated probe container with a fixed
+target, rate limits and a process timeout. Nuclei uses the supplied informational
+enumeration template, not unrestricted exploit packs. No arbitrary target argument
+is exposed. The tools are not deployed onto monitored customer hosts.
+
+The local agent can report to production via HTTPS so we can exercise actual
+notification and approval infrastructure without scanning the production app.
+Any protection action still requires authorization and is constrained by the
+test agent's allowlist to the disposable probe. See [scanner details and licenses](../devops/local/SCANNERS.md).
+
+### Recorded development evidence
 
 The October 27 development session exercised a real disposable PHP/Apache site,
 a 60-request test burst, real Bedrock inspection/recommendation, WhatsApp delivery

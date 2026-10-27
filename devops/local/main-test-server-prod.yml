@@ -1,0 +1,12 @@
+# The target stays local. Only enrollment and agent telemetry reach GuardScale.
+services:
+  test-enroll:
+    environment:
+      GUARDSCALE_FIXTURE_CONTROL_URL: https://guardscale.org
+      GUARDSCALE_FIXTURE_PRODUCTION: 'true'
+      GUARDSCALE_FIXTURE_SERVER_ID: local-php-fixture-prod
+      GUARDSCALE_ROOT_PASSWORD: ''
+    secrets: [production_session]
+secrets:
+  production_session:
+    file: ${GUARDSCALE_PROD_SESSION_FILE:?Set the private production session file path}

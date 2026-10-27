@@ -14,6 +14,12 @@ and turn explicit approval into scoped, temporary protection.**
 
 ## Protect the origin. Understand the incident.
 
+GuardScale grew out of our experience responding to a real attack involving
+automated tools including ffuf and Nuclei. We used AI to help investigate the
+request patterns, application logs and origin-server pressure. That experience
+led us to build a system that gathers evidence, investigates further and brings
+an operator into the response loop.
+
 An application can fail while individual requests still look ordinary. A distributed
 crawl can exhaust PHP workers and database capacity without one obvious high-rate
 client. Understanding the incident means correlating request patterns, log-source
@@ -99,6 +105,8 @@ To stop just the test website and probe, run `bash test-server.sh stop`.
 
 [Environment, health checks and testing](README-TECHNICAL.md)
 
+[Authenticated production smoke test](docs/production-testing.md)
+
 ## Human control, with a verifiable result
 
 Protection is opt-in and constrained by host policy. It uses a temporary HTTP(S)
@@ -121,6 +129,28 @@ communication loop. Secrets Manager, IAM, CloudWatch and CloudFormation support
 credential handling, observability and repeatable delivery.
 
 [Architecture diagrams and tradeoffs](docs/AWS-ARCHITECTURE.md) · [Evaluation and limitations](docs/JUDGES_FIELD_GUIDE.md#evaluation-and-limitations)
+
+## Ethical hacking and defensive development
+
+We now use ffuf and Nuclei in an authorized local lab to reproduce scanning
+patterns and test the response workflow. The pinned tools run against our own
+disposable PHP/Apache website, with fixed targets, request limits and bounded
+runtime. They are development tools; GuardScale's monitored-host agent does not
+install or launch scanners.
+
+This lets us examine real requests and logs, review AI-assisted findings, approve
+temporary protection, and verify removal or expiry. The local website can report
+to the production control plane over HTTPS while scanner traffic remains on its
+private Docker network. Production receives telemetry and operator responses;
+it is not the scanner target.
+
+Tool names or user-agent strings alone do not establish who sent a request or
+whether it was malicious. Our origin story describes the incident that motivated
+the project; controlled reproductions provide repeatable engineering evidence.
+We do not claim that a local scan is a production penetration test or a guarantee
+of protection against every attack.
+
+[Tool sources, limits and licenses](devops/local/SCANNERS.md) · [Production testing](docs/production-testing.md)
 
 ## Build and deploy
 

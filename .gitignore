@@ -8,6 +8,7 @@
 /.aws/
 /playwright-report/
 /test-results/
+/devops/playwright/.auth/
 *.test
 *.prof
 
