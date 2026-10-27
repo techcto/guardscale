@@ -188,14 +188,12 @@ export const dynamoStore={
     return (r.Item as IncidentRecord)??null;
   },
   async incidents(tenant:string):Promise<IncidentRecord[]>{
-    await ensureTable();
-    const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',ExpressionAttributeValues:{':pk':`ORG#${tenant}`,':prefix':'INCIDENT#'}}));
-    return (r.Items??[]) as IncidentRecord[];
+    await ensureTable();const items:IncidentRecord[]=[];let cursor:Record<string,unknown>|undefined;
+    do{const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',ExpressionAttributeValues:{':pk':`ORG#${tenant}`,':prefix':'INCIDENT#'},ExclusiveStartKey:cursor}));items.push(...(r.Items??[]) as IncidentRecord[]);cursor=r.LastEvaluatedKey;}while(cursor);
+    return items.sort((a,b)=>b.startedAt.localeCompare(a.startedAt)||a.incidentId.localeCompare(b.incidentId));
   },
   async incidentsForNode(tenant:string,serverId:string):Promise<IncidentRecord[]>{
-    await ensureTable();
-    const r=await client.send(new QueryCommand({TableName:tableName,KeyConditionExpression:'pk=:pk AND begins_with(sk,:prefix)',FilterExpression:'serverId=:sid',ExpressionAttributeValues:{':pk':`ORG#${tenant}`,':prefix':'INCIDENT#',':sid':serverId}}));
-    return (r.Items??[]) as IncidentRecord[];
+    return (await this.incidents(tenant)).filter(i=>i.serverId===serverId);
   },
   // Returns false when an event with the same ID was already stored, so agent retries are not counted twice.
   async putEvent(v:GuardScaleEvent){
@@ -266,7 +264,7 @@ export const dynamoStore={
     await client.send(new PutCommand({TableName:tableName,Item:{pk:`ORG#${tenant}`,sk:'SETTINGS',...v}}));
   },
   async products():Promise<Product[]>{
-    return[{id:'dev',name:'Dev',description:'Free tier for a single personal workspace.',stripePriceId:'',monthlyPrice:0,serverLimit:1,logMbIncluded:1000,aiCreditsIncluded:pricing.includedAiCredits.dev,active:true},{id:'starter',name:'Starter',description:'Detection and alerting for a small server fleet.',stripePriceId:process.env.STRIPE_STARTER_PRICE_ID??'',monthlyPrice:49,serverLimit:5,logMbIncluded:10000,aiCreditsIncluded:pricing.includedAiCredits.starter,active:true},{id:'scale',name:'Scale',description:'Response automation and expanded infrastructure coverage.',stripePriceId:process.env.STRIPE_SCALE_PRICE_ID??'',monthlyPrice:199,serverLimit:50,logMbIncluded:100000,aiCreditsIncluded:pricing.includedAiCredits.scale,active:true}];
+    return[{id:'dev',name:pricing.planNames.dev,description:'Free tier for a single personal workspace.',stripePriceId:'',monthlyPrice:0,serverLimit:pricing.includedServers.dev,logMbIncluded:1000,aiCreditsIncluded:pricing.includedAiCredits.dev,active:true},{id:'starter',name:pricing.planNames.starter,description:'Detection and alerting for a small server fleet.',stripePriceId:process.env.STRIPE_STARTER_PRICE_ID??'',monthlyPrice:49,serverLimit:pricing.includedServers.starter,logMbIncluded:10000,aiCreditsIncluded:pricing.includedAiCredits.starter,active:true},{id:'scale',name:pricing.planNames.scale,description:'Response automation and expanded infrastructure coverage.',stripePriceId:process.env.STRIPE_SCALE_PRICE_ID??'',monthlyPrice:199,serverLimit:pricing.includedServers.scale,logMbIncluded:100000,aiCreditsIncluded:pricing.includedAiCredits.scale,active:true}];
   },
   async subscriptions(orgId:string):Promise<Subscription[]>{
     await ensureTable();

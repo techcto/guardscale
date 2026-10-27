@@ -71,11 +71,11 @@ test('Dev stops at its allowance; an opted-in paid plan continues to its cap',as
  saas();process.env.GUARDSCALE_USAGE_EXPORT='enabled';process.env.STRIPE_SERVER_OVERAGE_PRICE_ID='price_server';
  process.env.GUARDSCALE_LOG_MB_INCLUDED_JSON=JSON.stringify({dev:1,starter:2});process.env.GUARDSCALE_AI_CREDIT_WEIGHTS_JSON=JSON.stringify({version:'v1',included_credits:{dev:0,starter:1},models:{nova:{input_per_1k:1,output_per_1k:1}}});
  const dev=randomUUID();forgetPlan(dev);
- assert.equal(await serverLimitFor(dev),1);assert.equal(await logAllowed(dev),true);assert.equal(await aiAllowed(dev),false,'Dev includes no AI credits');
+ assert.equal(await serverLimitFor(dev),3);assert.equal(await logAllowed(dev),true);assert.equal(await aiAllowed(dev),false,'Dev includes no AI credits');
  await recordLogBytes(dev,MB);forgetPlan(dev);assert.equal(await logAllowed(dev),false);
  const org=randomUUID(),subscription=paid(org);await store.putSubscription(subscription);
  const settings=await store.settings(org);await store.putSettings(org,{...settings,billing:validateBilling({overageEnabled:true,capPercent:200,alertPercents:[80]},subscription)});forgetPlan(org);
- assert.equal(await serverLimitFor(org),10,'5 servers at a 200% cap');
+ assert.equal(await serverLimitFor(org),20,'10 servers at a 200% cap');
  await recordLogBytes(org,3*MB);forgetPlan(org);assert.equal(await logAllowed(org),true,'3 MB is under the 4 MB cap');
  await recordLogBytes(org,MB);forgetPlan(org);assert.equal(await logAllowed(org),false);
  for(const k of ['GUARDSCALE_USAGE_EXPORT','STRIPE_SERVER_OVERAGE_PRICE_ID','GUARDSCALE_LOG_MB_INCLUDED_JSON','GUARDSCALE_AI_CREDIT_WEIGHTS_JSON'])delete process.env[k];
@@ -101,7 +101,7 @@ test('export sends one meter event per completed hour and meter, retries failure
  await store.putSubscription({...subscription,productId:'dev'});forgetPlan(org);
  assert.equal((await exportUsage(org,{} as MeterClient)).status,'no_customer');
  await store.putSubscription(subscription);forgetPlan(org);
- const start=subscription.currentPeriodStart,earlier=hourOf(new Date(Date.now()-2*3600000)),now=hourOf(),included=5*720;
+ const start=subscription.currentPeriodStart,earlier=hourOf(new Date(Date.now()-2*3600000)),now=hourOf(),included=10*720;
  await store.addUsage(org,start,earlier,{serverHours:included+3},true);await store.addUsage(org,start,now,{serverHours:2},true);
  const sent:{event_name:string;identifier:string;payload:Record<string,string>}[]=[];let fail=true;
  const client={billing:{meterEvents:{create:async(e:{event_name:string;identifier:string;payload:Record<string,string>})=>{if(fail){fail=false;throw Error('Stripe unavailable')}sent.push(e)}},meters:{list:async function*(){},listEventSummaries:async function*(){}}}} as unknown as MeterClient;

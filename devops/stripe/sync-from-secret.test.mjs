@@ -9,7 +9,7 @@ test('live and sandbox preview are offline and expose only the plan catalog',()=
  for(const mode of ['live','sandbox']){
   const result=run('--mode',mode);assert.equal(result.status,0,result.stderr);
   const out=JSON.parse(result.stdout);assert.equal(out.mode,mode);assert.match(out.action,/no AWS or Stripe calls/);
-  assert.deepEqual(out.plans.map(p=>[p.cents,p.servers]),[[4900,5],[19900,50]]);
+  assert.deepEqual(out.plans.map(p=>[p.cents,p.servers]),[[4900,10],[19900,50]]);
   assert.ok(!result.stdout.includes('secret_key'));
  }
 });

@@ -7,6 +7,7 @@ stop_probe(){
   "${compose[@]}" exec -T probe node -e 'fetch("http://127.0.0.1:8080/stop",{method:"POST",signal:AbortSignal.timeout(4000)}).then(r=>{if(!r.ok)process.exit(1);console.log("Suspicious request generation stopped; firewall state is unchanged.")}).catch(()=>process.exit(1))'
 }
 case "${1:-}" in
+  --continuous) test "$#" -eq 1 || exit 1; attack_mode=stream ;;
   --ffuf|--nuclei) test "$#" -eq 1 || exit 1; attack_mode="${1#--}"; compose+=(-f devops/local/tools.yml) ;;
   --verify-ffuf|--verify-nuclei) test "$#" -eq 1 || exit 1; exec node devops/local/test.mjs --security "--${1#--verify-}" ;;
   --stop) test "$#" -eq 1 || exit 1; stop_probe; exit ;;
@@ -18,6 +19,11 @@ case "${1:-}" in
   *) echo 'Usage: bash attack.sh [--ffuf|--nuclei|--verify|--verify-ffuf|--verify-nuclei|--stop]. Arbitrary targets are not accepted.' >&2; exit 1 ;;
 esac
 trap 'trap - INT TERM; stop_probe; exit 130' INT TERM
+if [ "$attack_mode" = stream ]; then
+  echo 'Local-only continuous test: one suspicious request/second for at most 30 minutes. Ctrl+C or bash attack.sh --stop stops requests.'
+  "${compose[@]}" exec -T probe node /scripts/attack-client.mjs stream
+  exit
+fi
 echo 'Disposable local test only: probe 192.0.2.20 → PHP container. No external target.'
 echo 'Start first with: npm run local:security'
 if [ "$attack_mode" != attack ]; then echo 'Real scanner mode requires: npm run local:security -- --tools'; fi

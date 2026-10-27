@@ -1,5 +1,7 @@
 import{NextRequest,NextResponse}from'next/server';import{operator}from'@/lib/operator';import{store}from'@/lib/store';
 import {destructiveAccess} from '@/lib/destructive-access';
+import {commandsFor} from '@/lib/protection-commands';
+import {withIncidentProtection} from '@/lib/incident-groups';
 import {validateWebsiteUrls} from '@/lib/server-sites';
 export async function PATCH(req:NextRequest,{params}:{params:Promise<{id:string}>}){
  const session=await destructiveAccess(req);if(!session)return NextResponse.json({error:'Administrator access and same-origin request required'},{status:403});
@@ -15,4 +17,4 @@ export async function DELETE(req:NextRequest,{params}:{params:Promise<{id:string
  if(!await store.node(session.orgId,id))return NextResponse.json({error:'Server not found'},{status:404});
  await store.retireNode(session.orgId,id);return NextResponse.json({removed:true});
 }
-export async function GET(req:NextRequest,{params}:{params:Promise<{id:string}>}){const session=await operator(req);if(!session)return NextResponse.json({error:'unauthorized'},{status:401});const {id}=await params;const node=await store.node(session.orgId,id);if(!node)return NextResponse.json({error:'not found'},{status:404});const [events,incidents]=await Promise.all([store.eventsForNode(session.orgId,id),store.incidentsForNode(session.orgId,id)]);return NextResponse.json({node,events,incidents})}
+export async function GET(req:NextRequest,{params}:{params:Promise<{id:string}>}){const session=await operator(req);if(!session)return NextResponse.json({error:'unauthorized'},{status:401});const {id}=await params;const node=await store.node(session.orgId,id);if(!node)return NextResponse.json({error:'not found'},{status:404});const [events,incidents,commands]=await Promise.all([store.eventsForNode(session.orgId,id),store.incidentsForNode(session.orgId,id),commandsFor(session.orgId)]);return NextResponse.json({node,events,incidents:withIncidentProtection(incidents,commands)})}

@@ -1,5 +1,9 @@
 # Hackathon local testing
 
+For the real Bedrock + WhatsApp round trip, split server-log console, continuous
+local attack and bounded renewal/removal checks, use the
+[local incident-response test guide](whatsapp-local-testing.md).
+
 ## Start here: no tag, Marketplace wait or AWS account needed
 
 Install Docker with Compose 2.24.4+ (Linux containers) and Node.js 26. Run from

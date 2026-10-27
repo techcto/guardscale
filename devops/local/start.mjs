@@ -3,13 +3,16 @@ import {mkdir,writeFile,chmod,access} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('./',import.meta.url));
+const envFile=fileURLToPath(new URL('../../.env',import.meta.url));
 if(process.env.NODE_ENV==='production')throw Error('Refusing fixture startup in production');
 const security=process.argv.includes('--security');
 const bedrock=process.argv.includes('--bedrock');
+const whatsapp=process.argv.includes('--whatsapp');
+if(whatsapp&&!security)throw Error('Real WhatsApp testing requires the isolated --security fixture');
 const toolsEnabled=process.argv.includes('--tools');
 if(toolsEnabled&&!security)throw Error('--tools requires the isolated --security fixture');
 if(toolsEnabled)for(const tool of ['ffuf','nuclei'])try{await access(root+'../../submodules/'+tool+'/go.mod');}catch{throw Error('Initialize scanner sources first: git submodule update --init --recursive');}
-if(process.argv.slice(2).some(v=>!['--security','--bedrock','--tools'].includes(v)))throw Error('Usage: start.mjs [--security] [--bedrock] [--tools]');
+if(process.argv.slice(2).some(v=>!['--security','--bedrock','--tools','--whatsapp'].includes(v)))throw Error('Usage: start.mjs [--security] [--bedrock] [--tools] [--whatsapp]');
 await mkdir(root+'.secrets',{recursive:true,mode:0o700});
 // User-requested disposable localhost login; never used by release services.
 await writeFile(root+'.secrets/root-password','test',{mode:0o600});
@@ -19,7 +22,8 @@ for(const name of ['session-secret']){
  catch(error){if(error.code!=='EEXIST')throw error;}
  await chmod(root+'.secrets/'+name,0o600);
 }
-const compose=['compose','-f',root+'compose.yml',...(security?['-f',root+'security.yml','--profile','local-security']:[]),...(bedrock?['-f',root+'bedrock.yml']:[]),...(toolsEnabled?['-f',root+'tools.yml']:[]),'--profile','local-fixture'];
+if(bedrock||whatsapp)await access(envFile).catch(()=>{throw Error('Prepare the ignored root .env first with the local credential helpers');});
+const compose=['compose',...(bedrock||whatsapp?['--env-file',envFile]:[]),'-f',root+'compose.yml',...(security?['-f',root+'security.yml','--profile','local-security']:[]),...(bedrock?['-f',root+'bedrock.yml']:[]),...(whatsapp?['-f',root+'whatsapp.yml','--profile','local-whatsapp']:[]),...(toolsEnabled?['-f',root+'tools.yml']:[]),'--profile','local-fixture'];
 const result=spawnSync('docker',[...compose,'up','-d','--build'],{stdio:'inherit'});
 if(result.status!==0)process.exit(result.status??1);
 // The agent reads enrollment/config on startup. Re-read after bootstrap updates it.

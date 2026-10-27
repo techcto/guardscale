@@ -8,14 +8,14 @@ export type IncidentRecord={tenantId:string;serverId:string;agentId:string;incid
 export type GuardScaleEvent={id?:string;tenantId:string;serverId:string;agentId:string;type:string;at:string;metadata?:Record<string,string>};
 // Internal audit partition, not a fabricated enrolled server.
 export const whatsappSetupAuditId='__guardscale_whatsapp_setup__';
-export const normalizedEvents=['viewer.request','edge.cache.hit','edge.cache.miss','waf.allow','waf.block','origin.request','origin.response','origin.timeout','app.php.slow','app.php.max_children','host.cpu','host.memory','service.restart','monitor.down','protection.enabled','protection.expired'] as const;
+export const normalizedEvents=['viewer.request','edge.cache.hit','edge.cache.miss','waf.allow','waf.block','origin.request','origin.response','origin.timeout','app.php.slow','app.php.max_children','host.cpu','host.memory','service.restart','monitor.down','protection.enabled','protection.expired','protection.traffic'] as const;
 export type UserRole='root'|'admin'|'operator'|'viewer';
 export type GuardScaleUser={id:string;username:string;displayName:string;email?:string;emailVerified?:boolean;verificationSentAt?:string;status:'active'|'disabled';createdAt:string;updatedAt:string};
 export type Settings={
   tenantId:string;
   detection:{warningPercent:number;criticalPercent:number;emergencyPercent:number;trafficMultiplier:number;distributedCrawlerCorrelation:boolean;applicationFailureDetection:boolean;heartbeatStaleSeconds:number};
   notifications:{whatsappEnabled:boolean;whatsappSenderId:string;emailEnabled:boolean;recipients:string};
-  response:{allowRemoteRequests:boolean;dryRun:boolean;defaultTtlSeconds:number;maxTtlSeconds:number;autoGuardian?:{enabled:boolean;waitSeconds:number;maxTtlSeconds:number;maxActionsPerHour:number}};
+  response:{allowRemoteRequests:boolean;dryRun:boolean;defaultTtlSeconds:number;maxTtlSeconds:number;renewal?:{enabled:boolean;maxTotalSeconds:number};autoGuardian?:{enabled:boolean;waitSeconds:number;maxTtlSeconds:number;maxActionsPerHour:number}};
   privacy:{evidenceRetentionDays:number;maxEvidenceLines:number;removeQueryValues:boolean;fingerprintUserAgents:boolean};
   billing?:{overageEnabled:boolean;capPercent:number;alertPercents:number[];updatedAt:string};
   updatedAt:string;

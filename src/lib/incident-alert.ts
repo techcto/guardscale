@@ -1,0 +1,15 @@
+type IncidentAlert={server:string;source?:string;country?:string;detectedAt:string;analysisStatus:string;summary?:string;reviewUrl:string;websites?:string[];code:string;blockSeconds:number};
+const label=(value:string)=>value.replace(/[\r\n*_`]/g,' ').slice(0,100);
+export function incidentAlert(a:IncidentAlert,channel:'email'|'whatsapp'){
+ const heading=(text:string)=>channel==='whatsapp'?`*${text}*`:text;
+ const details=[`Server: ${label(a.server)}`,`Source IP: ${label(a.source??'Not available')}`];
+ if(a.country)details.push(`Country: ${label(a.country)}`);
+ details.push(`Detected: ${a.detectedAt}`);
+ const parts=[heading('GuardScale | Server event'), 'Hey, we detected unusual activity on your server. Please review before taking action.',details.join('\n')];
+ if(a.websites?.length)parts.push(heading('Websites')+'\n'+a.websites.join('\n'));
+ parts.push(heading('Assessment')+'\n'+(a.analysisStatus==='complete'?(a.summary?.slice(0,500)??'Review the measured findings in the console.'):`AI assessment: ${a.analysisStatus}. Review the measured findings in the console.`));
+ if(channel==='whatsapp')parts.push(heading('What would you like to do?')+`\n\nReply Protect\nBlock this source on this server for ${a.blockSeconds} seconds.\n\nReply Watch\nKeep monitoring without adding a block.\n\nReply Dismiss\nDismiss this incident and request removal of its active block.`, 'A one-word reply works when exactly one current alert needs review. If several alerts are pending, use the matching line below:',`Protect ${a.code}\nWatch ${a.code}\nDismiss ${a.code}`, 'Commands expire 15 minutes after detection. Watch keeps an existing block until its expiry. Dismiss stops renewal and asks the agent to remove the incident block. Protection is confirmed only after the server agent reports it.');
+ else parts.push('Use the authenticated console to review or approve temporary protection. Direct email replies are not supported.');
+ parts.push(heading('Review incident')+'\n'+a.reviewUrl);
+ return parts.join('\n\n');
+}

@@ -2,7 +2,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {DynamoDBClient} from '@aws-sdk/client-dynamodb';
 import {DynamoDBDocumentClient,PutCommand,QueryCommand,UpdateCommand,DeleteCommand} from '@aws-sdk/lib-dynamodb';
 import {store} from './store';
-export type ProtectionCommand={id:string;orgId:string;serverId:string;agentId:string;incidentId:string;candidateId:string;kind?:'inspect_server'|'protect';result?:Record<string,string>;expiresAt:string;approvedBy:string;createdAt:string;status:'queued'|'complete'|'applied'|'failed'|'rejected'|'expired';updatedAt:string};
+export type ProtectionCommand={id:string;orgId:string;serverId:string;agentId:string;incidentId:string;candidateId:string;kind?:'inspect_server'|'protect';result?:Record<string,string>;expiresAt:string;approvedBy:string;createdAt:string;status:'queued'|'complete'|'applied'|'failed'|'rejected'|'expired'|'cancel_requested'|'cancelled';updatedAt:string};
 const db=DynamoDBDocumentClient.from(new DynamoDBClient({endpoint:process.env.GUARDSCALE_DYNAMODB_ENDPOINT}));
 const memory=new Map<string,ProtectionCommand>();
 const autoLocks=new Set<string>();
@@ -55,12 +55,40 @@ export async function acknowledgeCommand(orgId:string,agentId:string,serverId:st
  if(previous.status===status)return;
  if(status==='complete'&&previous.kind!=='inspect_server')throw Error('Invalid inspection result');
  if(status==='applied'&&previous.kind==='inspect_server')throw Error('Inspection cannot apply changes');
- if(previous.status!=='queued'&&!(previous.status==='applied'&&status==='expired'))throw Error('Command already terminal');
+ if(previous.status!=='queued'&&!(previous.status==='applied'&&status==='expired')&&!(previous.status==='cancel_requested'&&['cancelled','failed'].includes(status)))throw Error('Command already terminal');
+ if(status==='cancelled'&&previous.status!=='cancel_requested')throw Error('Cancellation was not requested');
  if(status==='expired'&&Date.parse(previous.expiresAt)>Date.now())throw Error('Command not expired');
  const now=new Date().toISOString();
  if(process.env.GUARDSCALE_TABLE)await db.send(new UpdateCommand({TableName:process.env.GUARDSCALE_TABLE,Key:{pk:'ORG#'+orgId,sk:'COMMAND#'+id},UpdateExpression:'SET #status=:status,updatedAt=:now,#result=:result',ConditionExpression:'#status=:previous',ExpressionAttributeNames:{'#status':'status','#result':'result'},ExpressionAttributeValues:{':status':status,':now':now,':previous':previous.status,':result':result}}));
  else memory.set(id,{...previous,status,result,updatedAt:now});
  await store.putEvent({id:'command-'+id+'-'+status,tenantId:orgId,agentId,serverId,type:'protection.'+status,at:now,metadata:{command_id:id,expires_at:previous.expiresAt}});
+}
+
+export async function cancelIncidentProtection(orgId:string,incidentId:string){
+ let requested=0;
+ for(const command of (await commandsFor(orgId)).filter(c=>c.incidentId===incidentId&&c.kind!=='inspect_server'&&['queued','applied'].includes(c.status))){
+  const now=new Date().toISOString();
+  if(process.env.GUARDSCALE_TABLE){try{await db.send(new UpdateCommand({TableName:process.env.GUARDSCALE_TABLE,Key:{pk:'ORG#'+orgId,sk:'COMMAND#'+command.id},UpdateExpression:'SET #status=:next,updatedAt=:now',ConditionExpression:'#status=:previous',ExpressionAttributeNames:{'#status':'status'},ExpressionAttributeValues:{':next':'cancel_requested',':now':now,':previous':command.status}}));}catch(e){if(e instanceof Error&&e.name==='ConditionalCheckFailedException')continue;throw e;}}
+  else memory.set(command.id,{...command,status:'cancel_requested',updatedAt:now});
+  await store.putEvent({id:'cancel-'+command.id,tenantId:orgId,serverId:command.serverId,agentId:command.agentId,type:'protection.cancel_requested',at:now,metadata:{command_id:command.id,incident_id:incidentId}});requested++;
+ }
+ return requested;
+}
+
+export async function acknowledgeRenewal(orgId:string,agentId:string,serverId:string,id:string,expiresAt:string,packets:number){
+ const previous=(await commandsFor(orgId)).find(c=>c.id===id&&c.agentId===agentId&&c.serverId===serverId&&c.kind!=='inspect_server');
+ if(!previous||previous.status!=='applied')throw Error('Active scoped protection required');
+ if(expiresAt===previous.expiresAt)return;
+ const settings=await store.settings(orgId),policy=settings.response.renewal;
+ const incident=await store.incident(orgId,previous.incidentId);if(incident?.state==='resolved')throw Error('Incident dismissed; renewal disabled');
+ const next=Date.parse(expiresAt),old=Date.parse(previous.expiresAt),now=Date.now();
+ if(!settings.response.allowRemoteRequests||settings.response.dryRun||!policy?.enabled||!Number.isInteger(policy.maxTotalSeconds)||policy.maxTotalSeconds<60||policy.maxTotalSeconds>900)throw Error('Renewal disabled');
+ if(!Number.isSafeInteger(packets)||packets<Number(previous.result?.blocked_packets??0)+3||!Number.isFinite(next)||next<=old||next> Date.parse(previous.createdAt)+policy.maxTotalSeconds*1000||next>now+Math.min(settings.response.defaultTtlSeconds,settings.response.maxTtlSeconds,900)*1000+2000||old<now-10000)throw Error('Renewal exceeds evidence or duration limits');
+ const updatedAt=new Date().toISOString(),result={...previous.result,blocked_packets:String(packets)};
+ if(process.env.GUARDSCALE_TABLE)await db.send(new UpdateCommand({TableName:process.env.GUARDSCALE_TABLE,Key:{pk:'ORG#'+orgId,sk:'COMMAND#'+id},UpdateExpression:'SET expiresAt=:expiry,updatedAt=:now,#result=:result',ConditionExpression:'#status=:applied AND expiresAt=:old',ExpressionAttributeNames:{'#status':'status','#result':'result'},ExpressionAttributeValues:{':expiry':expiresAt,':now':updatedAt,':result':result,':applied':'applied',':old':previous.expiresAt}}));
+ else memory.set(id,{...previous,expiresAt,updatedAt,result});
+ await store.putEvent({id:'renewal-'+id+'-'+packets,tenantId:orgId,serverId,agentId,type:'protection.renewed',at:updatedAt,metadata:{command_id:id,blocked_packets:String(packets),expires_at:expiresAt}});
+ return true;
 }
 
 export async function inspectServer(orgId:string,incidentId:string){

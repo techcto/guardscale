@@ -5,8 +5,9 @@ import {evaluateAutoGuardian} from '../lib/auto-guardian';
 import {processIncident,processWhatsAppEnvelope,notifyProtectionOutcome} from '../lib/incident-workflow';
 import {exportUsage,reconcileUsage,usageAlerts,usageExportEnabled} from '../lib/usage';
 import {stripe} from '../lib/stripe';
+import {messagingClientOptions} from '../lib/local-messaging-credentials';
 const queue=process.env.GUARDSCALE_QUEUE_URL;if(!queue)throw Error('GUARDSCALE_QUEUE_URL is required');
-const sqs=new SQSClient({endpoint:process.env.GUARDSCALE_QUEUE_ENDPOINT});
+const sqs=new SQSClient({endpoint:process.env.GUARDSCALE_QUEUE_ENDPOINT,...messagingClientOptions()});
 async function receive(){
  try{return await sqs.send(new ReceiveMessageCommand({QueueUrl:queue,WaitTimeSeconds:20,MaxNumberOfMessages:10}));}
  catch(error){if(process.env.GUARDSCALE_LOCAL_QUEUE_AUTOCREATE==='true'&&error instanceof Error&&error.name==='QueueDoesNotExist'){await sqs.send(new CreateQueueCommand({QueueName:queue!.split('/').pop()!}));return{Messages:[]};}throw error;}

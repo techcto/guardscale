@@ -1,0 +1,54 @@
+# Explicit real-message opt-in for the disposable fixture, not release services.
+services:
+  web:
+    environment:
+      GUARDSCALE_NOTIFICATION_MODE: aws
+      GUARDSCALE_SES_FROM: ${GUARDSCALE_SES_FROM:-}
+      GUARDSCALE_WHATSAPP_ORIGINATION_ID: ${GUARDSCALE_WHATSAPP_ORIGINATION_ID:?Prepare local WhatsApp settings first}
+      GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN: ${GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN:?Missing registered sender event topic}
+      GUARDSCALE_WHATSAPP_ALERT_TEMPLATE: ''
+      GUARDSCALE_MESSAGING_CREDENTIALS_FILE: /run/secrets/whatsapp-session.json
+      GUARDSCALE_LOCAL_WHATSAPP_RECIPIENT: ${GUARDSCALE_LOCAL_WHATSAPP_RECIPIENT:?Choose an authorized test recipient}
+      GUARDSCALE_PUBLIC_URL: http://localhost:8185
+    volumes:
+      - type: bind
+        source: ${GUARDSCALE_MESSAGING_CREDENTIALS_PATH:?Prepare the temporary localhost messaging role session}
+        target: /run/secrets/whatsapp-session.json
+        read_only: true
+        bind: {create_host_path: false}
+  whatsapp-worker:
+    profiles: [local-whatsapp]
+    build:
+      context: ../..
+      dockerfile: devops/docker/Dockerfile.worker
+    command: [node, /scripts/whatsapp-worker.mjs]
+    environment:
+      GUARDSCALE_LOCAL_FIXTURE: 'true'
+      GUARDSCALE_DEPLOYMENT_MODE: saas
+      GUARDSCALE_LOCAL_REPLAY: 'true'
+      GUARDSCALE_ROOT_USER: root
+      GUARDSCALE_DYNAMODB_ENDPOINT: http://database:8000
+      GUARDSCALE_TABLE: guardscale-local-fixture
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      GUARDSCALE_QUEUE_URL: ${GUARDSCALE_WHATSAPP_DEV_QUEUE_URL:?Use the separate CloudFormation development reply queue}
+      GUARDSCALE_NOTIFICATION_MODE: aws
+      GUARDSCALE_WHATSAPP_ORIGINATION_ID: ${GUARDSCALE_WHATSAPP_ORIGINATION_ID}
+      GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN: ${GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN}
+      GUARDSCALE_WHATSAPP_ALERT_TEMPLATE: ''
+      GUARDSCALE_MESSAGING_CREDENTIALS_FILE: /run/secrets/whatsapp-session.json
+      GUARDSCALE_LOCAL_WHATSAPP_RECIPIENT: ${GUARDSCALE_LOCAL_WHATSAPP_RECIPIENT}
+      GUARDSCALE_PUBLIC_URL: http://localhost:8185
+      GUARDSCALE_USAGE_EXPORT: disabled
+    secrets: [root_password, session_secret]
+    volumes:
+      - ./whatsapp-worker.mjs:/scripts/whatsapp-worker.mjs:ro
+      - type: bind
+        source: ${GUARDSCALE_MESSAGING_CREDENTIALS_PATH}
+        target: /run/secrets/whatsapp-session.json
+        read_only: true
+        bind: {create_host_path: false}
+    depends_on:
+      web: {condition: service_healthy}
+    networks: [fixture, publish]

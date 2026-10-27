@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/techcto/guardscale/internal/agentclient"
@@ -31,10 +32,16 @@ type responder struct {
 	requests   []apache.Request
 	candidates map[string]candidate
 	cooldown   map[string]time.Time
+	renewed    map[string]renewalReceipt
+	traffic    map[string]uint64
+}
+type renewalReceipt struct {
+	Expiry  time.Time
+	Packets uint64
 }
 
 func newResponder(c config.Config, client agentclient.Client) *responder {
-	r := &responder{c: c, client: client, candidates: map[string]candidate{}, cooldown: map[string]time.Time{}}
+	r := &responder{c: c, client: client, candidates: map[string]candidate{}, cooldown: map[string]time.Time{}, renewed: map[string]renewalReceipt{}, traffic: map[string]uint64{}}
 	b, err := os.ReadFile(filepath.Join(c.Storage.StateDir, "response-candidates.json"))
 	if err == nil {
 		_ = json.Unmarshal(b, &r.candidates)
@@ -148,6 +155,23 @@ func (r *responder) poll(ctx context.Context) {
 		return
 	}
 	for _, command := range commands {
+		if command.Kind == "revoke" {
+			c, ok := r.candidates[command.CandidateID]
+			if !ok || !permittedTarget(c.IP, r.c.Protection.AllowedCIDRs) {
+				_ = r.client.CommandResult(ctx, command.ID, "failed")
+				continue
+			}
+			call, cancel := context.WithTimeout(ctx, 3*time.Second)
+			err := exec.CommandContext(call, "ipset", "del", "guardscale_temporary", c.IP, "-exist").Run()
+			cancel()
+			if err != nil {
+				_ = r.client.CommandResult(ctx, command.ID, "failed")
+			} else {
+				delete(r.renewed, command.ID)
+				_ = r.client.CommandResult(ctx, command.ID, "cancelled")
+			}
+			continue
+		}
 		if command.Kind == "inspect_server" {
 			expiry, e := time.Parse(time.RFC3339Nano, command.ExpiresAt)
 			if e != nil || time.Now().After(expiry) {
@@ -172,6 +196,12 @@ func (r *responder) poll(ctx context.Context) {
 		}
 		c, ok := r.candidates[command.CandidateID]
 		expiry, e := time.Parse(time.RFC3339Nano, command.ExpiresAt)
+		if command.Status == "applied" && e == nil && time.Now().Before(expiry) {
+			if ok && permittedTarget(c.IP, r.c.Protection.AllowedCIDRs) {
+				r.renew(ctx, command, c.IP, expiry)
+			}
+			continue
+		}
 		ttl := int(time.Until(expiry).Seconds())
 		if e == nil && ttl < 1 {
 			_ = r.client.CommandResult(ctx, command.ID, "expired")
@@ -187,7 +217,10 @@ func (r *responder) poll(ctx context.Context) {
 			defer cancel()
 			return exec.CommandContext(call, name, args...).Run()
 		}
-		err = run("ipset", "create", "guardscale_temporary", "hash:ip", "family", "inet", "timeout", "900", "maxelem", "1000", "-exist")
+		err = run("ipset", "create", "guardscale_temporary", "hash:ip", "family", "inet", "timeout", "900", "maxelem", "1000", "counters", "-exist")
+		if err != nil {
+			err = run("ipset", "create", "guardscale_temporary", "hash:ip", "family", "inet", "timeout", "900", "maxelem", "1000", "-exist")
+		}
 		rule := []string{"INPUT", "-p", "tcp", "-m", "multiport", "--dports", "80,443", "-m", "set", "--match-set", "guardscale_temporary", "src", "-j", "REJECT"}
 		if err == nil && run("iptables", append([]string{"-w", "2", "-C"}, rule...)...) != nil {
 			err = run("iptables", append([]string{"-w", "2", "-I"}, rule...)...)
@@ -201,4 +234,89 @@ func (r *responder) poll(ctx context.Context) {
 		}
 		_ = r.client.CommandResult(ctx, command.ID, status)
 	}
+}
+
+// Counters belong to this blocked source, not aggregate server traffic. An old
+// set without counters cannot renew; its existing kernel timeout still applies.
+func blockedCounters(output, ip string) (uint64, uint64, bool) {
+	for _, line := range strings.Split(output, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 3 || f[0] != "add" || f[1] != "guardscale_temporary" || f[2] != ip {
+			continue
+		}
+		var packets, bytes uint64
+		found := false
+		for i := 3; i+1 < len(f); i++ {
+			if f[i] == "packets" {
+				v, e := strconv.ParseUint(f[i+1], 10, 64)
+				if e != nil {
+					return 0, 0, false
+				}
+				packets = v
+				found = true
+			}
+			if f[i] == "bytes" {
+				v, e := strconv.ParseUint(f[i+1], 10, 64)
+				if e != nil {
+					return 0, 0, false
+				}
+				bytes = v
+			}
+		}
+		return packets, bytes, found
+	}
+	return 0, 0, false
+}
+func renewalExpiry(now, expiry, cap time.Time, seconds int, packets, previous uint64) (time.Time, bool) {
+	if !now.Before(expiry) || expiry.Sub(now) > 20*time.Second || seconds < 10 || seconds > 900 || packets < previous || packets-previous < 3 {
+		return time.Time{}, false
+	}
+	next := now.Add(time.Duration(seconds) * time.Second)
+	if next.After(cap) {
+		next = cap
+	}
+	return next, next.After(expiry.Add(5 * time.Second))
+}
+func (r *responder) renew(ctx context.Context, command agentclient.Command, ip string, expiry time.Time) {
+	if pending, ok := r.renewed[command.ID]; ok {
+		if pending.Expiry.After(expiry) {
+			_ = r.client.RenewalResult(ctx, command.ID, pending.Expiry.Format(time.RFC3339Nano), pending.Packets)
+			return
+		}
+		delete(r.renewed, command.ID)
+	}
+	call, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(call, "ipset", "save", "guardscale_temporary").Output()
+	if err != nil {
+		return
+	}
+	packets, bytes, ok := blockedCounters(string(output), ip)
+	if !ok {
+		return
+	}
+	if packets > r.traffic[command.ID] {
+		delta := packets - r.traffic[command.ID]
+		if r.client.Event(ctx, "protection.traffic", map[string]string{"command_id": command.ID, "blocked_packets": strconv.FormatUint(packets, 10), "new_blocked_packets": strconv.FormatUint(delta, 10), "message": "Firewall rejected " + strconv.FormatUint(delta, 10) + " new packets from the protected source; total " + strconv.FormatUint(packets, 10)}) == nil {
+			r.traffic[command.ID] = packets
+		}
+	}
+	if !command.RenewalEnabled {
+		return
+	}
+	cap, e := time.Parse(time.RFC3339Nano, command.RenewalUntil)
+	if e != nil {
+		return
+	}
+	next, ok := renewalExpiry(time.Now(), expiry, cap, command.RenewalSeconds, packets, command.BlockedPackets)
+	if !ok {
+		return
+	}
+	// Preserve the monotonic packet counter while refreshing only the same source.
+	err = exec.CommandContext(call, "ipset", "add", "guardscale_temporary", ip, "timeout", strconv.Itoa(int(time.Until(next).Seconds())), "packets", strconv.FormatUint(packets, 10), "bytes", strconv.FormatUint(bytes, 10), "-exist").Run()
+	if err != nil {
+		return
+	}
+	r.renewed[command.ID] = renewalReceipt{Expiry: next, Packets: packets}
+	_ = r.client.RenewalResult(ctx, command.ID, next.Format(time.RFC3339Nano), packets)
 }

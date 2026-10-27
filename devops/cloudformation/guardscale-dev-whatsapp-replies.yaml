@@ -2,6 +2,16 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: GuardScale development-only copy of WhatsApp events for a local worker. Subscribes to the existing production WhatsApp topic; never changes the WABA destination or production resources. Delete after testing.
 Parameters:
   WhatsappEventTopicArn: {Type: String, AllowedPattern: '^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+$', Description: 'WhatsappEventTopicArn output of the production GuardScale stack.'}
+  LocalDeveloperArn: {Type: String, Default: '', AllowedPattern: '^$|^arn:aws[a-z-]*:iam::[0-9]{12}:(user|role)/[A-Za-z0-9_+=,.@/-]+$', Description: 'Optional exact IAM principal allowed to assume the temporary localhost testing role.'}
+  WhatsappSenderId: {Type: String, Default: '', AllowedPattern: '^$|^phone-number-id-[a-zA-Z0-9]+$', Description: 'Existing registered sender ID, only needed for the optional localhost testing role.'}
+  WhatsappBusinessAccountId: {Type: String, Default: '', AllowedPattern: '^$|^waba-[a-zA-Z0-9]+$', Description: 'Existing linked WABA ID, only needed for the optional localhost testing role.'}
+Conditions:
+  CreateLocalRole: !Not [!Equals [!Ref LocalDeveloperArn, '']]
+Rules:
+  LocalRoleNeedsSender:
+    Assertions:
+      - Assert: !Or [!Equals [!Ref LocalDeveloperArn, ''], !And [!Not [!Equals [!Ref WhatsappSenderId, '']], !Not [!Equals [!Ref WhatsappBusinessAccountId, '']]]]
+        AssertDescription: Supply the existing registered sender and WABA when creating a localhost testing role.
 Resources:
   # Short retention: every event on the topic is copied here, including other recipients' messages.
   DevDeadLetterQueue: {Type: 'AWS::SQS::Queue', Properties: {MessageRetentionPeriod: 3600, SqsManagedSseEnabled: true}}
@@ -20,8 +30,38 @@ Resources:
             Condition: {ArnEquals: {'aws:SourceArn': {Ref: WhatsappEventTopicArn}}}
   # The worker verifies the SNS envelope TopicArn, so raw delivery stays off, as in production.
   DevSubscription: {Type: 'AWS::SNS::Subscription', DependsOn: DevQueuePolicy, Properties: {TopicArn: {Ref: WhatsappEventTopicArn}, Protocol: sqs, Endpoint: {Fn::GetAtt: [DevQueue, Arn]}, RawMessageDelivery: false}}
+  LocalTestingRole:
+    Type: AWS::IAM::Role
+    Condition: CreateLocalRole
+    Properties:
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {AWS: !Ref LocalDeveloperArn}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: guardscale-isolated-whatsapp-test
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ['sqs:ReceiveMessage', 'sqs:DeleteMessage', 'sqs:ChangeMessageVisibility', 'sqs:GetQueueAttributes']
+                Resource: !GetAtt DevQueue.Arn
+              - Effect: Allow
+                Action: ['social-messaging:SendWhatsAppMessage', 'social-messaging:GetLinkedWhatsAppBusinessAccountPhoneNumber']
+                Resource: !Sub
+                  - 'arn:${AWS::Partition}:social-messaging:${AWS::Region}:${AWS::AccountId}:phone-number-id/${PhoneKey}'
+                  - PhoneKey: !Select [1, !Split ['phone-number-id-', !Ref WhatsappSenderId]]
+              - Effect: Allow
+                Action: ['social-messaging:GetLinkedWhatsAppBusinessAccount', 'social-messaging:ListWhatsAppMessageTemplates']
+                Resource: !Sub
+                  - 'arn:${AWS::Partition}:social-messaging:${AWS::Region}:${AWS::AccountId}:waba/${WabaKey}'
+                  - WabaKey: !Select [1, !Split ['waba-', !Ref WhatsappBusinessAccountId]]
 Outputs:
   QueueUrl: {Value: {Ref: DevQueue}}
   QueueArn: {Value: {Fn::GetAtt: [DevQueue, Arn]}}
   DeadLetterQueueUrl: {Value: {Ref: DevDeadLetterQueue}}
   DeadLetterQueueArn: {Value: {Fn::GetAtt: [DevDeadLetterQueue, Arn]}}
+  LocalTestingRoleArn: {Condition: CreateLocalRole, Value: !GetAtt LocalTestingRole.Arn}

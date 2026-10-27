@@ -6,17 +6,18 @@ import {incidentSummary} from '@/lib/incident-summary';
 
 type Readiness={canApprove:boolean;blockedReason:string|null;ttlSeconds:number};
 type Evidence={source_ip?:string;country?:string;analysis?:{status:string;summary?:string;recommendation?:string;trace?:{tool:string;status:string;result?:unknown}[]}};
-const commandLabels:Record<string,string>={queued:'Waiting for the agent to apply the block',applied:'Temporary block applied by the agent',expired:'Temporary block ended',failed:'The agent could not apply the block',rejected:'The agent rejected the block for safety'};
+const commandLabels:Record<string,string>={queued:'Waiting for the agent to apply the block',applied:'Temporary block applied by the agent',expired:'Temporary block ended',failed:'The agent could not apply the block',rejected:'The agent rejected the block for safety',cancel_requested:'Waiting for the agent to remove protection',cancelled:'Protection removed by the agent'};
 
 export default function IncidentDetailConsole({incidentId}:{incidentId:string}){
  const[incident,setIncident]=useState<IncidentRecord|null>(null),[node,setNode]=useState<Node|null>(null);
  const[commands,setCommands]=useState<{id:string;kind?:string;status:string;expiresAt:string}[]>([]);
+ const[activity,setActivity]=useState<{type:string;at:string;option?:string;channel?:string}[]>([]);
  const[protection,setProtection]=useState<Readiness|null>(null),[canManage,setCanManage]=useState(false);
  const[approval,setApproval]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  const load=useCallback(async()=>{try{
   const response=await fetch(`/api/v1/incidents/${encodeURIComponent(incidentId)}`);
   if(!response.ok)throw Error(response.status===404?'This incident was not found.':'Unable to load this incident.');
-  const data=await response.json();setIncident(data.incident);setNode(data.node);setCommands(data.commands??[]);setProtection(data.protection??null);setCanManage(data.canManage===true);
+  const data=await response.json();setIncident(data.incident);setNode(data.node);setCommands(data.commands??[]);setActivity(data.activity??[]);setProtection(data.protection??null);setCanManage(data.canManage===true);
  }catch(e){setError(e instanceof Error?e.message:'Unable to load incident.');}},[incidentId]);
  useEffect(()=>{const first=setTimeout(()=>void load(),0);const timer=setInterval(()=>void load(),2000);return()=>{clearTimeout(first);clearInterval(timer);};},[load]);
  async function transition(state:string){setBusy(true);setError('');try{
@@ -57,11 +58,13 @@ export default function IncidentDetailConsole({incidentId}:{incidentId:string}){
    {commands.filter(command=>command.kind!=='inspect_server').map(command=><p key={command.id} role="status"><strong>{commandLabels[command.status]??command.status}</strong>{['queued','applied'].includes(command.status)&&` · Expires ${new Date(command.expiresAt).toLocaleString()}`}</p>)}
    <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
     <button className="button primary" disabled={busy||!protection?.canApprove} onClick={protect}>Block source temporarily…</button>
+    <button className="button" disabled={busy||!canManage||incident.state==='watch'||incident.state==='resolved'} onClick={()=>transition('watch')}>Watch</button>
     <button className="button" disabled={busy||!canManage||incident.state==='acknowledged'||incident.state==='resolved'} onClick={()=>transition('acknowledged')}>I’m investigating</button>
-    <button className="button" disabled={busy||!canManage||incident.state==='resolved'} onClick={()=>transition('resolved')}>Resolve incident</button>
+    <button className="button" disabled={busy||!canManage||incident.state==='resolved'} onClick={()=>transition('resolved')}>Dismiss and remove protection</button>
    </div>
-   <p className="muted small" style={{marginTop:12}}>“I’m investigating” acknowledges the alert. “Resolve incident” closes the review. Neither button blocks traffic or removes an existing block.</p>
+   <p className="muted small" style={{marginTop:12}}>“I’m investigating” acknowledges the alert. “Dismiss and remove protection” stops extensions and requests removal of this incident’s active block. Removal is confirmed by the agent.</p>
   </section>
+  <section className="g-card" style={{marginBottom:16}} aria-label="Response history"><h2>Response history</h2><p className="muted small">WhatsApp replies, console responses and agent execution results appear here.</p>{activity.length?<ol>{activity.map((event,index)=><li key={index}><strong>{event.type==='response.received'?`${event.option??'Response'} via ${event.channel??'console'}`:event.type.replaceAll('.',' ')}</strong> · {new Date(event.at).toLocaleString()}</li>)}</ol>:<p>No response has been recorded yet.</p>}</section>
   <details className="g-card"><summary>Technical evidence</summary><p className="muted small">Structured data reported by the agent; useful for deeper investigation.</p><pre><code>{JSON.stringify(incident.payload,null,2)}</code></pre></details>
  </main>;
 }

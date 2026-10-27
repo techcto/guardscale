@@ -1,5 +1,8 @@
 import{NextRequest,NextResponse}from'next/server';import{operator}from'@/lib/operator';import{store}from'@/lib/store';
-import {commandsFor} from '@/lib/protection-commands';
+import {commandsFor,cancelIncidentProtection} from '@/lib/protection-commands';
+import {requestOrigin} from '@/lib/session';
+import {randomUUID} from 'node:crypto';
+import {destructiveAccess} from '@/lib/destructive-access';
 
 export async function GET(req:NextRequest,{params}:{params:Promise<{id:string}>}){
   const session=await operator(req);
@@ -24,10 +27,13 @@ export async function GET(req:NextRequest,{params}:{params:Promise<{id:string}>}
    !settings.response.allowRemoteRequests?'Remote protection is disabled in Settings → Response.':
    settings.response.dryRun?'Protection is in dry-run mode. Turn off dry-run in Settings → Response to allow real blocks.':
    agentDisabled?'The agent reported that protection is disabled on this server. Enable its protection policy before approving a block.':null;
-  return NextResponse.json({incident,node,commands,canManage:session.role!=='viewer',protection:{canApprove:!blockedReason,blockedReason,ttlSeconds:Math.min(settings.response.defaultTtlSeconds,settings.response.maxTtlSeconds,900)}});
+  const commandIds=new Set(commands.map(c=>c.id));
+  const activity=(await store.eventsForNode(session.orgId,incident.serverId,100)).filter(e=>e.metadata?.incident_id===id||commandIds.has(e.metadata?.command_id??'')).map(e=>({type:e.type,at:e.at,option:e.metadata?.option,channel:e.metadata?.channel}));
+  return NextResponse.json({incident,node,commands,activity,canManage:session.role!=='viewer',protection:{canApprove:!blockedReason,blockedReason,ttlSeconds:Math.min(settings.response.defaultTtlSeconds,settings.response.maxTtlSeconds,900)}});
 }
 
 export async function PATCH(req:NextRequest,{params}:{params:Promise<{id:string}>}){
+  if(req.headers.get('origin')!==requestOrigin(req))return NextResponse.json({error:'Same-origin request required'},{status:403});
   const session=await operator(req);
   if(!session||session.role==='viewer')return NextResponse.json({error:'forbidden'},{status:403});
   const {state}=await req.json() as {state?:string};
@@ -35,7 +41,10 @@ export async function PATCH(req:NextRequest,{params}:{params:Promise<{id:string}
   const {id}=await params;
   const existing=await store.incident(session.orgId,id);
   if(!existing)return NextResponse.json({error:'not found'},{status:404});
+  if(state==='resolved'&&(await commandsFor(session.orgId)).some(c=>c.incidentId===id&&['queued','applied'].includes(c.status)&&c.kind!=='inspect_server')&&!await destructiveAccess(req))return NextResponse.json({error:'Administrator approval required to remove active protection'},{status:403});
   const updated={...existing,state,updatedAt:new Date().toISOString()};
   await store.putIncident(updated);
+  if(state==='resolved')await cancelIncidentProtection(session.orgId,id);
+  await store.putEvent({id:randomUUID(),tenantId:session.orgId,serverId:existing.serverId,agentId:existing.agentId,type:'response.received',at:updated.updatedAt,metadata:{incident_id:id,channel:'console',option:state==='resolved'?'dismiss':state==='watch'?'watch':'investigating'}});
   return NextResponse.json(updated);
 }

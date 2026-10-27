@@ -12,7 +12,7 @@ Version `2026-10-26-v1` is defined in `src/lib/billing-pricing.json`:
 | `guardscale_log_mb_v1` | $0.0015 per MiB | 1,048,576 bytes, including log-accounting overhead; seven-day retention included |
 | `guardscale_ai_credits_v1` | $0.003 per credit | One credit represents $0.001 of model inference cost at versioned token weights |
 
-Starter includes 5 servers, 10,000 MiB and 1,000 AI credits for $49/month. Scale includes 50 servers, 100,000 MiB and 5,000 AI credits for $199/month. Free Dev includes one server, 1,000 MiB and no paid AI credits. AI metering requires configured, verified model weights; unknown models or missing token usage are reported separately, never estimated into charges.
+Pro includes 10 servers, 10,000 MiB and 1,000 AI credits for $49/month. Scale includes 50 servers, 100,000 MiB and 5,000 AI credits for $199/month. Free Dev includes three servers, 1,000 MiB and no paid AI credits. AI metering requires configured, verified model weights; unknown models or missing token usage are reported separately, never estimated into charges.
 
 For each approved model, divide its published USD cost per 1,000 input/output tokens by `0.001` to obtain `input_per_1k` and `output_per_1k` credit weights. Record the effective rates under a version in `AICreditWeights`; do not invent defaults for an unconfigured model. Sum token-derived credits and round cumulative billable overage up to whole credits; do not round each call separately. These are configured model-cost equivalents, not a reconciliation of AWS discounts or the final AWS invoice.
 

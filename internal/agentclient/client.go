@@ -64,10 +64,15 @@ func (c Client) Incident(ctx context.Context, payload any) error {
 }
 
 type Command struct {
-	ID          string `json:"id"`
-	CandidateID string `json:"candidateId"`
-	ExpiresAt   string `json:"expiresAt"`
-	Kind        string `json:"kind"`
+	ID             string `json:"id"`
+	CandidateID    string `json:"candidateId"`
+	ExpiresAt      string `json:"expiresAt"`
+	Kind           string `json:"kind"`
+	Status         string `json:"status"`
+	RenewalEnabled bool   `json:"renewalEnabled"`
+	RenewalUntil   string `json:"renewalUntil"`
+	RenewalSeconds int    `json:"renewalSeconds"`
+	BlockedPackets uint64 `json:"blockedPackets"`
 }
 
 func (c Client) Commands(ctx context.Context) ([]Command, error) {
@@ -96,6 +101,9 @@ func (c Client) Commands(ctx context.Context) ([]Command, error) {
 }
 func (c Client) CommandResult(ctx context.Context, id, status string) error {
 	return c.post(ctx, "/api/v1/agents/commands", map[string]string{"server_id": c.ServerID, "id": id, "status": status})
+}
+func (c Client) RenewalResult(ctx context.Context, id, expiresAt string, packets uint64) error {
+	return c.post(ctx, "/api/v1/agents/commands", map[string]any{"server_id": c.ServerID, "id": id, "status": "renewed", "expires_at": expiresAt, "blocked_packets": packets})
 }
 func (c Client) InspectionResult(ctx context.Context, id string, result map[string]string) error {
 	return c.post(ctx, "/api/v1/agents/commands", map[string]any{"server_id": c.ServerID, "id": id, "status": "complete", "result": result})

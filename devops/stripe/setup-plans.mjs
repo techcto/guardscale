@@ -3,8 +3,8 @@ import Stripe from 'stripe';
 import pricing from '../../src/lib/billing-pricing.json' with {type:'json'};
 
 export const plans = [
-  { id: 'starter', name: 'GuardScale Starter', cents: 4900, servers: 5, logMb: 10000, aiCredits: pricing.includedAiCredits.starter, env: 'STRIPE_STARTER_PRICE_ID' },
-  { id: 'scale', name: 'GuardScale Scale', cents: 19900, servers: 50, logMb: 100000, aiCredits: pricing.includedAiCredits.scale, env: 'STRIPE_SCALE_PRICE_ID' },
+  { id: 'starter', name: 'GuardScale Pro', cents: 4900, servers: pricing.includedServers.starter, logMb: 10000, aiCredits: pricing.includedAiCredits.starter, env: 'STRIPE_STARTER_PRICE_ID' },
+  { id: 'scale', name: 'GuardScale Scale', cents: 19900, servers: pricing.includedServers.scale, logMb: 100000, aiCredits: pricing.includedAiCredits.scale, env: 'STRIPE_SCALE_PRICE_ID' },
 ];
 // Shown in the Checkout order summary. Keep descriptions factual: what the plan includes, nothing promised beyond the app.
 const describe = servers => `Up to ${servers} protected servers: Apache and PHP attack detection, incident timelines with evidence, live activity and log streams, and alert notifications. Cancel anytime.`;

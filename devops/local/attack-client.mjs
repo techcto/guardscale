@@ -1,5 +1,5 @@
 if(process.env.GUARDSCALE_SECURITY_TEST!=='true')throw Error('Disposable security probe only');
-const mode=process.argv[2];if(!['attack','ffuf','nuclei','recover'].includes(mode))throw Error('Unsupported test mode');
+const mode=process.argv[2];if(!['attack','ffuf','nuclei','recover','stream'].includes(mode))throw Error('Unsupported test mode');
 const base='http://127.0.0.1:8080'; // Only the existing fixed-target probe service.
 async function check(){const value=await (await fetch(base+'/check',{signal:AbortSignal.timeout(4000)})).json();if(value.paused){console.error('Request generation stopped by the operator.');process.exit(130);}return value.status;}
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -9,6 +9,11 @@ if(mode==='recover'){
  throw Error('Access did not recover within the maximum block window. Inspect the agent audit; no success is claimed.');
 }
 await fetch(base+'/resume',{method:'POST',signal:AbortSignal.timeout(4000)});
+if(mode==='stream'){
+ const deadline=Date.now()+30*60*1000;let requests=0,blocked=0;
+ while(Date.now()<deadline){await check();try{const r=await fetch('http://site/missing-security-stream?table_filter=test',{signal:AbortSignal.timeout(1500)});await r.arrayBuffer();}catch{blocked++;}requests++;if(requests%15===0)console.log(JSON.stringify({requests,blockedAttempts:blocked}));await sleep(1000);}
+ console.log('30-minute local test limit reached.');process.exit(0);
+}
 if(await check()!==200)throw Error('Test website is not reachable before the run. Start the fixture or wait for an earlier block to expire.');
 const deadline=Date.now()+180000,maxBursts=mode==='attack'?3:1;let bursts=0,nextBurst=0;
 while(Date.now()<deadline){

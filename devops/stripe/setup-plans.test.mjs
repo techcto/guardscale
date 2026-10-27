@@ -59,8 +59,8 @@ test('products get Checkout names, descriptions and one uploaded logo, updated i
   products.set('guardscale_starter_v1', { id: 'guardscale_starter_v1', name: 'GuardScale starter', active: true, images: [] });
   await setup(client, { data: Buffer.from('png'), name: 'logo.png' });
   const starter = products.get('guardscale_starter_v1');
-  assert.equal(starter.name, 'GuardScale Starter');
-  assert.match(starter.description, /Up to 5 protected servers/);
+  assert.equal(starter.name, 'GuardScale Pro');
+  assert.match(starter.description, /Up to 10 protected servers/);
   assert.deepEqual(starter.images, ['https://files.stripe.com/links/logo']);
   assert.equal(starter.metadata.logo_file, 'file_1');
   assert.deepEqual(uploads, ['business_logo'], 'logo uploaded once and reused');
@@ -136,12 +136,12 @@ test('invalid overage amounts are rejected before any Stripe resource is created
 test('plan products carry their included units, and reruns add missing unit metadata without other changes', async () => {
   const { client, products, updates } = fakeStripe();
   await setup(client);
-  assert.deepEqual([products.get('guardscale_starter_v1').metadata.included_servers, products.get('guardscale_starter_v1').metadata.included_log_mb], ['5', '10000']);
+  assert.deepEqual([products.get('guardscale_starter_v1').metadata.included_servers, products.get('guardscale_starter_v1').metadata.included_log_mb], ['10', '10000']);
   assert.deepEqual([products.get('guardscale_scale_v1').metadata.included_servers, products.get('guardscale_scale_v1').metadata.included_log_mb], ['50', '100000']);
   // A product created before log MB was attached gains it on the next run; other metadata is kept.
   const old = products.get('guardscale_starter_v1'); products.set(old.id, { ...old, metadata: { application: 'guardscale', included_servers: '5', logo_file: 'file_old' } });
   updates.length = 0; await setup(client);
-  assert.deepEqual(products.get('guardscale_starter_v1').metadata, { application: 'guardscale', included_servers: '5', logo_file: 'file_old', included_log_mb: '10000', included_ai_credits: '1000' });
+  assert.deepEqual(products.get('guardscale_starter_v1').metadata, { application: 'guardscale', included_servers: '10', logo_file: 'file_old', included_log_mb: '10000', included_ai_credits: '1000' });
   assert.deepEqual(updates, ['guardscale_starter_v1']);
   updates.length = 0; await setup(client);
   assert.deepEqual(updates, [], 'nothing to change on a current rerun');

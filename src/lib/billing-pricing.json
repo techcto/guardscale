@@ -1,9 +1,11 @@
 {
-  "version": "2026-10-26-v1",
+  "version": "2026-10-27-v1",
   "currency": "usd",
   "serverHourCents": "2",
   "logMiBCents": "0.15",
   "aiCreditCents": "0.3",
   "aiCreditBasisUsd": "0.001",
-  "includedAiCredits": {"dev": 0, "starter": 1000, "scale": 5000}
+  "includedAiCredits": {"dev": 0, "starter": 1000, "scale": 5000},
+  "includedServers": {"dev": 3, "starter": 10, "scale": 50},
+  "planNames": {"dev": "Dev", "starter": "Pro", "scale": "Scale"}
 }

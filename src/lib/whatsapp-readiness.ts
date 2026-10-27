@@ -1,11 +1,12 @@
 import {SocialMessagingClient,ListLinkedWhatsAppBusinessAccountsCommand,GetLinkedWhatsAppBusinessAccountCommand,GetLinkedWhatsAppBusinessAccountPhoneNumberCommand,ListWhatsAppMessageTemplatesCommand} from '@aws-sdk/client-socialmessaging';
 import {validSender} from './whatsapp-setup';
+import {messagingClientOptions} from './local-messaging-credentials';
 
 export type Sender={id:string;name:string;number:string};
 export type Inspection={registered:boolean;routing:boolean;template:boolean;number:string;note:string};
 export interface WhatsAppReader{senders():Promise<Sender[]>;inspect(id:string,topic:string,template:string,language:string):Promise<Inspection>}
 export class AWSWhatsAppReader implements WhatsAppReader{
- private client=new SocialMessagingClient({maxAttempts:1});
+ private client=new SocialMessagingClient({maxAttempts:1,...messagingClientOptions()});
  private signal=AbortSignal.timeout(20000);
  async senders(){
   const senders:Sender[]=[];let nextToken:string|undefined;
