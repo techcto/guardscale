@@ -2083,6 +2083,12 @@
                     }
                   ]
                 }
+              },
+              {
+                "Name": "GUARDSCALE_STRIPE_CREDENTIALS_REVISION",
+                "Value": {
+                  "Ref": "StripeCredentialsRevision"
+                }
               }
             ],
             "LogConfiguration": {
@@ -2096,7 +2102,39 @@
                 },
                 "awslogs-stream-prefix": "worker"
               }
-            }
+            },
+            "Secrets": [
+              {
+                "Fn::If": [
+                  "UseStripeCredentials",
+                  {
+                    "Name": "STRIPE_SECRET_KEY",
+                    "ValueFrom": {
+                      "Fn::Join": [
+                        "",
+                        [
+                          {
+                            "Fn::If": [
+                              "UseExternalStripeSecret",
+                              {
+                                "Ref": "StripeCredentialsSecretArn"
+                              },
+                              {
+                                "Ref": "StripeCredentials"
+                              }
+                            ]
+                          },
+                          ":secret_key::"
+                        ]
+                      ]
+                    }
+                  },
+                  {
+                    "Ref": "AWS::NoValue"
+                  }
+                ]
+              }
+            ]
           }
         ]
       }

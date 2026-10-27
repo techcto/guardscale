@@ -37,11 +37,12 @@ for(const name of ['guardscale.yaml','guardscale-existing.yaml','guardscale-apph
     }
     for(const key of ['STRIPE_SECRET_KEY','STRIPE_WEBHOOK_SECRET'])assert.ok(!container.Environment.some(value=>value.Name===key));
     if(!container.Secrets?.some(value=>value['Fn::If']?.[1]?.Name==='STRIPE_SECRET_KEY'))continue;withCredentials++;
-    assert.ok(container.Secrets.some(value=>value['Fn::If']?.[1]?.Name==='STRIPE_WEBHOOK_SECRET'));
+    if(container.Name!=='worker')assert.ok(container.Secrets.some(value=>value['Fn::If']?.[1]?.Name==='STRIPE_WEBHOOK_SECRET'));
+    else assert.ok(!container.Secrets.some(value=>value['Fn::If']?.[1]?.Name==='STRIPE_WEBHOOK_SECRET'),'usage worker does not need webhook signing credentials');
     assert.ok(container.Environment.some(value=>value.Name==='GUARDSCALE_STRIPE_CREDENTIALS_REVISION'),'credential rotation rolls tasks');
    }
   }
-  assert.equal(mainContainers,3);assert.ok(withCredentials>=2);
+  assert.equal(mainContainers,3);assert.equal(withCredentials,3,'usage worker must receive billing credentials too');
   assert.ok(template.Rules.StripeCredentialSource);
   assert.equal(template.Parameters.BlockedSignupDomains.Default,'');
   for(const task of Object.values(template.Resources)){

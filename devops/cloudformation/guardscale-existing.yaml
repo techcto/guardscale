@@ -999,18 +999,6 @@ Resources:
                             - Ref: StripeCredentials
                         - ':secret_key::'
                 - Ref: AWS::NoValue
-            - Fn::If:
-                - UseStripeCredentials
-                - Name: STRIPE_WEBHOOK_SECRET
-                  ValueFrom:
-                    Fn::Join:
-                      - ''
-                      - - Fn::If:
-                            - UseExternalStripeSecret
-                            - Ref: StripeCredentialsSecretArn
-                            - Ref: StripeCredentials
-                        - ':webhook_secret::'
-                - Ref: AWS::NoValue
   WebService:
     Type: AWS::ECS::Service
     DependsOn: WebListenerRule

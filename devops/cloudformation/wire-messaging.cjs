@@ -54,6 +54,12 @@ for(const name of ['guardscale.yaml','guardscale-existing.yaml','guardscale-apph
   if(!env.some(e=>e.Name==='GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE'))env.push({Name:'GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE',Value:ref('WhatsappTemplateLanguage')});
   for(const [Name,Value] of [['GUARDSCALE_EMAIL_REPLY_DOMAIN',ref('EmailReplyDomain')],['GUARDSCALE_EMAIL_REPLY_TOPIC_ARN',emailTopic]]){const existing=env.find(e=>e.Name===Name);if(existing)existing.Value=Value;else env.push({Name,Value});}
  }
+ const appContainers=Object.values(r).filter(resource=>resource.Type==='AWS::ECS::TaskDefinition').flatMap(resource=>resource.Properties.ContainerDefinitions);
+ const apiSecrets=appContainers.find(container=>container.Name==='api').Secrets;
+ for(const container of appContainers.filter(container=>container.Name==='worker')){
+  container.Secrets=structuredClone(apiSecrets.filter(value=>value['Fn::If']?.[1]?.Name==='STRIPE_SECRET_KEY'));
+  if(!container.Environment.some(value=>value.Name==='GUARDSCALE_STRIPE_CREDENTIALS_REVISION'))container.Environment.push({Name:'GUARDSCALE_STRIPE_CREDENTIALS_REVISION',Value:ref('StripeCredentialsRevision')});
+ }
  t.Outputs??={};
  for(const [key,value] of Object.entries({EmailReplyTopicArn:emailTopic,EmailReplyDomain:ref('EmailReplyDomain'),WhatsappEventTopicArn:topic,WhatsappOriginationId:ref('WhatsappOriginationId'),SesFrom:ref('SesFrom'),NotificationMode:ref('NotificationMode'),WhatsappAlertTemplate:ref('WhatsappAlertTemplate'),WhatsappTemplateLanguage:ref('WhatsappTemplateLanguage'),AwsRegion:ref('AWS::Region')}))t.Outputs[key]={Value:value};
  // Keep hand-maintained YAML layout and all unrelated infrastructure unchanged.

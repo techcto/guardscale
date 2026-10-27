@@ -682,18 +682,6 @@ Resources:
                             - Ref: StripeCredentials
                         - ':secret_key::'
                 - Ref: AWS::NoValue
-            - Fn::If:
-                - UseStripeCredentials
-                - Name: STRIPE_WEBHOOK_SECRET
-                  ValueFrom:
-                    Fn::Join:
-                      - ''
-                      - - Fn::If:
-                            - UseExternalStripeSecret
-                            - Ref: StripeCredentialsSecretArn
-                            - Ref: StripeCredentials
-                        - ':webhook_secret::'
-                - Ref: AWS::NoValue
   WebService: {Type: 'AWS::ECS::Service', DependsOn: Listener, Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: WebTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}, LoadBalancers: [{ContainerName: web, ContainerPort: 3000, TargetGroupArn: {Ref: WebTarget}}]}}
   ApiService: {Type: 'AWS::ECS::Service', DependsOn: ApiRule, Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: ApiTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}, LoadBalancers: [{ContainerName: api, ContainerPort: 3001, TargetGroupArn: {Ref: ApiTarget}}]}}
   WorkerService: {Type: 'AWS::ECS::Service', Properties: {Cluster: {Ref: Cluster}, LaunchType: FARGATE, DesiredCount: 1, TaskDefinition: {Ref: WorkerTask}, NetworkConfiguration: {AwsvpcConfiguration: {AssignPublicIp: DISABLED, Subnets: {Ref: PrivateSubnets}, SecurityGroups: [{Ref: ServiceSG}]}}}}
