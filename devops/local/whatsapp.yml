@@ -12,7 +12,7 @@ services:
       GUARDSCALE_WHATSAPP_ALERT_TEMPLATE: ''
       GUARDSCALE_MESSAGING_CREDENTIALS_FILE: /run/secrets/whatsapp-session.json
       GUARDSCALE_LOCAL_WHATSAPP_RECIPIENT: ${GUARDSCALE_LOCAL_WHATSAPP_RECIPIENT:?Choose an authorized test recipient}
-      GUARDSCALE_PUBLIC_URL: http://localhost:8185
+      GUARDSCALE_PUBLIC_URL: http://localtest.me:8185
     volumes:
       - type: bind
         source: ${GUARDSCALE_MESSAGING_CREDENTIALS_PATH:?Prepare the temporary localhost messaging role session}
@@ -46,7 +46,7 @@ services:
       GUARDSCALE_WHATSAPP_ALERT_TEMPLATE: ''
       GUARDSCALE_MESSAGING_CREDENTIALS_FILE: /run/secrets/whatsapp-session.json
       GUARDSCALE_LOCAL_WHATSAPP_RECIPIENT: ${GUARDSCALE_LOCAL_WHATSAPP_RECIPIENT}
-      GUARDSCALE_PUBLIC_URL: http://localhost:8185
+      GUARDSCALE_PUBLIC_URL: http://localtest.me:8185
       GUARDSCALE_USAGE_EXPORT: disabled
     secrets: [root_password, session_secret]
     volumes:
