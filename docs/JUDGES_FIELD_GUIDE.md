@@ -17,6 +17,10 @@ not identify an attacker or establish intent.
 
 ## Suggested three-minute walkthrough
 
+The main local app and enrolled test server work without AWS credentials. The
+Bedrock and WhatsApp steps below require the separate live-provider setup; use
+the saved gallery to inspect historical tool results without configuring AWS.
+
 [Console screenshots and architecture gallery](gallery/README.md) show actual local
 records, saved Guardian tool results and a confirmed protection-removal state.
 
@@ -90,8 +94,11 @@ http://localhost using the root password you configured. Then run
 `bash test-server.sh start` to enroll the local test website into that same app,
 and `bash test-server.sh attack` only when ready to generate test traffic.
 
-The commands below are the separate automated regression lab, not the normal
-three-step application/test-server/attack workflow.
+### Optional automated regression lab
+
+The commands below start a separate console and dataset, not the normal
+three-step application/test-server/attack workflow. Stop the main test website
+with `bash test-server.sh stop` first: both test websites use port 8186.
 
 ```sh
 git clone --recurse-submodules https://github.com/techcto/guardscale.git
@@ -101,7 +108,7 @@ npm run local:security
 npm run local:test:security
 ```
 
-Requirements: Node.js 26, Docker Linux containers, Compose 2.24.4+ and kernel
+Requirements for this advanced lab: Node.js 26, Docker Linux containers, Compose 2.24.4+ and kernel
 iptables/ipset support. Open http://localhost:8185, root / test; the authorized
 fixture site is http://localhost:8186. Normal tests deliver no messages.
 
@@ -160,6 +167,7 @@ approval or obtain arbitrary shell access. Keep bearer credentials private.
 - Open-source license: [AGPL-3.0-or-later](../LICENSE), with a separate [copyright notice](../NOTICE).
 - Technical report: this guide, [technical README](../README-TECHNICAL.md), and [AWS architecture](AWS-ARCHITECTURE.md).
 - Diagram sources: the Mermaid diagrams above and [editable deployment diagram](architecture-diagram.mmd).
+- Upload-ready architecture: [branded PDF](guardscale-aws-architecture.pdf), [PNG](guardscale-aws-architecture.png) and [editable SVG](guardscale-aws-architecture.svg).
 - Runtime CDS evidence: source call-site table above and the delivered-message demonstration.
 - Working endpoint: https://guardscale.org; reviewer access must be supplied and checked.
 

@@ -53,6 +53,10 @@ real reply test are required before claiming that a particular installation supp
 
 ## Run locally
 
+Requires Docker with Linux containers, Docker Compose 2.24.4 or newer, and Bash
+for the optional test-server commands. Host Node.js and Go are not required to
+start the app. Protection tests additionally require kernel iptables/ipset support.
+
 ```sh
 git clone https://github.com/techcto/guardscale.git
 cd guardscale
@@ -62,6 +66,9 @@ docker compose up --build -d
 ```
 
 Open **http://localhost** and sign in as `root` with the password you set.
+If `.env` sets `GUARDSCALE_WEB_PORT`, use that port instead. On an existing
+checkout, retain your `.env` rather than copying over it. First builds can take
+several minutes; use `docker compose ps` to confirm the services are healthy.
 The main stack includes web, API, worker and local data services. It does not
 require AWS credentials to start. Local billing uses Stripe sandbox keys only.
 
@@ -83,6 +90,12 @@ bash test-server.sh stop-attack
 The attack targets only the disposable test website. No attack starts during app
 or test-server startup. Protection additionally requires enabling remote response
 and disabling dry-run in organization settings. [Testing details](docs/hackathon-local-testing.md)
+
+Review the new incident, choose **Block source temporarily…**, and distinguish
+the approval acknowledgement from the agent-confirmed result. Default local
+startup does not deliver WhatsApp/email or run Bedrock inference; the
+[advanced integration guide](docs/whatsapp-local-testing.md) covers those real AWS tests.
+To stop just the test website and probe, run `bash test-server.sh stop`.
 
 [Environment, health checks and testing](README-TECHNICAL.md)
 
