@@ -1,10 +1,56 @@
-# Hackathon local testing
+# Local application and optional testing
 
 For the real Bedrock + WhatsApp round trip, split server-log console, continuous
 local attack and bounded renewal/removal checks, use the
 [local incident-response test guide](whatsapp-local-testing.md).
 
-## Start here: no tag, Marketplace wait or AWS account needed
+## 1. Start the main application
+
+```sh
+git clone https://github.com/techcto/guardscale.git
+cd guardscale
+cp .env.example .env
+# Edit .env with your root password and session secret.
+docker compose up --build -d
+```
+
+Open http://localhost as `root` with the password from `.env`. This starts the
+normal web/API/worker application and local data services. No release or AWS
+account is required. Keep an existing `.env` rather than copying over it.
+Use `docker compose logs -f` for logs and `docker compose down` to stop without
+deleting data. Optional tests below do not replace this normal startup workflow.
+
+## 2. Start the optional local test server
+
+```sh
+bash test-server.sh start
+```
+
+This attaches a real PHP/Apache website and Go agent to the **main application**.
+Open http://localhost:8186 to browse it; review `local-php-fixture` in the main
+console at http://localhost. Your root password remains the one in `.env`.
+Startup does not generate an attack. Port 8186 must not be used by an older lab.
+
+## 3. Generate an attack only when needed
+
+```sh
+bash test-server.sh attack
+# In a second terminal:
+bash test-server.sh stop-attack
+```
+
+The generator sends bounded suspicious requests only to its isolated test site.
+Use the console to review findings. To test a real temporary block, explicitly
+enable remote response and disable dry-run in organization settings, then approve
+an eligible incident. The test agent only permits blocking its dedicated probe.
+
+`bash test-server.sh stop` stops the test server and probe while retaining the
+main application and its data. `bash test-server.sh logs` follows test logs.
+
+## Advanced: independent automated regression lab
+
+The commands below start a separate disposable console and dataset for automated
+checks. They are not required for normal app or test-server startup above.
 
 Install Docker with Compose 2.24.4+ (Linux containers) and Node.js 26. Run from
 the repository root. The first build downloads images/dependencies and can take

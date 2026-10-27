@@ -1,0 +1,64 @@
+# Optional services attached to the NORMAL root Compose application.
+# Start the root stack first, then add this file with --profile test-server.
+services:
+  test-enroll:
+    profiles: [test-server]
+    image: node:26-alpine
+    command: [node, /scripts/enroll.mjs]
+    environment:
+      GUARDSCALE_LOCAL_FIXTURE: 'true'
+      GUARDSCALE_SECURITY_TEST: 'true'
+      GUARDSCALE_FIXTURE_CONTROL_URL: http://guardscale-web:3000
+      GUARDSCALE_ROOT_USER: ${GUARDSCALE_ROOT_USER:-root}
+      GUARDSCALE_ROOT_PASSWORD: ${GUARDSCALE_ROOT_PASSWORD:?Set GUARDSCALE_ROOT_PASSWORD in .env first}
+    volumes:
+      - ./devops/local/enroll.mjs:/scripts/enroll.mjs:ro
+      - test-enrollment:/runtime
+    depends_on:
+      guardscale-web: {condition: service_healthy}
+    networks: [default]
+  test-site:
+    profiles: [test-server]
+    build:
+      context: .
+      dockerfile: devops/local/Dockerfile.site
+      args:
+        PROTECTION_TOOLS: 'true'
+    environment:
+      GUARDSCALE_LOCAL_FIXTURE: 'true'
+    volumes:
+      - test-enrollment:/runtime:ro
+      - test-site-data:/var/lib/guardscale-demo
+    ports: ['127.0.0.1:8186:80']
+    cap_add: [NET_ADMIN]
+    depends_on:
+      test-enroll: {condition: service_completed_successfully}
+    networks:
+      default: {}
+      attack-lab:
+        ipv4_address: 198.51.100.10
+        aliases: [site]
+  test-probe:
+    profiles: [test-server]
+    image: node:26-alpine
+    user: node
+    command: [node, /scripts/probe.mjs]
+    environment:
+      GUARDSCALE_SECURITY_TEST: 'true'
+    volumes:
+      - ./devops/local/probe.mjs:/scripts/probe.mjs:ro
+      - ./devops/local/attack-client.mjs:/scripts/attack-client.mjs:ro
+    cap_drop: [ALL]
+    depends_on: [test-site]
+    networks:
+      attack-lab:
+        ipv4_address: 198.51.100.20
+networks:
+  attack-lab:
+    internal: true
+    ipam:
+      config:
+        - subnet: 198.51.100.0/24
+volumes:
+  test-enrollment:
+  test-site-data:

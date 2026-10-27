@@ -1,5 +1,8 @@
 # Local incident-response testing
 
+For normal application startup, use [clone, .env and Docker Compose](../README-TECHNICAL.md#start-the-main-application).
+This guide covers an optional separate disposable lab, not the main stack.
+
 Run these commands from the repository root using Node.js 26, Docker Linux
 containers and Compose 2.24.4 or newer. Use one shell environment consistently
 (for example WSL Bash); credential-file paths must be accessible to Docker.

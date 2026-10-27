@@ -1,0 +1,42 @@
+{
+  "capturedAt": "2026-10-27T14:12:22.481Z",
+  "source": "Existing local fixture records; no data seeded, no messaging sent.",
+  "captures": [
+    {
+      "file": "01-operations-console.png",
+      "title": "One place to understand origin-server activity",
+      "caption": "Real local fixture: enrolled Go agent, existing incidents and sanitized activity.",
+      "path": "/console"
+    },
+    {
+      "file": "02-server-activity.png",
+      "title": "Watch the server, without opening a shell",
+      "caption": "Server detail: actual Apache activity and agent heartbeat from the isolated fixture.",
+      "path": "/servers/local-php-fixture"
+    },
+    {
+      "file": "03-grouped-incidents.png",
+      "title": "Organize incidents by observed source",
+      "caption": "Existing development incidents; source grouping does not identify a person or establish intent.",
+      "path": "/incidents"
+    },
+    {
+      "file": "04-incident-evidence.png",
+      "title": "Start with measured findings",
+      "caption": "Existing incident evidence from the development test; historical approvals may have expired.",
+      "path": "/incidents/126ae1a7928d1037a59cba8fc38ff8bd"
+    },
+    {
+      "file": "05-guardian-review.png",
+      "title": "Inspect real evidence before recommending action",
+      "caption": "Actual saved Guardian review and tool results; no fresh inference is implied.",
+      "path": "/incidents/126ae1a7928d1037a59cba8fc38ff8bd"
+    },
+    {
+      "file": "06-protection-removed.png",
+      "title": "Dismiss requests removal. The host confirms it.",
+      "caption": "Historical real protection result: removal confirmed by the agent; no fresh approval was issued.",
+      "path": "/incidents/f471b7ebe973be4a2d3ed64e515eaf80"
+    }
+  ]
+}

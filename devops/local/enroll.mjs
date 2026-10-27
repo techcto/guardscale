@@ -1,13 +1,14 @@
 import {readFile,writeFile,chmod} from 'node:fs/promises';
 if(process.env.GUARDSCALE_LOCAL_FIXTURE!=='true')throw Error('Local fixture only');
-const base='http://web:3000';let cookie='';
+const base=process.env.GUARDSCALE_FIXTURE_CONTROL_URL??'http://web:3000';let cookie='';
+if(!['http://web:3000','http://guardscale-web:3000'].includes(base))throw Error('Only the local Compose control plane is allowed');
 async function request(path,body){
  const r=await fetch(base+path,{method:body?'POST':'GET',headers:{'content-type':'application/json',origin:base,...(cookie?{cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});
  if(!r.ok)throw Error(`Enrollment ${path}: HTTP ${r.status}`);
  const set=r.headers.getSetCookie();if(set.length)cookie=set.map(v=>v.split(';')[0]).join('; ');
  return r.json();
 }
-const identity=await request('/api/auth/login',{username:'root',password:(await readFile('/run/secrets/root_password','utf8')).trim()});
+const identity=await request('/api/auth/login',{username:process.env.GUARDSCALE_ROOT_USER??'root',password:process.env.GUARDSCALE_ROOT_PASSWORD??(await readFile('/run/secrets/root_password','utf8')).trim()});
 const orgs=await request('/api/orgs');
 const org=orgs.find(v=>v.id===identity.orgId);
 if(!org)throw Error('Root default workspace is unavailable');
@@ -19,7 +20,7 @@ await writeFile('/runtime/config.yaml',`server:
   id: local-php-fixture
   tenant: ${credential.tenantId}
 control_plane:
-  endpoint: http://web:3000
+  endpoint: ${base}
   agent_id: local-php-agent
   token_file: /runtime/enrollment.token
   heartbeat_seconds: 5
@@ -34,6 +35,6 @@ storage:
 protection:
   enabled: ${process.env.GUARDSCALE_SECURITY_TEST==='true'}
   dry_run: ${process.env.GUARDSCALE_SECURITY_TEST!=='true'}
-${process.env.GUARDSCALE_SECURITY_TEST==='true'?'  allowed_cidrs:\n    - 192.0.2.20/32\n':''}
+${process.env.GUARDSCALE_SECURITY_TEST==='true'?'  allowed_cidrs:\n    - '+(base==='http://guardscale-web:3000'?'198.51.100.20/32':'192.0.2.20/32')+'\n':''}
 `,{mode:0o600});
 console.log('Dedicated local organization enrolled; credentials stored only in runtime volume.');

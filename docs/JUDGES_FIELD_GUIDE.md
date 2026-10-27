@@ -17,6 +17,9 @@ not identify an attacker or establish intent.
 
 ## Suggested three-minute walkthrough
 
+[Console screenshots and architecture gallery](gallery/README.md) show actual local
+records, saved Guardian tool results and a confirmed protection-removal state.
+
 1. Show the server heartbeat and live sanitized activity in the signed-in console.
 2. Generate requests only against the disposable local PHP/Apache fixture.
 3. Open the resulting incident and its Guardian tool trace: actual inspection
@@ -79,7 +82,16 @@ pending incident for that recipient. Multiple pending alerts require the inciden
 code or authenticated console selection. Dismiss is a state change plus a removal
 request; removal is complete only after the host confirms it.
 
-## Reproduce the demonstration
+## Run the application, then choose a test
+
+Start with clone → `.env` → `docker compose up --build -d` as described in the
+[technical README](../README-TECHNICAL.md#start-the-main-application). Open
+http://localhost using the root password you configured. Then run
+`bash test-server.sh start` to enroll the local test website into that same app,
+and `bash test-server.sh attack` only when ready to generate test traffic.
+
+The commands below are the separate automated regression lab, not the normal
+three-step application/test-server/attack workflow.
 
 ```sh
 git clone --recurse-submodules https://github.com/techcto/guardscale.git
@@ -142,7 +154,7 @@ Read tools inspect servers, activity and incidents. Response tools dispatch only
 an already-approved, unexpired command; an external agent cannot grant itself
 approval or obtain arbitrary shell access. Keep bearer credentials private.
 
-## Submission package
+## Source and access
 
 - Repository URL: https://github.com/techcto/guardscale (public; no collaborator invitation required).
 - Open-source license: [AGPL-3.0-or-later](../LICENSE), with a separate [copyright notice](../NOTICE).
@@ -150,7 +162,6 @@ approval or obtain arbitrary shell access. Keep bearer credentials private.
 - Diagram sources: the Mermaid diagrams above and [editable deployment diagram](architecture-diagram.mmd).
 - Runtime CDS evidence: source call-site table above and the delivered-message demonstration.
 - Working endpoint: https://guardscale.org; reviewer access must be supplied and checked.
-- Video, partner eligibility, ACE details and final submission fields: [submission checklist](../CONTEST-README.md).
 
 Never commit real credentials, session files, signed response tokens or private
 customer evidence. Optional scanners are confined to authorized targets and retain

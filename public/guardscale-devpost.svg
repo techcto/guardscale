@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" role="img" aria-labelledby="title description">
+  <title id="title">GuardScale</title>
+  <desc id="description">The GuardScale blue and navy shield. Investigate, approve, protect.</desc>
+  <rect width="1200" height="800" fill="#ffffff"/>
+  <g transform="translate(392 55) scale(6.5)">
+    <path fill="#0078bd" d="M32 3 56 12v18c0 15-9 25-24 31C17 55 8 45 8 30V12L32 3Z"/>
+    <path fill="#07111e" d="M32 13 46 18v12c0 9-5 16-14 21-9-5-14-12-14-21V18l14-5Zm0 8a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z"/>
+  </g>
+  <text x="600" y="590" text-anchor="middle" fill="#07111e" font-family="Arial, Helvetica, sans-serif" font-size="102" font-weight="800" letter-spacing="-3">GuardScale</text>
+  <text x="600" y="658" text-anchor="middle" fill="#0078bd" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="600" letter-spacing="2">INVESTIGATE · APPROVE · PROTECT</text>
+</svg>

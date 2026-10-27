@@ -8,7 +8,7 @@
 **Investigate origin-server pressure, reach the operator through WhatsApp or email,
 and turn explicit approval into scoped, temporary protection.**
 
-[Start the judge walkthrough](docs/JUDGES_FIELD_GUIDE.md) · [Technical README](README-TECHNICAL.md) · [AWS architecture](docs/AWS-ARCHITECTURE.md) · [Guardian and MCP](docs/guardian.md) · [Submission checklist](CONTEST-README.md)
+[Start the judge walkthrough](docs/JUDGES_FIELD_GUIDE.md) · [Technical README](README-TECHNICAL.md) · [AWS architecture](docs/AWS-ARCHITECTURE.md) · [Guardian and MCP](docs/guardian.md)
 
 <a href="https://guardscale.org"><img src="assets/launch-website.svg" width="200" alt="Try GuardScale live" /></a>
 
@@ -42,6 +42,8 @@ real reply test are required before claiming that a particular installation supp
 
 ## Try the actual application
 
+[Browse the real-console gallery and diagrams](docs/gallery/README.md)
+
 1. Open [GuardScale](https://guardscale.org) and sign in to your authorized workspace.
 2. Enroll a supported host from the node enrollment screen and confirm its heartbeat.
 3. Open its server page to view sanitized activity, incidents and available evidence.
@@ -49,10 +51,40 @@ real reply test are required before claiming that a particular installation supp
 5. Approve a bounded response through the console or a verified messaging recipient.
 6. Check the agent-confirmed outcome, expiry or removal in the activity timeline.
 
-Hosted credentials are private. For a reproducible local demonstration, run
-`npm run local:security`, then `npm run local:test:security`; open
-http://localhost:8185 as root / test. These credentials apply only to the disposable
-loopback-bound fixture. [Setup and testing](README-TECHNICAL.md)
+## Run locally
+
+```sh
+git clone https://github.com/techcto/guardscale.git
+cd guardscale
+cp .env.example .env
+# Set GUARDSCALE_ROOT_PASSWORD and GUARDSCALE_SESSION_SECRET in .env.
+docker compose up --build -d
+```
+
+Open **http://localhost** and sign in as `root` with the password you set.
+The main stack includes web, API, worker and local data services. It does not
+require AWS credentials to start. Local billing uses Stripe sandbox keys only.
+
+Then, optionally start an enrolled local test server:
+
+```sh
+bash test-server.sh start
+```
+
+Open its website at http://localhost:8186 and find `local-php-fixture` in the
+**same main console**. When you want to generate suspicious test traffic:
+
+```sh
+bash test-server.sh attack
+# In another terminal, stop the requests:
+bash test-server.sh stop-attack
+```
+
+The attack targets only the disposable test website. No attack starts during app
+or test-server startup. Protection additionally requires enabling remote response
+and disabling dry-run in organization settings. [Testing details](docs/hackathon-local-testing.md)
+
+[Environment, health checks and testing](README-TECHNICAL.md)
 
 ## Human control, with a verifiable result
 

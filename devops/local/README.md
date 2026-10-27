@@ -1,5 +1,8 @@
 # Real local PHP/Apache fixture
 
+For normal application startup, use [clone, .env and Docker Compose](../../README-TECHNICAL.md#start-the-main-application).
+This guide covers an optional separate disposable lab, not the main stack.
+
 For the richer single-container SQLite app and pinned ffuf/nuclei workloads, see
 [real-tool and database testing](SCANNERS.md).
 

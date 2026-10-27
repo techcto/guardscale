@@ -10,18 +10,63 @@ it does not receive the control plane's AWS credentials. Dockerfiles, package-lo
 go.mod and go.sum define the build inputs. Use `npm ci` to preserve resolved versions.
 Optional scanner submodules are pinned Git references with their own licenses.
 
+## Start the main application
+
 ```sh
-git clone --recurse-submodules https://github.com/techcto/guardscale.git
+git clone https://github.com/techcto/guardscale.git
 cd guardscale
-npm ci
-npm run local:security
-npm run local:test:security
+cp .env.example .env
+# Edit .env: set a strong root password and random session secret.
+docker compose up --build -d
 ```
 
-The isolated fixture uses ports 8185/8186 and root / test. It generates real
-Apache requests and tests a real temporary block inside the disposable container.
-No cloud messaging is delivered by the default fixture. Follow the
-[real Bedrock and messaging guide](docs/whatsapp-local-testing.md) to enable those paths.
+Open **http://localhost**, username `root`, password from `.env`. Compose reads the
+root `.env` automatically. Docker with Compose is sufficient for this application
+startup; host Node and Go are needed only for the optional development commands.
+Do not overwrite an existing `.env` when updating a checkout.
+
+```sh
+docker compose ps
+curl --fail http://localhost/api/health
+docker compose logs -f
+# Stop while retaining persistent volumes:
+docker compose down
+```
+
+The main stack runs web, API, worker, DynamoDB Local, ElasticMQ and S3Mock.
+Notification delivery is audit-only by default. Real AWS inference and messaging
+need the dedicated setup described below, not just nonempty environment fields.
+Stripe is sandbox-only locally; leave its settings empty if billing is not needed.
+
+## Optional tests after startup
+
+Start a test website and enroll its real Go agent into the running main app:
+
+```sh
+bash test-server.sh start
+# Optional, only when you want suspicious traffic:
+bash test-server.sh attack
+# Stop traffic separately:
+bash test-server.sh stop-attack
+# Stop the test website and probe, leaving the main application running:
+bash test-server.sh stop
+```
+
+The main console remains http://localhost with your `.env` credentials. The test
+website is http://localhost:8186. The probe is isolated on a container network and
+can target only the test site; startup sends no attack. Enable remote protection
+and disable dry-run in the console only when you intend to approve test blocks.
+The test host allows protection of the probe's address only.
+
+`test-server.sh` combines root Compose with
+`devops/local/main-test-server.yml`. NET_ADMIN is granted only to the disposable
+website container, never the main app or host. The host kernel must support
+iptables/ipset. Stop any older lab already using port 8186 before starting it.
+
+The independent automated fixture remains available for repeatable regression
+tests. It uses a separate console and dataset; see the
+[advanced live Bedrock and messaging guide](docs/whatsapp-local-testing.md).
+Only optional scanner tests need initialized scanner submodules.
 
 ## Checks
 
