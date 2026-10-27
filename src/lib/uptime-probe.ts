@@ -9,12 +9,16 @@ for(const [address,prefix] of [['0.0.0.0',8],['10.0.0.0',8],['100.64.0.0',10],['
 const globalV6=new BlockList();globalV6.addSubnet('2000::',3,'ipv6');
 const deniedV6=new BlockList();for(const [a,p] of [['2001:db8::',32],['2001::',23],['2002::',16],['3fff::',20]] as const)deniedV6.addSubnet(a,p,'ipv6');
 export function publicMonitorAddress(address:string){const family=isIP(address);return family===4?!denied.check(address,'ipv4'):family===6&&globalV6.check(address,'ipv6')&&!deniedV6.check(address,'ipv6');}
+export function localMonitorHostname(value:string){
+ const host=value.toLowerCase().replace(/\.$/,'').replace(/^\[|\]$/g,'');
+ return ['localhost','test','local','localdomain','internal','invalid','example','home.arpa','localtest.me','lvh.me'].some(suffix=>host===suffix||host.endsWith('.'+suffix))||!host.includes('.')&&!host.includes(':')||!!isIP(host)&&!publicMonitorAddress(host);
+}
 export function monitorURL(value:unknown){
  if(typeof value!=='string'||value.length>2048)throw Error('Enter a public HTTP(S) website URL');
  let url:URL;try{url=new URL(value.trim())}catch{throw Error('Enter a full http:// or https:// website URL')}
  if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.hash||url.search||url.port&&!['80','443'].includes(url.port))throw Error('Use HTTP(S) on port 80 or 443, without credentials, queries or fragments');
  const host=url.hostname.replace(/^\[|\]$/g,'');
- if(host==='localhost'||!host.includes('.')&&!host.includes(':')||isIP(host)&&!publicMonitorAddress(host))throw Error('Only public website addresses can be monitored');
+ if(localMonitorHostname(host))throw Error('Local and test hostnames are not public uptime targets');
  return url;
 }
 

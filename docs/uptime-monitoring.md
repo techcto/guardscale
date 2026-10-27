@@ -25,6 +25,10 @@ Paused, customized and explicitly deleted checks are not recreated or reset by
 reconciliation. Additional sites wait when the 50-check workspace limit is reached.
 Deleting a check retains a small suppression record so auto-enrollment respects
 your choice; workspace deletion removes it. You can manually add the URL again.
+Local/test names such as `.test`, `.localhost`, `.local` and loopback aliases
+are excluded. Older automatically added checks for those names are retired and
+their false availability incidents closed without sending recovery notifications.
+Failures for genuine public websites remain visible.
 
 ## Checks, charts and incidents
 

@@ -3,6 +3,21 @@ import assert from 'node:assert/strict';
 import {store} from './store';
 import {uptimeStore} from './uptime-store';
 import {enrollServerWebsites} from './uptime';
+import type {UptimeMonitor} from './uptime-model';
+
+test('old auto-enrolled test domains are retired without hiding genuine public outages',async()=>{
+ const org=await store.createOrganization({name:'Reserved-domain migration',ownerId:'owner',orgType:'business'}),at=new Date().toISOString();
+ try{
+  for(const [id,url] of [['fixture','https://local-fixture.test/'],['public','https://example.com/']] as const){
+   const monitor:UptimeMonitor={id,orgId:org.id,name:id,url,autoEnrolled:true,intervalSeconds:60,recipientIds:[],whatsapp:false,tags:[],paused:false,revision:0,createdAt:at,updatedAt:at,nextCheckAt:at,state:'down',failures:2,successes:0,samples:[{at,ok:false,durationMs:20,error:'DNS failed'}],notices:[{id,incidentId:id,kind:'down',at,sent:[]}],outages:[{incidentId:id,startedAt:at}],activeIncidentId:id};
+   await uptimeStore.save(monitor);await store.putIncident({tenantId:org.id,serverId:'uptime:'+id,agentId:'uptime-worker',incidentId:id,state:'review',startedAt:at,updatedAt:at,payload:{kind:'uptime'}});
+  }
+  await enrollServerWebsites(org.id);
+  assert.deepEqual((await uptimeStore.list(org.id)).map(m=>m.id),['public']);
+  const removed=(await uptimeStore.get(org.id,'fixture'))!;assert.ok(removed.deletedAt);assert.equal(removed.samples.length,0);assert.equal(removed.notices.length,0);
+  assert.equal((await store.incident(org.id,'fixture'))!.state,'resolved');assert.equal((await store.incident(org.id,'public'))!.state,'review');
+ }finally{await store.deleteOrganization(org.id);}
+});
 
 test('server websites auto-enroll once, inherit tags and configured approved recipients, and respect edits/deletion',async()=>{
  const org=await store.createOrganization({name:'Auto enrollment regression',ownerId:'owner',orgType:'business'}),at=new Date().toISOString();
@@ -17,6 +32,7 @@ test('server websites auto-enroll once, inherit tags and configured approved rec
   await store.upsertNode({...base,serverId:'one',websiteUrls:['https://example.com/health'],discoveredHosts:['example.com']});
   await store.upsertNode({...base,serverId:'two',discoveredHosts:['example.com']});
   await store.upsertNode({...base,serverId:'private',websiteUrls:['http://127.0.0.1/','http://localhost:8186/']});
+  await store.upsertNode({...base,serverId:'local-test',discoveredHosts:['local-fixture.test','demo.localhost','service.local','localtest.me','site.lvh.me']});
   await Promise.all([enrollServerWebsites(org.id),enrollServerWebsites(org.id)]);
   let checks=await uptimeStore.list(org.id);assert.equal(checks.length,1);assert.equal(checks[0].url,'https://example.com/health');
   assert.deepEqual(checks[0].tags,base.tags);assert.deepEqual(checks[0].recipientIds,[org.id+'approved']);assert.equal(checks[0].autoEnrolled,true);

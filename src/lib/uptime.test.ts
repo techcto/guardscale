@@ -14,6 +14,7 @@ test('monitor targets reject internal, metadata, reserved, mapped IPv6 and crede
  for(const address of ['8.8.8.8','1.1.1.1','2606:4700:4700::1111'])assert.equal(publicMonitorAddress(address),true,address);
  for(const target of ['http://localhost/','http://2130706433/','http://169.254.169.254/','https://example.com:8443/','https://user:pass@example.com/','https://example.com/?token=private','file:///etc/passwd'])assert.throws(()=>monitorURL(target),Error,target);
  assert.equal(monitorURL('https://example.com/health').href,'https://example.com/health');
+ for(const target of ['https://local-fixture.test/','https://sub.localhost/','https://demo.local/','https://localtest.me/','https://site.lvh.me/'])assert.throws(()=>monitorURL(target),/Local and test/);
  assert.equal((await probeWebsite('http://127.0.0.1/')).ok,false);
 });
 test('two failures open one incident; two successes recover that same incident',()=>{

@@ -1,7 +1,7 @@
 import {randomUUID,createHash} from 'node:crypto';
 import {store} from './store';
 import {uptimeStore} from './uptime-store';
-import {probeWebsite,monitorURL} from './uptime-probe';
+import {probeWebsite,monitorURL,localMonitorHostname} from './uptime-probe';
 import {uptimeLimits,type UptimeMonitor,type UptimeSample} from './uptime-model';
 import {notifier,whatsappOrigination} from './notifications';
 import {setupNode,setupFingerprint} from './whatsapp-setup';
@@ -13,6 +13,15 @@ export const uptimeURLId=(url:string)=>'url-'+createHash('sha256').update(url).d
 // reporting it. Paused, edited and explicitly deleted checks are not recreated.
 export async function enrollServerWebsites(orgId:string){
  const monitors=await uptimeStore.list(orgId,true),known=new Set(monitors.map(m=>m.url));
+ for(const monitor of monitors){
+  if(!monitor.autoEnrolled||monitor.deletedAt||!localMonitorHostname(new URL(monitor.url).hostname))continue;
+  const at=new Date().toISOString();
+  if(!await uptimeStore.save({...monitor,paused:true,deletedAt:at,updatedAt:at,samples:[],notices:[],outages:[],activeIncidentId:undefined},monitor.revision))continue;
+  monitor.deletedAt=at;
+  for(const incident of await store.incidentsForNode(orgId,'uptime:'+monitor.id)){
+   if((incident.payload as {kind?:string})?.kind==='uptime'&&incident.state!=='resolved')await store.putIncident({...incident,state:'resolved',updatedAt:at,payload:{...incident.payload as object,excludedReason:'Local/test hostname is outside public uptime monitoring'}});
+  }
+ }
  const knownHosts=new Set(monitors.map(m=>new URL(m.url).hostname));
  let active=monitors.filter(m=>!m.deletedAt).length;
  const settings=await store.settings(orgId),configured=new Set(settings.notifications.recipients.split(/[\s,;]+/).map(v=>v.toLowerCase()));
