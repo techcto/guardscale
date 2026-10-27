@@ -3,6 +3,15 @@ const tags=['Ref','Sub','GetAtt','Join','If','Equals','Not','And','Or','Select',
 const schema=yaml.DEFAULT_SCHEMA.extend(tags.flatMap(tag=>['scalar','sequence'].map(kind=>new yaml.Type('!'+tag,{kind,construct:v=>({[tag==='Ref'||tag==='Condition'?tag:'Fn::'+tag]:tag==='GetAtt'&&typeof v==='string'?v.split('.'):v})}))));
 for(const name of ['guardscale.yaml','guardscale-existing.yaml','guardscale-apphub-migration.yaml','guardscale-apphub-owned-data.yaml','guardscale-apphub-relaunch.yaml']){
  const t=yaml.load(fs.readFileSync(path.join(__dirname,name),'utf8'),{schema});
+ test(name+': every explicit resource reference resolves',()=>{
+  const visit=value=>{
+   if(!value||typeof value!=='object')return;
+   if(typeof value.Ref==='string')assert.ok(value.Ref.startsWith('AWS::')||t.Parameters[value.Ref]||t.Resources[value.Ref],'Unresolved Ref '+value.Ref);
+   if(Array.isArray(value['Fn::GetAtt']))assert.ok(t.Resources[value['Fn::GetAtt'][0]],'Unresolved GetAtt '+value['Fn::GetAtt'][0]);
+   Object.values(value).forEach(visit);
+  };
+  visit(t.Resources);visit(t.Outputs);
+ });
  test(name+': managed, existing and disabled routing preserve trust boundaries',()=>{
   const r=t.Resources,evaluate=(value,params)=>{
    if(typeof value!=='object'||value===null)return value;

@@ -13,8 +13,8 @@ for(const name of ['guardscale.yaml','guardscale-existing.yaml','guardscale-apph
  t.Conditions.HasExistingWhatsappTopic=not(eq(ref('WhatsappEventTopicArn'),''));
  t.Conditions.CreateWhatsappTopic={'Fn::And':[not(eq(ref('WhatsappBusinessAccountId'),'')),eq(ref('WhatsappEventTopicArn'),'')]};
  t.Conditions.HasWhatsappTopic={'Fn::Or':[{Condition:'HasExistingWhatsappTopic'},{Condition:'CreateWhatsappTopic'}]};
- t.Parameters.EmailReplyTopicArn={Type:'String',Default:'',AllowedPattern:'^$|^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+$',Description:'Encrypted SES receiving topic from the email-replies stack; blank disables email replies.'};
- t.Parameters.EmailReplyDomain={Type:'String',Default:'',AllowedPattern:'^$|^[a-z0-9.-]+\\.[a-z]{2,}$',Description:'Dedicated receiving subdomain matching the email-replies stack.'};
+ t.Parameters.EmailReplyTopicArn={Type:'String',Default:'',AllowedPattern:'^$|^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+$',Description:'Optional existing encrypted SES receiving topic. Leave blank for main-stack-managed receiving or disabled replies.'};
+ t.Parameters.EmailReplyDomain={Type:'String',Default:'',AllowedPattern:'^$|^[a-z0-9.-]+\\.[a-z]{2,}$',Description:'Dedicated receiving subdomain configured by this installation or its existing receiving topic.'};
  t.Parameters.EmailRepliesEnabled={Type:'String',Default:'false',AllowedValues:['true','false'],Description:'Create SES reply routing in this application stack using the existing verified sender identity. Does not create another SES identity.'};
  t.Parameters.EmailReplyHostedZoneId={Type:'String',Default:'',AllowedPattern:'^$|^Z[A-Z0-9]+$',Description:'Route 53 hosted zone for the dedicated reply subdomain. Required for managed email replies.'};
  t.Parameters.EmailReplyExistingRuleSetName={Type:'String',Default:'',AllowedPattern:'^$|^[A-Za-z0-9._-]{1,64}$',Description:'Existing active SES rule set to extend. Blank creates a guarded stack-owned rule set only when no other rule set is active.'};
@@ -25,13 +25,25 @@ for(const name of ['guardscale.yaml','guardscale-existing.yaml','guardscale-apph
  t.Rules??={};t.Rules.EmailReplyConfiguration={Assertions:[{Assert:{'Fn::Or':[{'Fn::And':[eq(ref('EmailRepliesEnabled'),'false'),eq(ref('EmailReplyTopicArn'),''),eq(ref('EmailReplyDomain'),'')]},{'Fn::And':[eq(ref('EmailRepliesEnabled'),'false'),not(eq(ref('EmailReplyTopicArn'),'')),not(eq(ref('EmailReplyDomain'),''))]},{'Fn::And':[eq(ref('EmailRepliesEnabled'),'true'),eq(ref('EmailReplyTopicArn'),''),not(eq(ref('EmailReplyDomain'),'')),not(eq(ref('EmailReplyHostedZoneId'),'')),not(eq(ref('SesFrom'),''))]}]},AssertDescription:'Managed replies require a dedicated domain, hosted zone and verified SES From address with no external topic. Otherwise configure both external topic/domain, or leave replies disabled.'}]};
  const topic=choose('CreateWhatsappTopic',ref('WhatsappTopic'),ref('WhatsappEventTopicArn'));
  const r=t.Resources;
- Object.assign(r,require('./email-resources.cjs')({ref,get,sub,choose}));
+ // Optional stack-owned live/sandbox pair. Import mode NEVER writes secret values.
+ t.Parameters.StripeOwnedPairPrefix={Type:'String',Default:'',AllowedPattern:'^$|^[a-zA-Z0-9/_-]+$',Description:'Optional main-stack-owned Stripe live/sandbox pair prefix. Blank keeps the existing single-secret/external-secret flow.'};
+ t.Parameters.StripeOwnedPairImport={Type:'String',Default:'false',AllowedValues:['true','false'],Description:'For retained-resource import only. Keep true after import to avoid writing credential values.'};
+ t.Conditions.HasStripeOwnedPair=not(eq(ref('StripeOwnedPairPrefix'),''));
+ t.Conditions.InitializeStripeOwnedPair=eq(ref('StripeOwnedPairImport'),'false');
+ for(const [id,mode] of [['LiveCredentials','live'],['SandboxCredentials','sandbox']]){
+  r[id]={Type:'AWS::SecretsManager::Secret',Condition:'HasStripeOwnedPair',DeletionPolicy:'Retain',UpdateReplacePolicy:'Retain',Properties:{Name:sub('${StripeOwnedPairPrefix}/'+mode),Description:mode==='live'?'GuardScale live Stripe credentials. Populate both fields before enabling billing.':'GuardScale Stripe sandbox credentials. Never use live keys here.',SecretString:choose('InitializeStripeOwnedPair','{"secret_key":"","webhook_secret":""}',ref('AWS::NoValue')),Tags:[{Key:'Application',Value:'guardscale'},{Key:'BillingEnvironment',Value:mode}]}};
+ }
+ t.Outputs??={};
+ t.Outputs.OwnedLiveStripeCredentialsArn={Condition:'HasStripeOwnedPair',Value:ref('LiveCredentials')};
+ t.Outputs.OwnedSandboxStripeCredentialsArn={Condition:'HasStripeOwnedPair',Value:ref('SandboxCredentials')};
+ Object.assign(r,require('./email-resources.cjs')({ref,get,sub,choose,logGroup:r.LogGroup?'LogGroup':'WorkerLogGroup'}));
  const emailTopic=choose('CreateManagedEmailReplies',ref('EmailReplyTopic'),ref('EmailReplyTopicArn'));
  r.WhatsappTopic={Type:'AWS::SNS::Topic',Condition:'CreateWhatsappTopic'};
  r.WhatsappTopicPolicy={Type:'AWS::SNS::TopicPolicy',Condition:'CreateWhatsappTopic',Properties:{Topics:[ref('WhatsappTopic')],PolicyDocument:{Version:'2012-10-17',Statement:[{Effect:'Allow',Principal:{Service:'social-messaging.amazonaws.com'},Action:'sns:Publish',Resource:ref('WhatsappTopic'),Condition:{StringEquals:{'aws:SourceAccount':ref('AWS::AccountId')},ArnLike:{'aws:SourceArn':sub('arn:${AWS::Partition}:social-messaging:${AWS::Region}:${AWS::AccountId}:*')}}}]}}};
- const publishStatement=source=>({Effect:'Allow',Principal:{Service:'sns.amazonaws.com'},Action:'sqs:SendMessage',Resource:get('Queue','Arn'),Condition:{ArnEquals:{'aws:SourceArn':source}}});
- r.WhatsappQueuePolicy={Type:'AWS::SQS::QueuePolicy',Condition:'HasMessagingTopic',Properties:{Queues:[ref('Queue')],PolicyDocument:{Version:'2012-10-17',Statement:[choose('HasWhatsappTopic',publishStatement(topic),ref('AWS::NoValue')),choose('HasEmailReplies',publishStatement(emailTopic),ref('AWS::NoValue'))]}}};
- r.EmailReplySubscription={Type:'AWS::SNS::Subscription',Condition:'HasEmailReplies',DependsOn:['WhatsappQueuePolicy'],Properties:{TopicArn:emailTopic,Protocol:'sqs',Endpoint:get('Queue','Arn'),RawMessageDelivery:false}};
+ const queueUrl=r.Queue?ref('Queue'):ref('ExistingQueue'),queueArn=r.Queue?get('Queue','Arn'):ref('ExistingQueueArn');
+ const publishStatement=source=>({Effect:'Allow',Principal:{Service:'sns.amazonaws.com'},Action:'sqs:SendMessage',Resource:queueArn,Condition:{ArnEquals:{'aws:SourceArn':source}}});
+ r.WhatsappQueuePolicy={Type:'AWS::SQS::QueuePolicy',Condition:'HasMessagingTopic',Properties:{Queues:[queueUrl],PolicyDocument:{Version:'2012-10-17',Statement:[choose('HasWhatsappTopic',publishStatement(topic),ref('AWS::NoValue')),choose('HasEmailReplies',publishStatement(emailTopic),ref('AWS::NoValue'))]}}};
+ r.EmailReplySubscription={Type:'AWS::SNS::Subscription',Condition:'HasEmailReplies',DependsOn:['WhatsappQueuePolicy'],Properties:{TopicArn:emailTopic,Protocol:'sqs',Endpoint:queueArn,RawMessageDelivery:false}};
  r.WhatsappSubscription.Properties.TopicArn=topic;
  r.WhatsappSubscription.DependsOn=['WhatsappQueuePolicy'];
  r.WhatsappRoutingRole={Type:'AWS::IAM::Role',Condition:'CreateWhatsappTopic',Properties:{AssumeRolePolicyDocument:{Version:'2012-10-17',Statement:[{Effect:'Allow',Principal:{Service:'lambda.amazonaws.com'},Action:'sts:AssumeRole'}]},Policies:[{PolicyName:'guardscale-waba-routing',PolicyDocument:{Version:'2012-10-17',Statement:[{Effect:'Allow',Action:['social-messaging:GetLinkedWhatsAppBusinessAccount','social-messaging:PutWhatsAppBusinessAccountEventDestinations'],Resource:wabaArn},{Effect:'Allow',Action:'social-messaging:GetLinkedWhatsAppBusinessAccountPhoneNumber',Resource:sub('arn:${AWS::Partition}:social-messaging:${AWS::Region}:${AWS::AccountId}:phone-number-id/*')}]}}]}};

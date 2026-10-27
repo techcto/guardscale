@@ -63,7 +63,7 @@ jobs:
           bash devops/public-assets.sh
           aws s3 cp dist/agent/ "s3://$GUARDSCALE_CFT_BUCKET/agent/$VERSION/" --recursive --cache-control "public,max-age=31536000,immutable" --no-progress
           aws s3 cp dist/agent/ "s3://$GUARDSCALE_CFT_BUCKET/agent/latest/" --recursive --cache-control no-cache --no-progress
-          for template in guardscale guardscale-existing guardscale-apphub-migration guardscale-apphub-owned-data guardscale-apphub-relaunch; do
+          for template in guardscale guardscale-existing guardscale-apphub-migration guardscale-apphub-owned-data guardscale-apphub-relaunch guardscale-dev-whatsapp-replies; do
             aws s3 cp "devops/cloudformation/$template.yaml" "s3://$GUARDSCALE_CFT_BUCKET/cloudformation/$template-$VERSION.yaml" --content-type text/yaml --cache-control no-cache --no-progress
             aws s3 cp "devops/cloudformation/$template.yaml" "s3://$GUARDSCALE_CFT_BUCKET/cloudformation/$template.yaml" --content-type text/yaml --cache-control no-cache --no-progress
           done

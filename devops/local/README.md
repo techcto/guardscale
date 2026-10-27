@@ -1,5 +1,9 @@
 # Real local PHP/Apache fixture
 
+[Launch official development WhatsApp routing](../../docs/whatsapp-local-testing.md#3-give-each-local-worker-its-own-whatsapp-reply-queue)
+
+<a href="https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=guardscale-dev-whatsapp-YOURNAME&amp;templateURL=https%3A%2F%2Fguardscale.s3.us-east-1.amazonaws.com%2Fcloudformation%2Fguardscale-dev-whatsapp-replies.yaml"><img src="../../assets/launch-dev-whatsapp.svg" width="280" alt="Launch development WhatsApp routing" /></a>
+
 For normal application startup, use [clone, .env and Docker Compose](../../README-TECHNICAL.md#start-the-main-application).
 This guide covers an optional separate disposable lab, not the main stack.
 

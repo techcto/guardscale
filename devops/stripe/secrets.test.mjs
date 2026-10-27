@@ -5,18 +5,19 @@ import {createRequire} from 'node:module';
 const yaml=createRequire(import.meta.url)('js-yaml');
 const tags=['Ref','Sub','GetAtt','Join','If','Equals','Not','And','Or','Select','Split','ImportValue','FindInMap','GetAZs','Condition'];
 const schema=yaml.DEFAULT_SCHEMA.extend(tags.flatMap(tag=>['scalar','sequence'].map(kind=>new yaml.Type('!'+tag,{kind,construct:v=>({[tag==='Ref'||tag==='Condition'?tag:'Fn::'+tag]:tag==='GetAtt'&&typeof v==='string'?v.split('.'):v})}))));
-test('standalone Stripe credential stores are retained and strictly separated',()=>{
- const template=yaml.load(readFileSync(new URL('../cloudformation/guardscale-stripe-secrets.yaml',import.meta.url),'utf8'),{schema});
- assert.equal(Object.keys(template.Resources).length,2);
- for(const [id,mode] of [['LiveCredentials','live'],['SandboxCredentials','sandbox']]){
-  const secret=template.Resources[id];assert.equal(secret.Type,'AWS::SecretsManager::Secret');
-  assert.equal(secret.DeletionPolicy,'RetainExceptOnCreate');assert.equal(secret.UpdateReplacePolicy,'Retain');
-  assert.ok(secret.Properties.Name['Fn::Sub'].endsWith('/'+mode));
-  assert.deepEqual(JSON.parse(secret.Properties.SecretString),{secret_key:'',webhook_secret:''});
- }
-});
 for(const name of ['guardscale.yaml','guardscale-existing.yaml','guardscale-apphub-migration.yaml','guardscale-apphub-owned-data.yaml','guardscale-apphub-relaunch.yaml']){
  const template=yaml.load(readFileSync(new URL('../cloudformation/'+name,import.meta.url),'utf8'),{schema});
+ test(name+': main-stack pair import preserves existing credential values',()=>{
+  for(const [id,mode] of [['LiveCredentials','live'],['SandboxCredentials','sandbox']]){
+   const secret=template.Resources[id];assert.equal(secret.Type,'AWS::SecretsManager::Secret');
+   assert.equal(secret.Condition,'HasStripeOwnedPair');assert.equal(secret.DeletionPolicy,'Retain');assert.equal(secret.UpdateReplacePolicy,'Retain');
+   assert.ok(secret.Properties.Name['Fn::Sub'].endsWith('/'+mode));
+   const value=secret.Properties.SecretString['Fn::If'];assert.equal(value[0],'InitializeStripeOwnedPair');
+   assert.deepEqual(JSON.parse(value[1]),{secret_key:'',webhook_secret:''});
+   assert.deepEqual(value[2],{Ref:'AWS::NoValue'},'import must not create a secret version');
+   assert.equal(secret.Properties.GenerateSecretString,undefined);
+  }
+ });
  test(name+': Stripe credentials are retained, encrypted and never plain task environment values',()=>{
   assert.equal(template.Parameters.StripeMode.Default,'live');
   assert.deepEqual(template.Parameters.StripeMode.AllowedValues,['live','sandbox']);

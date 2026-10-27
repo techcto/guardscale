@@ -12,6 +12,37 @@ verified sender identities are reused; no extra identity or email stack is creat
 
 ## WhatsApp queues for private installs and development
 
+[Launch official local-development WhatsApp routing](../../docs/whatsapp-local-testing.md#3-give-each-local-worker-its-own-whatsapp-reply-queue)
+
+<a href="https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=guardscale-dev-whatsapp-YOURNAME&amp;templateURL=https%3A%2F%2Fguardscale.s3.us-east-1.amazonaws.com%2Fcloudformation%2Fguardscale-dev-whatsapp-replies.yaml"><img src="../../assets/launch-dev-whatsapp.svg" width="280" alt="Launch development WhatsApp routing" /></a>
+
+## Stripe ownership
+
+Stripe credentials belong to the main installation template. Fresh installs can
+create the retained credential secret using the NoEcho key parameters, or use an
+existing ARN. An optional main-stack-owned live/sandbox pair and retained-resource
+import path are described in [Stripe ownership](STRIPE-OWNERSHIP.md).
+Do not launch a separate secrets stack for new installations.
+
+## Fresh-install prerequisites and validation
+
+Choose the template matching your network: `guardscale.yaml` for standalone
+compute/ALB or `guardscale-existing.yaml` for an existing platform. AppHub migration
+variants are for explicitly preserved infrastructure, not first-time standalone installs.
+Provide real VPC/subnets, network egress, image access, strong root/session secrets,
+and an issued certificate for public HTTPS. Billing and messaging are optional.
+
+For managed messaging, the deployment identity needs the full resource lifecycle:
+SES receipt-rule creation/read/update/deletion, SNS topic attributes/policies/tags
+and subscriptions, KMS key creation/policy/rotation/cleanup, Route 53 records,
+Lambda and IAM. Task permissions do not grant these deployment permissions.
+Use an approved deployment role; the template does not self-grant user permissions.
+
+Schema validation and conditional contract tests are necessary but are not proof
+of a successful fresh AWS install. A full private-install test also needs actual
+account inputs, provider registration, deployment and end-to-end delivery checks.
+The repository does not claim that every account's IAM, DNS or sender approval is ready.
+
 Each installation owns its work queue. For a fresh private installation, use
 `DeploymentMode=on-premise`, `NotificationMode=aws`, the registered
 `WhatsappOriginationId`, and `WhatsappBusinessAccountId`. Leave

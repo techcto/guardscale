@@ -43,6 +43,21 @@ are mounted only into the local console, not the monitored PHP server.
 
 ## 3. Give each local worker its own WhatsApp reply queue
 
+The official development template is
+[`guardscale-dev-whatsapp-replies.yaml`](../devops/cloudformation/guardscale-dev-whatsapp-replies.yaml).
+Release publishing provides a stable S3 template URL for the launch button below.
+
+<a href="https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=guardscale-dev-whatsapp-YOURNAME&amp;templateURL=https%3A%2F%2Fguardscale.s3.us-east-1.amazonaws.com%2Fcloudformation%2Fguardscale-dev-whatsapp-replies.yaml"><img src="../assets/launch-dev-whatsapp.svg" width="280" alt="Launch development WhatsApp routing" /></a>
+
+Choose a unique developer stack name and the application's Region. Fill the
+parameters below, review the proposed resources, and acknowledge IAM role creation.
+The button uses Quick Create; for CLI deployment create and review a CREATE change
+set first. This development stack is intentional and temporary, not a second app.
+It creates a queue, DLQ, SNS subscription and optional developer role. It never
+changes the business sender's routing or subscribes localhost to the production queue.
+Delete this developer stack through CloudFormation after testing; stop its local
+worker first. Short queue retention does not replace deleting the stack.
+
 Do not point localhost at the production SQS queue: workers would compete for
 messages. Two developers testing simultaneously also need separate development
 queues. The development CFT subscribes an encrypted, short-retention queue to

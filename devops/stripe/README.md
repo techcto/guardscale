@@ -29,7 +29,21 @@ The local webhook helper redacts keys and checks the signing secret. Local Compo
 
 ## Prepare credentials
 
-The optional `devops/cloudformation/guardscale-stripe-secrets.yaml` provisions separate retained live and sandbox JSON secrets. Deploy it through a reviewed CloudFormation CREATE change set. Both fields start empty, which keeps billing unconfigured until real credentials are supplied; no dummy key is installed.
+Use the **main application CloudFormation stack**, not a separate secrets stack.
+For a fresh install, supply the NoEcho `StripeSecretKey` and `StripeWebhookSecret`
+parameters to create its retained `StripeCredentials` resource, or supply an
+existing `StripeCredentialsSecretArn`. Keep live and sandbox installations separate.
+
+An optional pair can be owned by the main stack using `StripeOwnedPairPrefix`,
+for example `my-installation/stripe`. With `StripeOwnedPairImport=false`, the
+main stack creates `/live` and `/sandbox` secrets with empty JSON fields; it does
+not invent test keys. Populate the real values, select the matching output ARN
+as `StripeCredentialsSecretArn`, and apply a reviewed update. Billing remains
+unconfigured until real keys, price IDs and webhook verification are ready.
+
+For existing secrets formerly owned by a separate stack, follow the
+[retain-and-import migration](../cloudformation/STRIPE-OWNERSHIP.md). Never delete
+the secrets themselves or recreate them under new ARNs to consolidate ownership.
 
 In AWS Secrets Manager, edit the matching secret's key/value fields:
 

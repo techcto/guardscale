@@ -210,13 +210,13 @@
       "Type": "String",
       "Default": "",
       "AllowedPattern": "^$|^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+$",
-      "Description": "Encrypted SES receiving topic from the email-replies stack; blank disables email replies."
+      "Description": "Optional existing encrypted SES receiving topic. Leave blank for main-stack-managed receiving or disabled replies."
     },
     "EmailReplyDomain": {
       "Type": "String",
       "Default": "",
       "AllowedPattern": "^$|^[a-z0-9.-]+\\.[a-z]{2,}$",
-      "Description": "Dedicated receiving subdomain matching the email-replies stack."
+      "Description": "Dedicated receiving subdomain configured by this installation or its existing receiving topic."
     },
     "EmailRepliesEnabled": {
       "Type": "String",
@@ -238,6 +238,21 @@
       "Default": "",
       "AllowedPattern": "^$|^[A-Za-z0-9._-]{1,64}$",
       "Description": "Existing active SES rule set to extend. Blank creates a guarded stack-owned rule set only when no other rule set is active."
+    },
+    "StripeOwnedPairPrefix": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^[a-zA-Z0-9/_-]+$",
+      "Description": "Optional main-stack-owned Stripe live/sandbox pair prefix. Blank keeps the existing single-secret/external-secret flow."
+    },
+    "StripeOwnedPairImport": {
+      "Type": "String",
+      "Default": "false",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Description": "For retained-resource import only. Keep true after import to avoid writing credential values."
     }
   },
   "Conditions": {
@@ -521,6 +536,26 @@
             ""
           ]
         }
+      ]
+    },
+    "HasStripeOwnedPair": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "StripeOwnedPairPrefix"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "InitializeStripeOwnedPair": {
+      "Fn::Equals": [
+        {
+          "Ref": "StripeOwnedPairImport"
+        },
+        "false"
       ]
     }
   },
@@ -3029,6 +3064,68 @@
           ]
         }
       }
+    },
+    "LiveCredentials": {
+      "Type": "AWS::SecretsManager::Secret",
+      "Condition": "HasStripeOwnedPair",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${StripeOwnedPairPrefix}/live"
+        },
+        "Description": "GuardScale live Stripe credentials. Populate both fields before enabling billing.",
+        "SecretString": {
+          "Fn::If": [
+            "InitializeStripeOwnedPair",
+            "{\"secret_key\":\"\",\"webhook_secret\":\"\"}",
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": "guardscale"
+          },
+          {
+            "Key": "BillingEnvironment",
+            "Value": "live"
+          }
+        ]
+      }
+    },
+    "SandboxCredentials": {
+      "Type": "AWS::SecretsManager::Secret",
+      "Condition": "HasStripeOwnedPair",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${StripeOwnedPairPrefix}/sandbox"
+        },
+        "Description": "GuardScale Stripe sandbox credentials. Never use live keys here.",
+        "SecretString": {
+          "Fn::If": [
+            "InitializeStripeOwnedPair",
+            "{\"secret_key\":\"\",\"webhook_secret\":\"\"}",
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": "guardscale"
+          },
+          {
+            "Key": "BillingEnvironment",
+            "Value": "sandbox"
+          }
+        ]
+      }
     }
   },
   "Outputs": {
@@ -3132,6 +3229,18 @@
     "EmailReplyDomain": {
       "Value": {
         "Ref": "EmailReplyDomain"
+      }
+    },
+    "OwnedLiveStripeCredentialsArn": {
+      "Condition": "HasStripeOwnedPair",
+      "Value": {
+        "Ref": "LiveCredentials"
+      }
+    },
+    "OwnedSandboxStripeCredentialsArn": {
+      "Condition": "HasStripeOwnedPair",
+      "Value": {
+        "Ref": "SandboxCredentials"
       }
     }
   }
