@@ -1,0 +1,19 @@
+[Unit]
+Description=Check and install a verified GuardScale agent release
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/guardscale/enrollment.token
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/guardscale update --if-running
+TimeoutStartSec=5min
+StateDirectory=guardscale-updater
+StateDirectoryMode=0750
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/usr/local/bin /var/lib/guardscale-updater
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=256M

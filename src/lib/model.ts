@@ -1,9 +1,10 @@
+import type {HostMetrics} from './host-metrics';
 export type OrgType='personal'|'business';
 export type Organization={id:string;name:string;slug:string;ownerId:string;orgType:OrgType;contactEmail?:string;contactPhone?:string;enrollmentToken:string;createdAt:string};
 export type MembershipRole='admin'|'operator'|'viewer';
 export type OrgMembership={id:string;orgId:string;userId:string;role:MembershipRole;status:'active'|'disabled';invitedByUserId?:string;createdAt:string;updatedAt:string};
 export type NodeStatus='pending'|'healthy'|'stale'|'offline';
-export type Node={tenantId:string;serverId:string;agentId:string;displayName:string;platform?:string;websiteUrls?:string[];discoveredHosts?:string[];tags:string[];status:NodeStatus;createdAt:string;lastHeartbeat:string;deletedAt?:string};
+export type Node={tenantId:string;serverId:string;agentId:string;displayName:string;platform?:string;agentVersion?:string;hostMetrics?:HostMetrics;manualDisplayName?:string;manualTags?:string[];agentDisplayName?:string;agentTags?:string[];websiteUrls?:string[];discoveredHosts?:string[];tags:string[];status:NodeStatus;createdAt:string;lastHeartbeat:string;deletedAt?:string};
 export type IncidentRecord={tenantId:string;serverId:string;agentId:string;incidentId:string;state:string;startedAt:string;updatedAt:string;payload:unknown};
 export type GuardScaleEvent={id?:string;tenantId:string;serverId:string;agentId:string;type:string;at:string;metadata?:Record<string,string>};
 // Internal audit partition, not a fabricated enrolled server.

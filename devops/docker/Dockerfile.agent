@@ -1,7 +1,8 @@
 FROM golang:1.23-alpine AS build
 WORKDIR /src
 COPY . .
-RUN CGO_ENABLED=0 go test ./... && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /guardscale ./cmd/guardscale
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go test ./... && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/techcto/guardscale/internal/buildinfo.Version=$VERSION" -o /guardscale ./cmd/guardscale
 FROM scratch
 COPY --from=build /guardscale /guardscale
 ENTRYPOINT ["/guardscale"]

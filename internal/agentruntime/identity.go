@@ -53,7 +53,7 @@ func readEC2Identity(ctx context.Context, client *http.Client, endpoint, serverI
 	}
 	name := ""
 	var tags []string
-	for _, key := range []string{"Name", "Environment", "Application", "Project", "Service"} {
+	for _, key := range []string{"Name", "Environment", "Application", "Project", "Service", "Stack", "aws:cloudformation:stack-name"} {
 		value := request("GET", "/latest/meta-data/tags/instance/"+key, token)
 		if value == "" || len(value) > 256 || strings.ContainsAny(value, "\r\n\x00") {
 			continue

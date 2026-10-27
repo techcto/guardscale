@@ -6,6 +6,7 @@ control_plane:
   agent_id: agent-example-1
   token_file: /etc/guardscale/enrollment.token
   heartbeat_seconds: 30
+  metrics_seconds: 5
 logs:
   apache_access: /var/log/httpd/access_log
   apache_error: /var/log/httpd/error_log

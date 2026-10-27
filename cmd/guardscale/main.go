@@ -23,6 +23,10 @@ func main() {
 		os.Exit(2)
 	}
 	switch os.Args[1] {
+	case "version":
+		versionCmd(os.Args[2:])
+	case "update":
+		updateCmd(os.Args[2:])
 	case "test-config":
 		withConfig(os.Args[2:], func(c config.Config) { fmt.Println("configuration valid") })
 	case "health":
@@ -45,7 +49,7 @@ func main() {
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "guardscale run|status|health|test-config|incidents|diagnostics|replay <apache-log>")
+	fmt.Fprintln(os.Stderr, "guardscale version|update|run|status|health|test-config|incidents|diagnostics|replay <apache-log>")
 }
 func withConfig(a []string, fn func(config.Config)) {
 	f := flag.NewFlagSet("config", flag.ExitOnError)

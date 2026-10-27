@@ -8,7 +8,7 @@ export default function ServerWebsites({serverId,urls,hosts}:{serverId:string;ur
  async function save(){
   setBusy(true);setError('');
   try{
-   const r=await fetch(`/api/v1/nodes/${encodeURIComponent(serverId)}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({websiteUrls:value.split('\n').map(v=>v.trim()).filter(Boolean)})});
+   const r=await fetch(`/api/v1/nodes/${encodeURIComponent(serverId)}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({websiteUrls:value.split('\n').map(v=>v.trim()).filter(Boolean).map(v=>v.includes('://')?v:'https://'+v)})});
    const data=await r.json();if(!r.ok)throw Error(data.error??'Unable to save websites');
    setSaved(data.websiteUrls);setEditing(false);
   }catch(e){setError(e instanceof Error?e.message:'Unable to save websites');}finally{setBusy(false);}

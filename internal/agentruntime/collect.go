@@ -6,6 +6,7 @@ import (
 	"github.com/techcto/guardscale/internal/agentclient"
 	"github.com/techcto/guardscale/internal/apache"
 	"github.com/techcto/guardscale/internal/config"
+	"github.com/techcto/guardscale/internal/hostmetrics"
 	"github.com/techcto/guardscale/internal/logtail"
 	"github.com/techcto/guardscale/internal/uploader"
 	"log/slog"
@@ -132,6 +133,17 @@ func collect(ctx context.Context, c config.Config) error {
 	if err := client.Heartbeat(ctx); err != nil {
 		slog.Warn("heartbeat failed", "error", err)
 	}
+	metricsSampler := &hostmetrics.Sampler{}
+	var metricsTick <-chan time.Time
+	if c.ControlPlane.MetricsSeconds > 0 {
+		if sample, err := metricsSampler.Read(); err == nil {
+			sample.IntervalSeconds = c.ControlPlane.MetricsSeconds
+			_ = client.Metrics(ctx, sample)
+		}
+		timer := time.NewTicker(time.Duration(c.ControlPlane.MetricsSeconds) * time.Second)
+		defer timer.Stop()
+		metricsTick = timer.C
+	}
 	heartbeatSeconds := c.ControlPlane.HeartbeatSeconds
 	if heartbeatSeconds < 1 {
 		heartbeatSeconds = 30
@@ -178,6 +190,15 @@ func collect(ctx context.Context, c config.Config) error {
 			}
 			response.evaluate(ctx)
 			response.poll(ctx)
+		case <-metricsTick:
+			if sample, err := metricsSampler.Read(); err == nil {
+				sample.IntervalSeconds = c.ControlPlane.MetricsSeconds
+				uploadCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+				if err = client.Metrics(uploadCtx, sample); err != nil {
+					slog.Debug("host metrics upload deferred")
+				}
+				cancel()
+			}
 		}
 	}
 }

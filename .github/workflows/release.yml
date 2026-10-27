@@ -24,6 +24,7 @@ jobs:
           version="$INPUT_VERSION"
           if [ -z "$version" ]; then version="${GITHUB_REF_NAME#v}"; fi
           case "$version" in ''|*[!0-9A-Za-z.-]*) exit 1;; esac
+          [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo 'Use a stable x.y.z release version'; exit 1; }
           echo "value=$version" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -41,13 +42,16 @@ jobs:
         run: |
           mkdir -p dist/agent
           for arch in amd64 arm64; do
-            GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "dist/agent/guardscale-linux-$arch" ./cmd/guardscale
+            GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/techcto/guardscale/internal/buildinfo.Version=$VERSION" -o "dist/agent/guardscale-linux-$arch" ./cmd/guardscale
           done
           cp configs/config.example.yaml dist/agent/config.example.yaml
           cp systemd/guardscale.service dist/agent/guardscale.service
           cp devops/install-agent.sh dist/agent/install-agent.sh
+          cp devops/update-agent.sh dist/agent/update-agent.sh
+          cp systemd/guardscale-update.service systemd/guardscale-update.timer dist/agent/
+          printf '{"version":"%s"}\n' "$VERSION" > dist/agent/release.json
           cd dist/agent
-          sha256sum guardscale-linux-* config.example.yaml guardscale.service install-agent.sh > SHA256SUMS
+          sha256sum guardscale-linux-* config.example.yaml guardscale.service install-agent.sh update-agent.sh guardscale-update.service guardscale-update.timer release.json > SHA256SUMS
       - name: Build and publish service images
         env: {VERSION: '${{ steps.version.outputs.value }}'}
         run: |
@@ -55,14 +59,16 @@ jobs:
             repository="${{ vars.GUARDSCALE_REPOSITORY_PREFIX || 'solodev/guardian' }}-$service"
             aws ecr describe-repositories --repository-names "$repository" >/dev/null || { echo "Repository $repository must be provisioned through CloudFormation before release" >&2; exit 1; }
             image="$MP_AWS_ECR/$repository:$VERSION"
-            docker buildx build --platform linux/amd64 --provenance=false --sbom=false --push -f "devops/docker/Dockerfile.$service" -t "$image" .
+            docker buildx build --platform linux/amd64 --build-arg VERSION="$VERSION" --provenance=false --sbom=false --push -f "devops/docker/Dockerfile.$service" -t "$image" .
           done
       - name: Publish agent and CloudFormation artifacts
         env: {VERSION: '${{ steps.version.outputs.value }}'}
         run: |
           bash devops/public-assets.sh
           aws s3 cp dist/agent/ "s3://$GUARDSCALE_CFT_BUCKET/agent/$VERSION/" --recursive --cache-control "public,max-age=31536000,immutable" --no-progress
-          aws s3 cp dist/agent/ "s3://$GUARDSCALE_CFT_BUCKET/agent/latest/" --recursive --cache-control no-cache --no-progress
+          aws s3 cp dist/agent/ "s3://$GUARDSCALE_CFT_BUCKET/agent/latest/" --recursive --exclude release.json --cache-control no-cache --no-progress
+          # Publish the pointer only after all immutable artifacts are available.
+          aws s3 cp dist/agent/release.json "s3://$GUARDSCALE_CFT_BUCKET/agent/latest/release.json" --content-type application/json --cache-control no-cache --no-progress
           for template in guardscale guardscale-existing guardscale-apphub-migration guardscale-apphub-owned-data guardscale-apphub-relaunch guardscale-dev-whatsapp-replies; do
             aws s3 cp "devops/cloudformation/$template.yaml" "s3://$GUARDSCALE_CFT_BUCKET/cloudformation/$template-$VERSION.yaml" --content-type text/yaml --cache-control no-cache --no-progress
             aws s3 cp "devops/cloudformation/$template.yaml" "s3://$GUARDSCALE_CFT_BUCKET/cloudformation/$template.yaml" --content-type text/yaml --cache-control no-cache --no-progress

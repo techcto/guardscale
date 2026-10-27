@@ -4,6 +4,8 @@ import{defaultSettings}from'./model';
 import {hasPaidEntitlement} from './subscription-entitlement';
 import pricing from './billing-pricing.json';
 import {uptimeStore,purgeUptimeHistory} from './uptime-store';
+import {effectiveServerEdits,type ServerEdits} from './server-metadata';
+import type {HostMetrics} from './host-metrics';
 type State={orgs:Map<string,Organization>;singletonOrgId?:string;memberships:Map<string,OrgMembership>;nodes:Map<string,Node>;incidents:Map<string,IncidentRecord>;events:Map<string,GuardScaleEvent[]>;users:Map<string,GuardScaleUser>;passwords:Map<string,string>;emails?:Map<string,string>;subscriptions:Map<string,Subscription>;settings:Map<string,Settings>;usage:Map<string,UsageHour>;claims:Set<string>};
 const g=globalThis as typeof globalThis&{guardscaleState?:State};
 export const state:State=g.guardscaleState??={orgs:new Map(),memberships:new Map(),nodes:new Map(),incidents:new Map(),events:new Map(),users:new Map(),passwords:new Map(),subscriptions:new Map(),settings:new Map(),usage:new Map(),claims:new Set()};
@@ -53,6 +55,8 @@ export const memoryStore={
   async nodes(tenant:string){return[...state.nodes.values()].filter(x=>x.tenantId===tenant&&!x.deletedAt)},
   async nodeRecord(tenant:string,serverId:string){return state.nodes.get(key(tenant,serverId))??null},
   async setNodeWebsites(tenant:string,serverId:string,websiteUrls:string[]){const node=state.nodes.get(key(tenant,serverId));if(!node||node.deletedAt)throw Error('Server removed');state.nodes.set(key(tenant,serverId),{...node,websiteUrls})},
+  async setNodeMetadata(tenant:string,id:string,changes:ServerEdits){const node=await memoryStore.node(tenant,id);if(!node)throw Error('Server removed');state.nodes.set(key(tenant,id),{...node,...effectiveServerEdits(node,changes)})},
+  async setNodeMetrics(tenant:string,id:string,metrics:HostMetrics,agentId:string){const node=await memoryStore.node(tenant,id);if(!node||node.agentId!==agentId)throw Error('Server removed');state.nodes.set(key(tenant,id),{...node,hostMetrics:metrics})},
   async node(tenant:string,serverId:string){const node=state.nodes.get(key(tenant,serverId));return node&&!node.deletedAt?node:null},
   async retireNode(tenant:string,serverId:string){const node=state.nodes.get(key(tenant,serverId));if(!node)return false;state.nodes.set(key(tenant,serverId),{...node,deletedAt:new Date().toISOString(),status:'offline'});return true},
   async purgeCollectedData(tenant:string){await purgeUptimeHistory(tenant);let events=0,incidents=0;for(const [k,list]of state.events){if(k.startsWith(tenant+'\0')){events+=list.length;state.events.delete(k)}}for(const [k,v]of state.incidents){if(v.tenantId===tenant){incidents++;state.incidents.delete(k)}}return{events,incidents}},

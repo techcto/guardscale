@@ -27,6 +27,7 @@ type Server struct{ ID, Tenant string }
 type ControlPlane struct {
 	Endpoint, AgentID, TokenFile string
 	HeartbeatSeconds             int
+	MetricsSeconds               int
 }
 type Logs struct{ ApacheAccess, ApacheError, PHPError, PHPSlow string }
 type Proxy struct{ TrustedCIDRs []string }
@@ -54,7 +55,7 @@ type Storage struct {
 
 func Default() Config {
 	return Config{
-		ControlPlane: ControlPlane{Endpoint: "https://guardscale.org", TokenFile: "/etc/guardscale/enrollment.token", HeartbeatSeconds: 30},
+		ControlPlane: ControlPlane{Endpoint: "https://guardscale.org", TokenFile: "/etc/guardscale/enrollment.token", HeartbeatSeconds: 30, MetricsSeconds: 5},
 		Detection:    Detection{Warning504Percent: 2, Critical504Percent: 10, Emergency504Percent: 30, TrafficMultiplierWarning: 5, ExpensiveQueryParameters: []string{"table_filter"}},
 		Protection:   Protection{DryRun: true, DefaultTTLSeconds: 300},
 		Storage:      Storage{StateDir: "./guardscale-state", MaxEvidenceLines: 500, MaxIncidents: 20},
@@ -166,6 +167,10 @@ func setScalar(c *Config, sec, key, v string) error {
 		x, e := i()
 		c.ControlPlane.HeartbeatSeconds = x
 		return e
+	case "control_plane.metrics_seconds":
+		x, e := i()
+		c.ControlPlane.MetricsSeconds = x
+		return e
 	case "logs.apache_access":
 		c.Logs.ApacheAccess = v
 	case "logs.apache_error":
@@ -219,6 +224,9 @@ func setScalar(c *Config, sec, key, v string) error {
 }
 func unquote(v string) string { return strings.Trim(strings.TrimSpace(v), "\"'") }
 func (c Config) Validate() error {
+	if c.ControlPlane.MetricsSeconds != 0 && (c.ControlPlane.MetricsSeconds < 5 || c.ControlPlane.MetricsSeconds > 300) {
+		return fmt.Errorf("control_plane.metrics_seconds must be 0 (disabled) or 5–300")
+	}
 	if c.Server.ID == "" || c.Server.Tenant == "" {
 		return fmt.Errorf("server.id and server.tenant are required")
 	}

@@ -1,52 +1,36 @@
 'use client';
-import{useEffect,useState}from'react';import Link from'next/link';import {useRouter,useSearchParams} from'next/navigation';import type{Node,Settings}from'@/lib/model';import AddNode from'./add-node';import ServerSites from './[id]/server-sites';import {serverDisplayName} from '@/lib/server-sites';
-
-function statusLabel(n:Node,staleAfterMs:number){
-  if(n.status!=='healthy')return n.status;
-  const staleMs=Date.now()-new Date(n.lastHeartbeat).getTime();
-  return staleMs>staleAfterMs?'stale':'healthy';
-}
-
-export default function NodesConsole(){
-  const[nodes,setNodes]=useState<Node[]>([]),[loaded,setLoaded]=useState(false);
-  const[settings,setSettings]=useState<Settings|null>(null);
-  const[groupBy,setGroupBy]=useState('all');
-  const tagKeys=[...new Set(nodes.flatMap(n=>(n.tags??[]).filter(t=>t.includes('=')).map(t=>t.split('=')[0])))].sort();
-  const params=useSearchParams(),statusFilter=params.get('status'),provider=params.get('provider');
-  function fetchNodes(){return fetch('/api/v1/nodes').then(r=>r.ok?r.json():[])}
-  function load(){return fetchNodes().then(data=>{setNodes(data);setLoaded(true)})}
-  useEffect(()=>{let active=true;fetch('/api/v1/settings').then(r=>r.ok?r.json():null).then(data=>{if(active&&data)setSettings(data)});return()=>{active=false}},[]);
-  useEffect(()=>{let active=true;function tick(){fetchNodes().then(data=>{if(active){setNodes(data);setLoaded(true)}})}tick();const t=setInterval(tick,15000);return()=>{active=false;clearInterval(t)}},[]);
-  const staleAfterMs=(settings?.detection.heartbeatStaleSeconds??180)*1000;
-  const visible=statusFilter?nodes.filter(n=>statusLabel(n,staleAfterMs)===statusFilter):nodes;
-  const byTag=new Map<string,Node[]>();
-  const standalone:Node[]=[];
-  for(const n of visible){const tags=[...new Set(n.tags??[])].filter(tag=>groupBy==='all'||tag.startsWith(groupBy+'='));if(tags.length){const tag=tags.sort().join(' · ');const list=byTag.get(tag)??[];list.push(n);byTag.set(tag,list)}else standalone.push(n)}
-  return <main>
-    <section className="hero compact-hero">
-      <div><div className="eyebrow">Fleet</div><h1>Servers</h1><p className="muted page-intro">Install a lightweight GuardScale agent on each server. Agents connect outbound to GuardScale; no inbound port is required.</p></div>
-      <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:12}}>
-        <span className="status neutral">{visible.length} of {nodes.length} server{nodes.length===1?'':'s'}{statusFilter?` (${statusFilter})`:''}</span>
-        <AddNode nodeCount={nodes.length} onAdded={load} initialProvider={provider}/>
-        {statusFilter&&<Link href="/servers" className="muted small">Clear filter</Link>}
-      </div>
-    </section>
-    <label className="field" style={{maxWidth:320,marginBottom:24}}>Group by<select value={groupBy} onChange={e=>setGroupBy(e.target.value)}><option value="all">All tags</option>{tagKeys.map(key=><option key={key} value={key}>{key}</option>)}</select></label>
-    {[...byTag.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([tag,items])=><section className="g-card" key={tag} style={{marginBottom:16}}>
-      <div className="section-heading"><div><h2>{tag}</h2><p className="muted">{items.length} server{items.length===1?'':'s'} tagged &quot;{tag}&quot;</p></div></div>
-      <NodeTable nodes={items} staleAfterMs={staleAfterMs}/>
-    </section>)}
-    <section className="g-card">
-      <div className="section-heading"><div><h2>{byTag.size?(groupBy==='all'?'Untagged servers':`No ${groupBy} tag`):'Connected servers'}</h2><p className="muted">A server appears after its first authenticated heartbeat. EC2 tags appear when the agent can read instance tags from IMDSv2.</p></div><span className="status neutral">{standalone.length} enrolled</span></div>
-      <NodeTable nodes={standalone} staleAfterMs={staleAfterMs} empty={loaded}/>
-    </section>
-  </main>;
-}
-
-function NodeTable({nodes,staleAfterMs,empty}:{nodes:Node[];staleAfterMs:number;empty?:boolean}){
-  const router=useRouter();
-  return <div className="table-wrap"><table><thead><tr><th>Server</th><th>Websites</th><th>Tags</th><th>Health</th><th>Last heartbeat</th></tr></thead><tbody>
-    {nodes.length?nodes.map(n=><tr key={n.serverId} className="row-link" onClick={()=>router.push(`/servers/${n.serverId}`)}><td><Link href={`/servers/${n.serverId}`}><strong>{serverDisplayName(n)}</strong></Link><br/><span className="muted">{n.platform??'unknown platform'}{serverDisplayName(n)!==n.serverId?' · '+n.serverId:''}</span></td><td onClick={e=>e.stopPropagation()}><ServerSites urls={n.websiteUrls??[]} hosts={n.discoveredHosts??[]}/>{!n.websiteUrls?.length&&!n.discoveredHosts?.length&&<span className="muted">Not reported</span>}</td><td>{(n.tags??[]).map(t=><span className="tag-pill" key={t}>{t}</span>)}</td><td><span className={`status${statusLabel(n,staleAfterMs)==='healthy'?'':' neutral'}`}>{statusLabel(n,staleAfterMs)}</span></td><td>{new Date(n.lastHeartbeat).toLocaleString()}</td></tr>)
-    :empty&&<tr><td colSpan={5} className="empty-state"><strong>No agents connected yet.</strong><span>Choose Connect server to generate an installation guide.</span></td></tr>}
-  </tbody></table></div>;
+import {useCallback,useEffect,useState} from 'react';
+import Link from 'next/link';
+import {useSearchParams} from 'next/navigation';
+import type {Node,Settings} from '@/lib/model';
+import {serverGroup} from '@/lib/server-metadata';
+import {serverDisplayName,validateDiscoveredHosts} from '@/lib/server-sites';
+import AddNode from './add-node';
+import ServerSites from './[id]/server-sites';
+function statusLabel(n:Node,staleAfterMs:number){return n.status==='healthy'&&Date.now()-Date.parse(n.lastHeartbeat)>staleAfterMs?'stale':n.status;}
+function domains(n:Node){return [...new Set([...(n.websiteUrls??[]).flatMap(v=>{try{return[new URL(v).hostname]}catch{return[]}}),...validateDiscoveredHosts(n.discoveredHosts)])];}
+export default function NodesConsole({canManage=false}:{canManage?:boolean}){
+ const[nodes,setNodes]=useState<Node[]>([]),[loaded,setLoaded]=useState(false),[settings,setSettings]=useState<Settings|null>(null);
+ const[filter,setFilter]=useState('all'),[selected,setSelected]=useState<Set<string>>(new Set()),[groupName,setGroupName]=useState(''),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('');
+ const params=useSearchParams(),statusFilter=params.get('status'),provider=params.get('provider');
+ const load=useCallback(async()=>{try{const r=await fetch('/api/v1/nodes');if(!r.ok)throw Error('Unable to load servers');setNodes(await r.json());setLoaded(true);}catch(e){setError(e instanceof Error?e.message:'Unable to load servers');}},[]);
+ useEffect(()=>{const first=setTimeout(()=>void load(),0),timer=setInterval(()=>void load(),15000);return()=>{clearTimeout(first);clearInterval(timer)}},[load]);
+ useEffect(()=>{let active=true;fetch('/api/v1/settings').then(r=>r.ok?r.json():null).then(v=>{if(active)setSettings(v)});return()=>{active=false}},[]);
+ const staleAfterMs=(settings?.detection.heartbeatStaleSeconds??180)*1000;
+ const groups=[...new Set(nodes.map(serverGroup).filter(Boolean))].sort(),allDomains=[...new Set(nodes.flatMap(domains))].sort();
+ const visible=nodes.filter(n=>(!statusFilter||statusLabel(n,staleAfterMs)===statusFilter)&&(filter==='all'||filter==='unassigned'&&!serverGroup(n)||filter.startsWith('group:')&&serverGroup(n)===filter.slice(6)||filter.startsWith('domain:')&&domains(n).includes(filter.slice(7))));
+ const selectedNodes=nodes.filter(n=>selected.has(n.serverId));
+ function toggle(id:string,checked:boolean){setSelected(current=>{const next=new Set(current);if(checked)next.add(id);else next.delete(id);return next});setMessage('');}
+ async function assignGroup(remove=false){
+  const name=remove?'':groupName.trim();if(!remove&&(!name||name.length>80||/[\r\n\x00]/.test(name))){setError('Enter a group name of 1–80 characters');return;}
+  if(selectedNodes.length>100){setError('Choose at most 100 servers at a time');return;}
+  setBusy(true);setMessage('');setError('');const failed:string[]=[];
+  for(const n of selectedNodes){const tags=(n.manualTags??[]).filter(t=>!t.startsWith('Group='));if(name)tags.push('Group='+name);try{const r=await fetch('/api/v1/nodes/'+encodeURIComponent(n.serverId),{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({manualTags:tags})});if(!r.ok)failed.push(n.serverId);}catch{failed.push(n.serverId);}}
+  await load();setSelected(new Set(failed));setBusy(false);setGroupName('');setMessage(`${selectedNodes.length-failed.length} server(s) ${remove?'ungrouped':'assigned to '+name}.`);if(failed.length)setError(`${failed.length} server(s) could not be updated. They remain selected so you can retry.`);
+ }
+ return <main className="server-fleet"><section className="hero compact-hero"><div><div className="eyebrow">Fleet</div><h1>Servers</h1><p className="muted page-intro">Monitor your fleet and organize servers by group, discovered stack or website domain.</p></div><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:12}}><span className="status neutral">{visible.length} of {nodes.length} servers</span>{canManage&&<AddNode nodeCount={nodes.length} onAdded={()=>void load()} initialProvider={provider}/>} {statusFilter&&<Link href="/servers">Clear status filter</Link>}</div></section>
+ {error&&<p role="alert" className="form-error">{error}</p>}{message&&<p role="status">{message}</p>}
+ <section className="g-card"><div className="section-heading" style={{alignItems:'flex-start',flexWrap:'wrap',gap:20}}><div><h2>{selected.size?`${selected.size} selected`:'Connected servers'}</h2><p className="muted small">Select servers to assign a shared group. Each server appears once.</p></div><label className="field server-group-picker">Group / stack / domain<select aria-label="Server group or domain" value={filter} onChange={e=>{setFilter(e.target.value);setSelected(new Set());}} disabled={busy}><option value="all">All servers</option><option value="unassigned">Ungrouped servers</option><optgroup label="Groups and stacks">{groups.map(g=><option key={g} value={'group:'+g}>{g}</option>)}</optgroup><optgroup label="Website domains">{allDomains.map(d=><option key={d} value={'domain:'+d}>{d}</option>)}</optgroup></select></label></div>
+ {canManage&&selected.size>0&&<div role="group" aria-label="Group selected servers" style={{display:'flex',gap:12,alignItems:'end',flexWrap:'wrap',marginBottom:20}}><label className="field server-group-input">Group selected servers<input aria-label="Group name" list="server-group-names" placeholder="Choose or create a group" value={groupName} maxLength={80} onChange={e=>setGroupName(e.target.value)} disabled={busy}/><datalist id="server-group-names">{groups.map(g=><option key={g} value={g}/>)}</datalist></label><button className="button primary" disabled={busy||!groupName.trim()} onClick={()=>void assignGroup()}>{busy?'Saving…':'Apply group'}</button><button className="button" disabled={busy} onClick={()=>void assignGroup(true)}>Ungroup</button><button className="button" disabled={busy} onClick={()=>setSelected(new Set())}>Clear selection</button></div>}
+ <div className="table-wrap"><table><thead><tr>{canManage&&<th><input type="checkbox" aria-label="Select all visible servers" checked={visible.length>0&&visible.every(n=>selected.has(n.serverId))} disabled={busy} onChange={e=>setSelected(e.target.checked?new Set(visible.map(n=>n.serverId)):new Set())}/></th>}<th>Server</th><th>Group / tags</th><th>Websites</th><th>Health</th><th>Last heartbeat</th></tr></thead><tbody>{visible.map(n=><tr key={n.serverId}>{canManage&&<td><input type="checkbox" aria-label={'Select '+serverDisplayName(n)} checked={selected.has(n.serverId)} disabled={busy} onChange={e=>toggle(n.serverId,e.target.checked)}/></td>}<td><Link href={'/servers/'+encodeURIComponent(n.serverId)}><strong>{serverDisplayName(n)}</strong></Link><div className="muted small">{n.platform??'unknown platform'}{n.agentVersion?' · '+n.agentVersion:''}</div>{serverDisplayName(n)!==n.serverId&&<div className="muted small">{n.serverId}</div>}</td><td>{serverGroup(n)&&<div><strong>{serverGroup(n)}</strong></div>}{(n.tags??[]).map(t=><span className="tag-pill" key={t}>{t}</span>)}</td><td><ServerSites urls={n.websiteUrls??[]} hosts={n.discoveredHosts??[]}/>{!n.websiteUrls?.length&&!n.discoveredHosts?.length&&<span className="muted small">Not reported</span>}</td><td><span className={'status'+(statusLabel(n,staleAfterMs)==='healthy'?'':' neutral')}>{statusLabel(n,staleAfterMs)}</span></td><td>{new Date(n.lastHeartbeat).toLocaleString()}</td></tr>)}{loaded&&!visible.length&&<tr><td colSpan={canManage?6:5} className="empty-state"><strong>{nodes.length?'No servers match this view.':'No agents connected yet.'}</strong></td></tr>}</tbody></table></div></section></main>;
 }

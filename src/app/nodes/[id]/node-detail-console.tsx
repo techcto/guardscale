@@ -4,9 +4,11 @@ import IncidentGroups from '../../incidents/incident-groups';
 import ServerSites from './server-sites';
 import ServerWebsites from './server-websites';
 import {serverDisplayName} from '@/lib/server-sites';
+import HostVitals from './host-vitals';
+import ServerIdentityEditor from './server-identity-editor';
 import{useEffect,useState}from'react';import {useLogViewport} from '../../use-log-viewport';import Link from'next/link';import {useRouter} from'next/navigation';import type{GuardScaleEvent,IncidentRecord,Node}from'@/lib/model';
 
-type Detail={node:Node;events:GuardScaleEvent[];incidents:IncidentRecord[]};
+type Detail={node:Node;events:GuardScaleEvent[];incidents:IncidentRecord[];canManage?:boolean};
 
 export default function NodeDetailConsole({serverId,localFixture=false}:{serverId:string;localFixture?:boolean}){
   const router=useRouter();
@@ -29,8 +31,8 @@ export default function NodeDetailConsole({serverId,localFixture=false}:{serverI
   const {node,events,incidents}=detail;
   return <main className="server-workspace">
     <section className="hero compact-hero server-heading">
-      <div><div className="eyebrow">Server</div><h1>{serverDisplayName(node)}</h1><p className="muted page-intro">{node.platform??'unknown platform'} · {node.serverId} · agent {node.agentId}<ServerSites urls={node.websiteUrls??[]} hosts={localFixture?[]:node.discoveredHosts??[]}/></p>{(node.tags??[]).map(t=><span className="tag-pill" key={t}>{t}</span>)}</div>
-      <span className={`status${node.status==='healthy'?'':' neutral'}`}>{node.status} · last heartbeat {new Date(node.lastHeartbeat).toLocaleString()}</span>
+      <div><div className="eyebrow">Server</div><h1>{serverDisplayName(node)}</h1><p className="muted page-intro">{node.platform??'unknown platform'} · {node.serverId} · agent {node.agentId}{node.agentVersion?' · version '+node.agentVersion:''}<ServerSites urls={node.websiteUrls??[]} hosts={localFixture?[]:node.discoveredHosts??[]}/></p>{(node.tags??[]).map(t=><span className="tag-pill" key={t}>{t}</span>)}</div>
+      <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:12}}><HostVitals metrics={node.hostMetrics}/><span className={`status${node.status==='healthy'?'':' neutral'}`}>{node.status} · last heartbeat {new Date(node.lastHeartbeat).toLocaleString()}</span></div>
     </section>
     <div className="server-split">
     <section className="g-card server-log-panel" aria-label="Live server logs">
@@ -43,6 +45,7 @@ export default function NodeDetailConsole({serverId,localFixture=false}:{serverI
       </div>
     </section>
     <aside className="server-panels">
+    {detail.canManage&&<ServerIdentityEditor node={node}/>}
     <ServerWebsites serverId={serverId} urls={node.websiteUrls??[]} hosts={localFixture?[]:node.discoveredHosts??[]}/>
     <section className="g-card" aria-label="Protection activity"><h2>Protection activity</h2><p className="muted small">Agent results and operator responses for this server.</p>{[...events].filter(e=>e.type.startsWith('protection.')||e.type==='response.received').sort((a,b)=>b.at.localeCompare(a.at)).slice(0,8).map((e,i)=><div className="server-response-entry" key={e.id??i}><strong>{e.type.replaceAll('.',' ')}</strong><div className="muted small">{new Date(e.at).toLocaleString()}{e.metadata?.option?` · ${e.metadata.option} via ${e.metadata.channel??'console'}`:''}</div>{e.metadata?.expires_at&&<div className="small">Expires {new Date(e.metadata.expires_at).toLocaleString()}</div>}{e.metadata?.incident_id&&<Link href={`/incidents/${e.metadata.incident_id}`}>Review incident →</Link>}</div>)}</section>
     <section className="g-card" style={{marginBottom:16}}>

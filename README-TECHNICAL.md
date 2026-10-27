@@ -4,6 +4,8 @@
 
 [Uptime monitoring, charts and outage alerts](docs/uptime-monitoring.md) · [Server identity and multiple-source tests](docs/production-testing.md)
 
+[Host agent versions and self-update](docs/agent-updates.md) · [Server groups, domains and live CPU/memory](docs/server-management.md)
+
 ## Runtime and reproducibility
 
 The console and HTTP API use Next.js, React and TypeScript on Node.js 26. The

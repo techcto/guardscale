@@ -6,6 +6,8 @@ import{defaultSettings,whatsappSetupAuditId}from'./model';
 import {hasPaidEntitlement} from './subscription-entitlement';
 import pricing from './billing-pricing.json';
 import {purgeUptimeHistory} from './uptime-store';
+import {effectiveServerEdits,type ServerEdits} from './server-metadata';
+import type {HostMetrics} from './host-metrics';
 
 const tableName=process.env.GUARDSCALE_TABLE??'guardscale-local';
 const client=DynamoDBDocumentClient.from(new DynamoDBClient({endpoint:process.env.GUARDSCALE_DYNAMODB_ENDPOINT}),{marshallOptions:{removeUndefinedValues:true}});
@@ -142,6 +144,14 @@ export const dynamoStore={
   },
   async setNodeWebsites(tenant:string,serverId:string,websiteUrls:string[]){
     await ensureTable();await client.send(new UpdateCommand({TableName:tableName,Key:{pk:`ORG#${tenant}`,sk:`NODE#${serverId}`},UpdateExpression:'SET websiteUrls=:urls',ExpressionAttributeValues:{':urls':websiteUrls},ConditionExpression:'attribute_exists(pk) AND attribute_not_exists(deletedAt)'}));
+  },
+  async setNodeMetadata(tenant:string,id:string,changes:ServerEdits){
+   const node=await dynamoStore.node(tenant,id);if(!node)throw Error('Server removed');
+   const values=Object.entries(effectiveServerEdits(node,changes));
+   await client.send(new UpdateCommand({TableName:tableName,Key:{pk:`ORG#${tenant}`,sk:`NODE#${id}`},UpdateExpression:'SET '+values.map((_,i)=>`#f${i}=:v${i}`).join(', '),ExpressionAttributeNames:Object.fromEntries(values.map(([k],i)=>[`#f${i}`,k])),ExpressionAttributeValues:Object.fromEntries(values.map(([,v],i)=>[`:v${i}`,v])),ConditionExpression:'attribute_exists(pk) AND attribute_not_exists(deletedAt)'}));
+  },
+  async setNodeMetrics(tenant:string,id:string,metrics:HostMetrics,agentId:string){
+   await client.send(new UpdateCommand({TableName:tableName,Key:{pk:`ORG#${tenant}`,sk:`NODE#${id}`},UpdateExpression:'SET hostMetrics=:metrics',ConditionExpression:'attribute_exists(pk) AND attribute_not_exists(deletedAt) AND agentId=:agent',ExpressionAttributeValues:{':metrics':metrics,':agent':agentId}}));
   },
   async nodes(tenant:string):Promise<Node[]>{
     await ensureTable();

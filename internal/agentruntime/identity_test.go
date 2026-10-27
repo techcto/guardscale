@@ -27,7 +27,7 @@ func TestEC2IdentityBoundToInstanceAndSelectedTags(t *testing.T) {
 			w.Write([]byte("Customer website"))
 		case "/latest/meta-data/tags/instance/Environment":
 			w.Write([]byte("production"))
-		case "/latest/meta-data/tags/instance/Application", "/latest/meta-data/tags/instance/Project", "/latest/meta-data/tags/instance/Service":
+		case "/latest/meta-data/tags/instance/Application", "/latest/meta-data/tags/instance/Project", "/latest/meta-data/tags/instance/Service", "/latest/meta-data/tags/instance/Stack", "/latest/meta-data/tags/instance/aws:cloudformation:stack-name":
 			http.NotFound(w, r)
 		default:
 			t.Errorf("unexpected metadata request: %s", r.URL.Path)

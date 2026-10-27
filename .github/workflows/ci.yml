@@ -16,6 +16,9 @@ jobs:
           cache: true
       - run: gofmt -w . && git diff --exit-code
       - run: go vet ./...
+      - run: go test ./...
+      - name: Test agent bootstrap without host or network access
+        run: docker run --rm --network none -e GUARDSCALE_UPDATER_SANDBOX=1 -v "$PWD:/src:ro" node:26-bookworm-slim bash /src/devops/testing/test-agent-bootstrap.sh
       - run: go build -trimpath -ldflags='-s -w' ./cmd/guardscale
       - uses: actions/setup-node@v4
         with:

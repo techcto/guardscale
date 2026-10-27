@@ -5,6 +5,7 @@ set +x
 
 GUARDSCALE_URL="${GUARDSCALE_URL:-https://guardscale.org}"
 GUARDSCALE_ASSET_BASE="${GUARDSCALE_ASSET_BASE:-https://guardscale.s3.us-east-1.amazonaws.com/agent/latest}"
+case "${GUARDSCALE_AUTO_UPDATE:-0}" in 0|1) ;; *) echo 'GUARDSCALE_AUTO_UPDATE must be 0 or 1' >&2;exit 2;; esac
 INSTALL_ONLY="${INSTALL_ONLY:-0}"
 
 usage() {
@@ -87,15 +88,27 @@ work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 binary="guardscale-linux-$agent_arch"
 
-for asset in "$binary" SHA256SUMS config.example.yaml guardscale.service; do
+# Resolve latest once; all files in this install then come from one immutable release.
+if [[ $GUARDSCALE_ASSET_BASE == */latest ]]; then
+  release_pointer=$(curl --retry 3 -fsS --connect-timeout 10 --max-time 60 "$GUARDSCALE_ASSET_BASE/release.json")
+  release_version=$(printf '%s' "$release_pointer" | sed -nE 's/^[[:space:]]*\{[[:space:]]*"version"[[:space:]]*:[[:space:]]*"([0-9]+\.[0-9]+\.[0-9]+)"[[:space:]]*\}[[:space:]]*$/\1/p')
+  [[ $release_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Invalid release pointer' >&2;exit 1; }
+  GUARDSCALE_ASSET_BASE="${GUARDSCALE_ASSET_BASE%/latest}/$release_version"
+fi
+
+for asset in "$binary" SHA256SUMS config.example.yaml guardscale.service guardscale-update.service guardscale-update.timer; do
   curl --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 -fsSLo "$work_dir/$asset" "$GUARDSCALE_ASSET_BASE/$asset"
 done
-(cd "$work_dir" && grep " $binary\$" SHA256SUMS | sha256sum -c -)
+for asset in "$binary" config.example.yaml guardscale.service guardscale-update.service guardscale-update.timer; do
+  (cd "$work_dir" && awk -v file="$asset" '$2==file{print}' SHA256SUMS | sha256sum --check --strict -)
+done
 
 install -m 0755 "$work_dir/$binary" /usr/local/bin/guardscale
-install -d -m 0750 /etc/guardscale /var/lib/guardscale
+install -d -m 0750 /etc/guardscale /var/lib/guardscale /var/lib/guardscale-updater
 install -m 0644 "$work_dir/config.example.yaml" /etc/guardscale/config.example.yaml
 install -m 0644 "$work_dir/guardscale.service" /etc/systemd/system/guardscale.service
+install -m 0644 "$work_dir/guardscale-update.service" /etc/systemd/system/guardscale-update.service
+install -m 0644 "$work_dir/guardscale-update.timer" /etc/systemd/system/guardscale-update.timer
 
 if [ "$INSTALL_ONLY" = "1" ]; then
   systemctl daemon-reload
@@ -117,5 +130,6 @@ printf '%s' "$GUARDSCALE_ENROLLMENT_TOKEN" > /etc/guardscale/enrollment.token
 systemctl daemon-reload
 systemctl enable guardscale
 systemctl restart guardscale
+if [[ ${GUARDSCALE_AUTO_UPDATE:-0} == 1 ]]; then systemctl enable --now guardscale-update.timer;fi
 systemctl --no-pager --full status guardscale
 echo "GuardScale agent started for node $GUARDSCALE_NODE_ID. Registration is confirmed by the first accepted heartbeat in your console."

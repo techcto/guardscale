@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/techcto/guardscale/internal/buildinfo"
+	"github.com/techcto/guardscale/internal/hostmetrics"
 	"net/http"
 	"runtime"
 	"strings"
@@ -47,6 +49,7 @@ func (c Client) post(ctx context.Context, path string, payload any) error {
 
 func (c Client) Heartbeat(ctx context.Context) error {
 	payload := map[string]any{
+		"agent_version":    buildinfo.Version,
 		"server_id":        c.ServerID,
 		"platform":         runtime.GOOS + "/" + runtime.GOARCH,
 		"discovered_hosts": c.DiscoveredHosts,
@@ -66,6 +69,10 @@ func (c Client) Event(ctx context.Context, eventType string, metadata map[string
 		"type":      eventType,
 		"metadata":  metadata,
 	})
+}
+
+func (c Client) Metrics(ctx context.Context, metrics hostmetrics.Sample) error {
+	return c.post(ctx, "/api/v1/agents/metrics", map[string]any{"server_id": c.ServerID, "metrics": metrics})
 }
 
 func (c Client) Incident(ctx context.Context, payload any) error {
