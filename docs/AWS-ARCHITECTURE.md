@@ -4,6 +4,10 @@
 
 ## Deployment and data flow
 
+[Download the branded PDF](guardscale-aws-architecture.pdf) · [PNG](guardscale-aws-architecture.png) · [Editable SVG](guardscale-aws-architecture.svg)
+
+![GuardScale AWS architecture](guardscale-aws-architecture.png)
+
 ```mermaid
 flowchart TB
   Origin[Apache / PHP origin] --> Agent[Go agent: bounded evidence and local policy]
