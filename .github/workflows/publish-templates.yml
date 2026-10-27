@@ -1,0 +1,41 @@
+name: Publish GuardScale templates
+on:
+  workflow_run:
+    workflows: [GuardScale CI]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: guardscale-template-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws-access-key-id: ${{ vars.MP_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.MP_AWS_SECRET_ACCESS_KEY }}
+      - name: Publish templates without rebuilding containers
+        env:
+          TEMPLATE_BUCKET: ${{ vars.GUARDSCALE_CFT_BUCKET || 'guardscale' }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          case "$SOURCE_SHA" in *[!0-9a-f]*|'') exit 1;; esac
+          current=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$current" != "$SOURCE_SHA" ]; then
+            echo 'Skipping superseded main revision.'
+            exit 0
+          fi
+          for template in guardscale guardscale-existing guardscale-apphub-migration guardscale-apphub-owned-data guardscale-apphub-relaunch guardscale-dev-whatsapp-replies; do
+            aws s3 cp "devops/cloudformation/$template.yaml" "s3://$TEMPLATE_BUCKET/cloudformation/$template-$SOURCE_SHA.yaml" --content-type text/yaml --cache-control 'public,max-age=31536000,immutable' --no-progress
+            aws s3 cp "devops/cloudformation/$template.yaml" "s3://$TEMPLATE_BUCKET/cloudformation/$template.yaml" --content-type text/yaml --cache-control no-cache --no-progress
+          done

@@ -3,6 +3,10 @@
 Start with the [private-install prerequisites](../../PREREQUISITES.md) for WhatsApp
 registration, SES verification, required launch values and current automation limits.
 For container-version rollouts, use the [reviewed update command](../../docs/cft-update.md).
+After successful main-branch CI, the template-only publishing workflow uploads
+commit-versioned and stable template URLs without rebuilding containers. Tagged
+releases still publish versioned images and release templates. A template update
+can preserve the existing `ReleaseVersion`; review its change set before execution.
 No release is needed for the [local hackathon tests](../../docs/hackathon-local-testing.md).
 
 SES incident replies are optional resources in these same main templates. See
