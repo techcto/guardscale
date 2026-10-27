@@ -33,13 +33,29 @@ func apacheHosts(patterns []string) []string {
 				continue
 			}
 			scan := bufio.NewScanner(io.LimitReader(file, 64*1024))
+			nginxNames := false
 			for scan.Scan() {
 				line, _, _ := strings.Cut(scan.Text(), "#")
 				fields := strings.Fields(line)
-				if len(fields) < 2 || (!strings.EqualFold(fields[0], "ServerName") && !strings.EqualFold(fields[0], "ServerAlias")) {
+				if len(fields) == 0 {
 					continue
 				}
-				for _, field := range fields[1:] {
+				nginx := fields[0] == "server_name" || nginxNames
+				if !nginx && (len(fields) < 2 || (!strings.EqualFold(fields[0], "ServerName") && !strings.EqualFold(fields[0], "ServerAlias"))) {
+					continue
+				}
+				names := fields[1:]
+				if nginxNames {
+					names = fields
+				}
+				nginxNames = nginx && !strings.Contains(line, ";")
+				if nginx {
+					// Ignore all directives after the end of server_name.
+					joined, _, _ := strings.Cut(strings.Join(names, " "), ";")
+					names = strings.Fields(joined)
+				}
+				for _, field := range names {
+					field = strings.TrimSuffix(field, ";")
 					host := strings.ToLower(strings.Trim(field, `"'`))
 					if strings.Contains(host, ":") {
 						continue
@@ -64,5 +80,5 @@ func apacheHosts(patterns []string) []string {
 }
 
 func discoverApacheHosts() []string {
-	return apacheHosts([]string{"/etc/apache2/sites-enabled/*", "/etc/httpd/conf.d/*.conf", "/etc/httpd/conf/httpd.conf"})
+	return apacheHosts([]string{"/etc/apache2/sites-enabled/*", "/etc/apache2/apache2.conf", "/etc/httpd/conf.d/*.conf", "/etc/httpd/conf/httpd.conf", "/etc/nginx/sites-enabled/*", "/etc/nginx/conf.d/*.conf", "/etc/nginx/nginx.conf"})
 }

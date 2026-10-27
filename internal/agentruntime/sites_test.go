@@ -20,3 +20,14 @@ func TestApacheHostsOnlyReturnsBoundedConfiguredNames(t *testing.T) {
 		t.Fatal("missing config must not create sites")
 	}
 }
+
+func TestNginxHostsIncludesMultilineNames(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "nginx.conf")
+	if err := os.WriteFile(file, []byte("server_name example.org\n www.example.org; root /var/www; # configured names\nserver_name _ *.bad.org $host ~regex;\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	hosts := apacheHosts([]string{file})
+	if len(hosts) != 2 || hosts[0] != "example.org" || hosts[1] != "www.example.org" {
+		t.Fatalf("unexpected names %v", hosts)
+	}
+}

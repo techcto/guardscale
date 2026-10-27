@@ -1,4 +1,4 @@
-type IncidentAlert={server:string;source?:string;country?:string;detectedAt:string;analysisStatus:string;summary?:string;reviewUrl:string;websites?:string[];code:string;blockSeconds:number};
+export type IncidentAlert={server:string;source?:string;country?:string;detectedAt:string;analysisStatus:string;summary?:string;reviewUrl:string;websites?:string[];code:string;blockSeconds:number};
 const label=(value:string)=>value.replace(/[\r\n*_`]/g,' ').slice(0,100);
 export function incidentAlert(a:IncidentAlert,channel:'email'|'whatsapp'){
  const heading=(text:string)=>channel==='whatsapp'?`*${text}*`:text;

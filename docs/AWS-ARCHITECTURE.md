@@ -22,6 +22,9 @@ flowchart TB
     Worker --> Bedrock[Amazon Bedrock: inspect then recommend]
     Worker --> Social[AWS End User Messaging Social]
     Worker --> SES[Amazon SES sending]
+    Worker --> Uptime[Bounded public HTTP/S uptime probes]
+    Uptime --> Incidents[Availability incidents and recovery]
+    Incidents --> DDB
     Social -->|Incoming WhatsApp events| SNS[SNS trusted event topics]
     Receiving[Optional SES receiving rule] --> SNS
     SNS --> Work

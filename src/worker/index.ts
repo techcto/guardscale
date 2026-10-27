@@ -6,6 +6,7 @@ import {processIncident,processWhatsAppEnvelope,processEmailEnvelope,notifyProte
 import {exportUsage,reconcileUsage,usageAlerts,usageExportEnabled} from '../lib/usage';
 import {stripe} from '../lib/stripe';
 import {messagingClientOptions} from '../lib/local-messaging-credentials';
+import {runUptimeCycle} from '../lib/uptime';
 const queue=process.env.GUARDSCALE_QUEUE_URL;if(!queue)throw Error('GUARDSCALE_QUEUE_URL is required');
 const sqs=new SQSClient({endpoint:process.env.GUARDSCALE_QUEUE_ENDPOINT,...messagingClientOptions()});
 async function receive(){
@@ -60,4 +61,6 @@ async function usageCycle(){
  }
 }
 if(Number.isFinite(usageSeconds)&&usageSeconds>=30){setInterval(()=>void usageCycle().catch(()=>console.error(JSON.stringify({level:'error',message:'Usage cycle failed'}))),usageSeconds*1000);void usageCycle().catch(()=>console.error(JSON.stringify({level:'error',message:'Usage cycle failed'})))}
+setInterval(()=>void runUptimeCycle().catch(()=>console.error(JSON.stringify({level:'error',message:'Uptime cycle failed'}))),15000);
+void runUptimeCycle().catch(()=>console.error(JSON.stringify({level:'error',message:'Uptime cycle failed'})));
 void main();

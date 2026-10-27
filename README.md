@@ -107,6 +107,15 @@ To stop just the test website and probe, run `bash test-server.sh stop`.
 
 [Authenticated production smoke test](docs/production-testing.md)
 
+## Website availability
+
+The **Uptime** view checks public HTTP(S) endpoints, charts response times and
+observed availability, and groups checks by tags and status. Select active,
+approved workspace users for email alerts and optionally notify verified WhatsApp
+recipients. Two failed checks open an availability incident; confirmed recovery
+resolves the same incident. Checks run from the deployment region and never
+authorize a protection rule. [Setup and limits](docs/uptime-monitoring.md)
+
 ## Human control, with a verifiable result
 
 Protection is opt-in and constrained by host policy. It uses a temporary HTTP(S)

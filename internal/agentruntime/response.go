@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +35,7 @@ type responder struct {
 	cooldown   map[string]time.Time
 	renewed    map[string]renewalReceipt
 	traffic    map[string]uint64
+	emissions  []time.Time
 }
 type renewalReceipt struct {
 	Expiry  time.Time
@@ -66,23 +68,74 @@ func (r *responder) evaluate(ctx context.Context) {
 	if len(recent) < 20 {
 		return
 	}
-	findings := detection.Evaluate(detection.Snapshot{Start: now.Add(-time.Minute), End: now, Requests: recent}, r.c)
-	if len(findings) == 0 {
-		return
-	}
-	counts := map[string]int{}
-	for _, q := range recent {
-		counts[q.ClientIP]++
-	}
-	var ip string
-	for address, n := range counts {
-		if n >= 20 && n > counts[ip] {
-			ip = address
+	kept := r.emissions[:0]
+	for _, at := range r.emissions {
+		if now.Sub(at) < time.Minute {
+			kept = append(kept, at)
 		}
 	}
-	if now.Before(r.cooldown[ip]) {
-		return
+	r.emissions = kept
+	// Per-source cooldown never hides a different source. Bound AI/alert fanout.
+	for _, review := range sourceReviews(recent, r.c, r.cooldown, now, 5-len(kept)) {
+		r.emitReview(now, review.IP, review.Findings)
 	}
+	for key, until := range r.cooldown {
+		if now.After(until) {
+			delete(r.cooldown, key)
+		}
+	}
+}
+
+type sourceReview struct {
+	IP       string
+	Findings []detection.Finding
+}
+
+func sourceReviews(requests []apache.Request, c config.Config, cooldown map[string]time.Time, now time.Time, limit int) []sourceReview {
+	if limit < 1 {
+		return nil
+	}
+	groups := map[string][]apache.Request{}
+	for _, request := range requests {
+		groups[request.ClientIP] = append(groups[request.ClientIP], request)
+	}
+	ips := make([]string, 0, len(groups))
+	for ip := range groups {
+		ips = append(ips, ip)
+	}
+	sort.Slice(ips, func(i, j int) bool {
+		if len(groups[ips[i]]) == len(groups[ips[j]]) {
+			return ips[i] < ips[j]
+		}
+		return len(groups[ips[i]]) > len(groups[ips[j]])
+	})
+	var reviews []sourceReview
+	specific := false
+	for _, ip := range ips {
+		if len(groups[ip]) < 20 || ip == "" {
+			continue
+		}
+		findings := detection.Evaluate(detection.Snapshot{Start: now.Add(-time.Minute), End: now, Requests: groups[ip]}, c)
+		if len(findings) == 0 {
+			continue
+		}
+		specific = true
+		if now.Before(cooldown[ip]) || len(reviews) >= limit {
+			continue
+		}
+		reviews = append(reviews, sourceReview{IP: ip, Findings: findings})
+	}
+	// Distributed evidence without an independently supported source stays advisory.
+	if !specific && !now.Before(cooldown[""]) {
+		findings := detection.Evaluate(detection.Snapshot{Start: now.Add(-time.Minute), End: now, Requests: requests}, c)
+		if len(findings) > 0 {
+			reviews = append(reviews, sourceReview{Findings: findings})
+		}
+	}
+	return reviews
+}
+
+func (r *responder) emitReview(now time.Time, ip string, findings []detection.Finding) {
 	digest := sha256.Sum256([]byte(r.c.Server.ID + ip + now.String()))
 	id := hex.EncodeToString(digest[:16])
 	if ip != "" {
@@ -111,11 +164,7 @@ func (r *responder) evaluate(ctx context.Context) {
 		return
 	}
 	r.cooldown[ip] = now.Add(5 * time.Minute)
-	for key, until := range r.cooldown {
-		if now.After(until) {
-			delete(r.cooldown, key)
-		}
-	}
+	r.emissions = append(r.emissions, now)
 }
 func (r *responder) outbox() uploader.Queue {
 	return uploader.Queue{Dir: filepath.Join(r.c.Storage.StateDir, "incident-outbox"), Endpoint: r.c.ControlPlane.Endpoint, Token: r.client.Token, MaxItems: 100, Client: &http.Client{Timeout: 40 * time.Second}}

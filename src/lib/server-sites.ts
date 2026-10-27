@@ -11,3 +11,7 @@ export function validateDiscoveredHosts(input:unknown):string[]{
  if(!Array.isArray(input))return [];
  return [...new Set(input.filter((v):v is string=>typeof v==='string'&&v.length<=253&&/^[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?$/.test(v)).map(v=>v.toLowerCase()))].slice(0,20);
 }
+
+export function serverDisplayName(node:{displayName:string;serverId:string;discoveredHosts?:string[]}){
+ return node.displayName!==node.serverId?node.displayName:validateDiscoveredHosts(node.discoveredHosts)[0]??node.displayName;
+}

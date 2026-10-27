@@ -1,0 +1,7 @@
+.gs-auth-page{position:relative;isolation:isolate;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:72px 24px 180px;background:#f6faff;overflow:hidden}
+.gs-auth-page>.login-card{position:relative;z-index:1;background:white;width:100%;max-width:440px}
+.gs-auth-page .gs-hero-log-tail{left:0;right:0;width:100%;padding:24px 4% 168px;opacity:.6}
+.gs-auth-page .gs-hero-log-background:after{background:radial-gradient(ellipse at center,rgba(255,255,255,.95),rgba(255,255,255,.65) 40%,transparent 80%)}
+.gs-auth-page .gs-hero-log-controls{left:24px;right:24px;bottom:24px}
+.gs-auth-page .gs-hero-log-controls p{padding:0;max-width:780px}
+@media(max-width:700px){.gs-auth-page{padding:36px 16px 240px;align-items:flex-start}.gs-auth-page .gs-hero-log-tail{opacity:.25;padding-bottom:220px}.gs-auth-page .gs-hero-log-controls{left:16px;right:16px}.gs-auth-page .gs-hero-log-controls button{margin-left:0}}

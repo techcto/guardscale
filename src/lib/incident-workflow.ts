@@ -6,6 +6,7 @@ import {acceptSetupReply,senderMatches} from './whatsapp-setup';
 import {approveProtection,commandsFor,cancelIncidentProtection} from './protection-commands';
 import {assessWithGuardian,type GuardianAssessment} from './guardian';
 import {incidentAlert} from './incident-alert';
+import {incidentEmail} from './incident-email';
 import {emailReplyAddress,validatedEmailReply} from './email-replies';
 import type {IncidentRecord} from './model';
 type Payload={candidate_id?:string;source_ip?:string;country?:string;findings?:unknown;analysis?:GuardianAssessment;notified?:string[];alertedAt?:string;alertDelivery?:'provider_accepted'|'local_only'};
@@ -36,9 +37,10 @@ export async function processIncident(orgId:string,incidentId:string){
   const channel=destination.includes('@')?'email':'whatsapp';
   if(channel==='email'?!settings.notifications.emailEnabled:!settings.notifications.whatsappEnabled)continue;
   const key=createHmac('sha256',process.env.GUARDSCALE_SESSION_SECRET!).update(channel+destination+':'+(process.env.GUARDSCALE_NOTIFICATION_MODE??'log')).digest('hex');if(payload.notified.includes(key))continue;
-  const text=incidentAlert({server:server?.displayName||incident.serverId,source:payload.source_ip,country:payload.country,detectedAt:incident.startedAt,analysisStatus:payload.analysis.status,summary:payload.analysis.summary,reviewUrl:link,websites:websites?.split('\n'),code,blockSeconds:Math.min(settings.response.defaultTtlSeconds,settings.response.maxTtlSeconds,900)},channel);
+  const alert={server:server?.displayName||incident.serverId,source:payload.source_ip,country:payload.country,detectedAt:incident.startedAt,analysisStatus:payload.analysis.status,summary:payload.analysis.summary,reviewUrl:link,websites:websites?.split('\n'),code,blockSeconds:Math.min(settings.response.defaultTtlSeconds,settings.response.maxTtlSeconds,900)};
   const replyTo=channel==='email'?emailReplyAddress(orgId,incidentId,destination):undefined;
-  const messageId=await notifier().send({channel,destination,replyTo,originationId:settings.notifications.whatsappSenderId||undefined,subject:'GuardScale: review server activity',text:replyTo?text.replace('Direct email replies are not supported.','Reply with Protect, Watch or Dismiss as the first line. Protect expires 15 minutes after detection; Dismiss stops extensions and requests removal of the active block.'):text});
+  const email=channel==='email'?incidentEmail({...alert,replyTo}):undefined;
+  const messageId=await notifier().send({channel,destination,replyTo,originationId:settings.notifications.whatsappSenderId||undefined,subject:'GuardScale: review server activity',text:email?.text??incidentAlert(alert,channel),html:email?.html,reviewUrl:link});
   payload.notified.push(key);payload.alertDelivery=process.env.GUARDSCALE_NOTIFICATION_MODE==='aws'?'provider_accepted':'local_only';payload.alertedAt??=new Date().toISOString();const current=await store.incident(orgId,incidentId);if(!current)return;await store.putIncident({...current,payload:{...(current.payload as Payload),...payload},updatedAt:new Date().toISOString()});
   await store.putEvent({id:'notification-'+incidentId+'-'+key,tenantId:orgId,serverId:incident.serverId,agentId:incident.agentId,type:'notification.sent',at:new Date().toISOString(),metadata:{channel,message_id:messageId,delivery:process.env.GUARDSCALE_NOTIFICATION_MODE==='aws'?'provider_accepted':'local_only'}});
  }
@@ -118,6 +120,6 @@ export async function notifyProtectionOutcome(orgId:string,commandId:string,rene
  const text=command.status==='cancelled'?`*Protection removed*\n\nServer: ${command.serverId}\nSource IP: ${source}\nThe agent confirmed removal of this incident's HTTP(S) source block. Automatic extensions for this incident are stopped. Monitoring continues.`:command.status==='applied'?`${renewal?'*Protection extended*':'*Protected*'}\n\nServer: ${command.serverId}\nSource IP: ${source}\nRule: temporary HTTP(S) source block\nDuration: ${Math.round((Date.parse(command.expiresAt)-Date.parse(command.createdAt))/1000)} seconds\nExpires: ${command.expiresAt}\n\nThe server agent confirmed the rule is active. This is a temporary source block, not a guarantee that all attacks have stopped.`:command.status==='expired'?`*Protection expired*\n\nServer: ${command.serverId}\nSource IP: ${source}\nThe temporary HTTP(S) block has expired. Monitoring continues.`:`GuardScale ${command.serverId}: protection ${command.status}. Source: ${source}. Review the incident in your authenticated console; no active block is confirmed by this status.`;
  for(const destination of settings.notifications.recipients.split(/[\s,;]+/).filter(Boolean).slice(0,20)){
   const channel=destination.includes('@')?'email':'whatsapp';if(channel==='email'?!settings.notifications.emailEnabled:!settings.notifications.whatsappEnabled)continue;
-  await notifier().send({channel,destination,replyTo:channel==='email'?emailReplyAddress(orgId,command.incidentId,destination):undefined,originationId:settings.notifications.whatsappSenderId||undefined,subject:'GuardScale protection '+command.status,text});
+  await notifier().send({channel,destination,replyTo:channel==='email'?emailReplyAddress(orgId,command.incidentId,destination):undefined,originationId:settings.notifications.whatsappSenderId||undefined,subject:'GuardScale protection '+command.status,text,reviewUrl:process.env.GUARDSCALE_PUBLIC_URL?new URL('/incidents/'+encodeURIComponent(command.incidentId),process.env.GUARDSCALE_PUBLIC_URL).href:undefined});
  }
 }

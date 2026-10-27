@@ -5,6 +5,7 @@ import type{GuardScaleEvent,GuardScaleUser,IncidentRecord,Node,OrgMembership,Org
 import{defaultSettings,whatsappSetupAuditId}from'./model';
 import {hasPaidEntitlement} from './subscription-entitlement';
 import pricing from './billing-pricing.json';
+import {purgeUptimeHistory} from './uptime-store';
 
 const tableName=process.env.GUARDSCALE_TABLE??'guardscale-local';
 const client=DynamoDBDocumentClient.from(new DynamoDBClient({endpoint:process.env.GUARDSCALE_DYNAMODB_ENDPOINT}),{marshallOptions:{removeUndefinedValues:true}});
@@ -156,6 +157,7 @@ export const dynamoStore={
   async node(tenant:string,serverId:string):Promise<Node|null>{const node=await dynamoStore.nodeRecord(tenant,serverId);return node&&!node.deletedAt?node:null},
   async retireNode(tenant:string,serverId:string){await ensureTable();await client.send(new UpdateCommand({TableName:tableName,Key:{pk:`ORG#${tenant}`,sk:`NODE#${serverId}`},UpdateExpression:'SET deletedAt=:at, #status=:status',ExpressionAttributeNames:{'#status':'status'},ExpressionAttributeValues:{':at':new Date().toISOString(),':status':'offline'},ConditionExpression:'attribute_exists(pk)'}));return true},
   async purgeCollectedData(tenant:string){
+    await purgeUptimeHistory(tenant);
     await ensureTable();const cutoff=new Date().toISOString();let events=0,incidents=0;
     let cursor:Record<string,unknown>|undefined;
     do{

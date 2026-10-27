@@ -3,6 +3,7 @@ import type{GuardScaleEvent,GuardScaleUser,IncidentRecord,Node,OrgMembership,Org
 import{defaultSettings}from'./model';
 import {hasPaidEntitlement} from './subscription-entitlement';
 import pricing from './billing-pricing.json';
+import {uptimeStore,purgeUptimeHistory} from './uptime-store';
 type State={orgs:Map<string,Organization>;singletonOrgId?:string;memberships:Map<string,OrgMembership>;nodes:Map<string,Node>;incidents:Map<string,IncidentRecord>;events:Map<string,GuardScaleEvent[]>;users:Map<string,GuardScaleUser>;passwords:Map<string,string>;emails?:Map<string,string>;subscriptions:Map<string,Subscription>;settings:Map<string,Settings>;usage:Map<string,UsageHour>;claims:Set<string>};
 const g=globalThis as typeof globalThis&{guardscaleState?:State};
 export const state:State=g.guardscaleState??={orgs:new Map(),memberships:new Map(),nodes:new Map(),incidents:new Map(),events:new Map(),users:new Map(),passwords:new Map(),subscriptions:new Map(),settings:new Map(),usage:new Map(),claims:new Set()};
@@ -29,6 +30,7 @@ export const memoryStore={
   async organizations(){return[...state.orgs.values()]},
   async putOrganization(v:Organization){state.orgs.set(v.id,v)},
   async deleteOrganization(id:string){
+    for(const monitor of await uptimeStore.list(id))await uptimeStore.remove(id,monitor.id);
     for(const[k,m]of state.memberships)if(m.orgId===id)state.memberships.delete(k);
     for(const map of[state.nodes,state.incidents,state.events,state.usage])for(const k of map.keys())if(k.startsWith(id+'\0'))map.delete(k);
     for(const k of state.claims)if(k.startsWith(id+'\0'))state.claims.delete(k);
@@ -53,7 +55,7 @@ export const memoryStore={
   async setNodeWebsites(tenant:string,serverId:string,websiteUrls:string[]){const node=state.nodes.get(key(tenant,serverId));if(!node||node.deletedAt)throw Error('Server removed');state.nodes.set(key(tenant,serverId),{...node,websiteUrls})},
   async node(tenant:string,serverId:string){const node=state.nodes.get(key(tenant,serverId));return node&&!node.deletedAt?node:null},
   async retireNode(tenant:string,serverId:string){const node=state.nodes.get(key(tenant,serverId));if(!node)return false;state.nodes.set(key(tenant,serverId),{...node,deletedAt:new Date().toISOString(),status:'offline'});return true},
-  async purgeCollectedData(tenant:string){let events=0,incidents=0;for(const [k,list]of state.events){if(k.startsWith(tenant+'\0')){events+=list.length;state.events.delete(k)}}for(const [k,v]of state.incidents){if(v.tenantId===tenant){incidents++;state.incidents.delete(k)}}return{events,incidents}},
+  async purgeCollectedData(tenant:string){await purgeUptimeHistory(tenant);let events=0,incidents=0;for(const [k,list]of state.events){if(k.startsWith(tenant+'\0')){events+=list.length;state.events.delete(k)}}for(const [k,v]of state.incidents){if(v.tenantId===tenant){incidents++;state.incidents.delete(k)}}return{events,incidents}},
   async putIncident(v:IncidentRecord){state.incidents.set(key(v.tenantId,v.incidentId),v)},
   async incident(tenant:string,incidentId:string){return state.incidents.get(key(tenant,incidentId))??null},
   async incidents(tenant:string){return[...state.incidents.values()].filter(x=>x.tenantId===tenant)},

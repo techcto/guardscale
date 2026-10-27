@@ -6,6 +6,8 @@ if(!['http://web:3000','http://guardscale-web:3000',...(production?['https://gua
 if(production&&base!=='https://guardscale.org')throw Error('Production test requires the fixed GuardScale HTTPS origin');
 const serverId=process.env.GUARDSCALE_FIXTURE_SERVER_ID??(production?'local-php-fixture-prod':'local-php-fixture');
 const agentId=production?'local-php-agent-prod':'local-php-agent';
+const mainLab=base==='http://guardscale-web:3000'||production;
+const probeCIDRs=mainLab?(process.env.GUARDSCALE_FIXTURE_MULTI_SOURCE==='true'?['198.51.100.20/32','198.51.100.21/32','198.51.100.22/32']:['198.51.100.20/32']):['192.0.2.20/32'];
 if(!/^[a-zA-Z0-9._-]{1,100}$/.test(serverId))throw Error('Invalid local test server ID');
 async function request(path,body){
  const r=await fetch(base+path,{method:body?'POST':'GET',headers:{'content-type':'application/json',origin:base,...(cookie?{cookie}:{})},redirect:'error',...(body?{body:JSON.stringify(body)}:{})});
@@ -46,6 +48,6 @@ storage:
 protection:
   enabled: ${process.env.GUARDSCALE_SECURITY_TEST==='true'}
   dry_run: ${process.env.GUARDSCALE_SECURITY_TEST!=='true'}
-${process.env.GUARDSCALE_SECURITY_TEST==='true'?'  allowed_cidrs:\n    - '+(base==='http://guardscale-web:3000'||production?'198.51.100.20/32':'192.0.2.20/32')+'\n':''}
+${process.env.GUARDSCALE_SECURITY_TEST==='true'?'  allowed_cidrs:\n'+probeCIDRs.map(cidr=>'    - '+cidr+'\n').join(''):''}
 `,{mode:0o600});
 console.log('Dedicated local organization enrolled; credentials stored only in runtime volume.');

@@ -2,6 +2,8 @@
 
 [Overview](README.md) · [Judge's field guide](docs/JUDGES_FIELD_GUIDE.md) · [AWS architecture](docs/AWS-ARCHITECTURE.md)
 
+[Uptime monitoring, charts and outage alerts](docs/uptime-monitoring.md) · [Server identity and multiple-source tests](docs/production-testing.md)
+
 ## Runtime and reproducibility
 
 The console and HTTP API use Next.js, React and TypeScript on Node.js 26. The

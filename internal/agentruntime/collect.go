@@ -70,6 +70,7 @@ func collect(ctx context.Context, c config.Config) error {
 	}
 	auth := c.Server.Tenant + "." + c.ControlPlane.AgentID + "." + strings.TrimSpace(string(token))
 	client := agentclient.Client{Endpoint: c.ControlPlane.Endpoint, Token: auth, ServerID: c.Server.ID, DiscoveredHosts: discoverApacheHosts()}
+	client.DisplayName, client.Tags = ec2Identity(ctx, c.Server.ID)
 	response := newResponder(c, client)
 	go response.deliver(ctx)
 	queue := uploader.Queue{Dir: filepath.Join(c.Storage.StateDir, "log-outbox"), Endpoint: strings.TrimRight(c.ControlPlane.Endpoint, "/"), Token: auth, MaxItems: 100}

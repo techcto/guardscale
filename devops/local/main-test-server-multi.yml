@@ -1,0 +1,33 @@
+# Three actual source addresses on the isolated lab network; no spoofed headers.
+x-probe: &probe
+  profiles: [test-server]
+  image: guardscale-local-security-tools:dev
+  user: node
+  command: [node, /scripts/probe.mjs]
+  environment:
+    GUARDSCALE_SECURITY_TEST: 'true'
+    GUARDSCALE_SECURITY_TOOLS: 'true'
+  volumes:
+    - ./devops/local/probe.mjs:/scripts/probe.mjs:ro
+    - ./devops/local/attack-client.mjs:/scripts/attack-client.mjs:ro
+  cap_drop: [ALL]
+  read_only: true
+  tmpfs:
+    - /tmp:rw,nosuid,noexec,size=128m,uid=1000,gid=1000
+    - /home/node:rw,nosuid,noexec,size=128m,uid=1000,gid=1000
+  security_opt: [no-new-privileges:true]
+  depends_on: [test-site]
+services:
+  test-enroll:
+    environment:
+      GUARDSCALE_FIXTURE_MULTI_SOURCE: 'true'
+  test-probe-two:
+    <<: *probe
+    networks:
+      attack-lab:
+        ipv4_address: 198.51.100.21
+  test-probe-three:
+    <<: *probe
+    networks:
+      attack-lab:
+        ipv4_address: 198.51.100.22

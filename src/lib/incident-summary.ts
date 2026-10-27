@@ -1,4 +1,5 @@
 const labels:Record<string,{title:string;explanation:string}>={
+ UptimeDown:{title:'Website availability check failed',explanation:'Two consecutive HTTP(S) checks failed from the GuardScale deployment region. This is an availability issue, not evidence of an attack.'},
  UniqueURLStorm:{title:'Unusually varied website requests',explanation:'Requests touched many different URLs. This can be scanning or crawling, but does not prove an attack.'},
  PaginationEnumeration:{title:'Repeated page-number scanning',explanation:'Requests traversed many page numbers, including deep pages.'},
  QueryParameterAbuse:{title:'Repeated costly query patterns',explanation:'Many requests used query parameters configured as expensive for this server.'},

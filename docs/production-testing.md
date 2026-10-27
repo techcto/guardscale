@@ -70,3 +70,36 @@ Use the [local test-server workflow](hackathon-local-testing.md) for harmless
 local traffic and the [live-provider guide](whatsapp-local-testing.md) for its
 separate development queue. Do not use a development consumer on production's
 queue or direct an attack generator at the production control plane.
+
+### Multiple observed sources
+
+Start the optional three-source lab using `bash test-server.sh start --multi`, or
+`bash test-server.sh start-prod --multi` with the private session file described
+above. Then run `bash test-server.sh multi` once. This runs bounded ffuf/Nuclei
+workloads against the disposable local target from three actual isolated Docker
+addresses: `198.51.100.20`, `.21`, and `.22`. It does not spoof forwarding headers.
+Only these three /32 addresses can be blocked by this test agent.
+
+The agent evaluates each source independently, so a source on cooldown cannot hide
+another source's evidence. It caps new source reviews at five per minute per host.
+When multiple incidents await a response, use the incident-specific email draft,
+console action, or WhatsApp code; a plain Protect reply must not guess the target.
+Existing cooldowns can prevent a repeated run from creating fresh incidents.
+
+### Server names, websites and EC2 tags
+
+The agent discovers bounded hostname suggestions from standard Apache and Nginx
+configuration files it can read. Discovered links assume HTTPS; add exact website
+URLs in the server's Websites panel for HTTP or custom ports. These are configured
+hostnames, not proof that a site is reachable or that a particular virtual host
+generated a request. No arbitrary Host headers become website links.
+
+EC2 agents read the Name, Environment, Application, Project and Service tags using
+IMDSv2 after checking the instance ID matches their configured server ID. Name
+becomes the display name; tag values support the Servers page's Group by selector.
+Instance tags must be enabled in metadata by the instance's owner (default is off).
+No additional AWS credentials or EC2 API permissions are needed for this path.
+Other tags, instance-role credentials and raw configuration files are not fetched.
+Existing agents need the updated agent binary and a restart to report discovery
+or identity changes. If metadata/configuration is unavailable, the stable server
+ID remains visible and website URLs can be entered manually.

@@ -12,6 +12,8 @@ import (
 )
 
 type Client struct {
+	DisplayName               string
+	Tags                      []string
 	DiscoveredHosts           []string
 	Endpoint, Token, ServerID string
 	HTTP                      *http.Client
@@ -44,11 +46,18 @@ func (c Client) post(ctx context.Context, path string, payload any) error {
 }
 
 func (c Client) Heartbeat(ctx context.Context) error {
-	return c.post(ctx, "/api/v1/agents/heartbeat", map[string]any{
+	payload := map[string]any{
 		"server_id":        c.ServerID,
 		"platform":         runtime.GOOS + "/" + runtime.GOARCH,
 		"discovered_hosts": c.DiscoveredHosts,
-	})
+	}
+	if c.DisplayName != "" {
+		payload["display_name"] = c.DisplayName
+	}
+	if len(c.Tags) > 0 {
+		payload["tags"] = c.Tags
+	}
+	return c.post(ctx, "/api/v1/agents/heartbeat", payload)
 }
 
 func (c Client) Event(ctx context.Context, eventType string, metadata map[string]string) error {
