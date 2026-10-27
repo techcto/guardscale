@@ -3,8 +3,9 @@ import {useLayoutEffect,useRef,type RefObject} from 'react';
 
 // Continuous motion for a bottom-anchored log tail: when a row is appended at the bottom, every
 // visible row glides from where it currently is (including any motion still in progress) to its new
-// place, and the new row rises in from below. Positions are visual, so rapid arrivals never snap.
-export function useFlipRows(viewport:RefObject<HTMLDivElement|null>,version:unknown,{duration=420}:{duration?:number}={}){
+// place, and the new row rises in from below (or drops in from above for a newest-first list).
+// Positions are visual, so rapid arrivals never snap.
+export function useFlipRows(viewport:RefObject<HTMLDivElement|null>,version:unknown,{duration=420,enterFrom='below'}:{duration?:number;enterFrom?:'below'|'above'}={}){
  const last=useRef(new Map<string,number>());
  useLayoutEffect(()=>{
   const el=viewport.current;if(!el)return;
@@ -21,8 +22,8 @@ export function useFlipRows(viewport:RefObject<HTMLDivElement|null>,version:unkn
   const easing='cubic-bezier(.22,.8,.24,1)';
   for(const row of rows){
    const id=row.dataset.logId??'',now=resting.get(id)!,before=drawn.get(id);
-   if(before===undefined)row.animate([{transform:`translateY(${row.offsetHeight}px)`,opacity:0},{transform:'none',opacity:1}],{duration,easing});
+   if(before===undefined)row.animate([{transform:`translateY(${enterFrom==='above'?-row.offsetHeight:row.offsetHeight}px)`,opacity:0},{transform:'none',opacity:1}],{duration,easing});
    else if(Math.abs(before-now)>.5)row.animate([{transform:`translateY(${before-now}px)`},{transform:'none'}],{duration,easing});
   }
- },[viewport,version,duration]);
+ },[viewport,version,duration,enterFrom]);
 }

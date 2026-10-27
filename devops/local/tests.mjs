@@ -56,18 +56,18 @@ try{
  for(let i=0;i<28;i++)await context.request.get(siteUrl+'/missing-'+i);
  await page.goto(consoleUrl+'/console');
  const organization=page.getByTestId('organization-log-stream');await organization.waitFor();
- const tailRows=organization.locator('[data-log-id]'),bottom=async()=>({id:await tailRows.last().getAttribute('data-log-id'),text:await tailRows.last().evaluate(r=>r.textContent)});
+ const tailRows=organization.locator('[data-log-id]'),top=async()=>({id:await tailRows.first().getAttribute('data-log-id'),text:await tailRows.first().evaluate(r=>r.textContent)});
  await waitFor(async()=>await tailRows.count()>=10,'organization log rows');
- // Terminal-style tail: the panel never scrolls; the newest entry is always the bottom row.
+ // Same order as the server log: the panel never scrolls; the newest entry is always the top row.
  assert.ok(await organization.evaluate(el=>getComputedStyle(el).overflowY==='hidden'&&el.scrollHeight<=el.clientHeight),'organization tail does not scroll');
- await context.request.get(siteUrl+'/new-at-bottom');
- await waitFor(async()=>(await bottom()).text.includes('/new-at-bottom'),'newest entry streams in at the bottom');
+ await context.request.get(siteUrl+'/new-at-top');
+ await waitFor(async()=>(await top()).text.includes('/new-at-top'),'newest entry streams in at the top');
  await page.getByRole('button',{name:'Pause',exact:true}).click();
- const before=(await bottom()).id;
+ const before=(await top()).id;
  await context.request.get(siteUrl+'/paused-request');await page.waitForTimeout(4500);
- assert.equal((await bottom()).id,before,'paused tail is frozen');
+ assert.equal((await top()).id,before,'paused stream is frozen');
  await page.getByRole('button',{name:'Resume',exact:true}).click();
- await waitFor(async()=>(await bottom()).id!==before,'resume catches up');
+ await waitFor(async()=>(await top()).id!==before,'resume catches up');
  await waitFor(async()=>(await tailRows.evaluateAll(rows=>rows.map(r=>r.textContent))).some(t=>t.includes('/paused-request')),'paused request streams into the tail after resume');
  await page.goto(consoleUrl+'/servers/local-php-fixture');await page.getByTestId('server-log-stream').waitFor();
  await page.getByRole('button',{name:'Connection settings'}).click();await page.getByRole('heading',{name:'Update or reconnect this server'}).waitFor();

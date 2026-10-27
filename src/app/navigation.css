@@ -12,3 +12,4 @@
 /* Terminal-style tail: fixed window, no scrolling; rows pinned to the bottom, older rows fade out at the top. */
 .gs-log-tail{position:relative;height:360px;overflow:hidden;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 72px);mask-image:linear-gradient(to bottom,transparent 0,#000 72px)}
 .gs-log-track{position:absolute;left:0;right:0;bottom:0}.gs-log-tail .gs-log-line{will-change:transform}.gs-log-tail .gs-log-line:last-child{border-bottom:0}
+.gs-log-newest-first{-webkit-mask-image:linear-gradient(to top,transparent 0,#000 72px);mask-image:linear-gradient(to top,transparent 0,#000 72px)}.gs-log-newest-first .gs-log-track{top:0;overflow:hidden}
