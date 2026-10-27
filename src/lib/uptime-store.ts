@@ -7,11 +7,11 @@ const db=DynamoDBDocumentClient.from(new DynamoDBClient({endpoint:process.env.GU
 const table=process.env.GUARDSCALE_TABLE;
 const key=(orgId:string,id:string)=>({pk:'ORG#'+orgId,sk:'UPTIME#'+id});
 export const uptimeStore={
- async list(orgId:string):Promise<UptimeMonitor[]>{
-  if(!table)return [...memory.values()].filter(m=>m.orgId===orgId).map(m=>structuredClone(m));
+ async list(orgId:string,includeDeleted=false):Promise<UptimeMonitor[]>{
+  if(!table)return [...memory.values()].filter(m=>m.orgId===orgId&&(includeDeleted||!m.deletedAt)).map(m=>structuredClone(m));
   const items:UptimeMonitor[]=[];let cursor:Record<string,unknown>|undefined;
   do{const r=await db.send(new QueryCommand({TableName:table,KeyConditionExpression:'pk=:pk AND begins_with(sk,:sk)',ExpressionAttributeValues:{':pk':'ORG#'+orgId,':sk':'UPTIME#'},ExclusiveStartKey:cursor,ConsistentRead:true}));items.push(...(r.Items??[]) as UptimeMonitor[]);cursor=r.LastEvaluatedKey;}while(cursor);
-  return items;
+  return includeDeleted?items:items.filter(m=>!m.deletedAt);
  },
  async get(orgId:string,id:string):Promise<UptimeMonitor|null>{
   if(!table)return structuredClone(memory.get(orgId+'#'+id)??null);

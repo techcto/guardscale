@@ -21,7 +21,7 @@ export default function NodesConsole(){
   const visible=statusFilter?nodes.filter(n=>statusLabel(n,staleAfterMs)===statusFilter):nodes;
   const byTag=new Map<string,Node[]>();
   const standalone:Node[]=[];
-  for(const n of visible){const tags=(n.tags??[]).filter(tag=>groupBy==='all'||tag.startsWith(groupBy+'='));if(tags.length)for(const tag of tags){const list=byTag.get(tag)??[];list.push(n);byTag.set(tag,list)}else standalone.push(n)}
+  for(const n of visible){const tags=[...new Set(n.tags??[])].filter(tag=>groupBy==='all'||tag.startsWith(groupBy+'='));if(tags.length){const tag=tags.sort().join(' · ');const list=byTag.get(tag)??[];list.push(n);byTag.set(tag,list)}else standalone.push(n)}
   return <main>
     <section className="hero compact-hero">
       <div><div className="eyebrow">Fleet</div><h1>Servers</h1><p className="muted page-intro">Install a lightweight GuardScale agent on each server. Agents connect outbound to GuardScale; no inbound port is required.</p></div>

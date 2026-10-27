@@ -14,6 +14,18 @@ notification enablement and use the existing SES and EUM Social integration.
 No additional AWS resources, standalone stack or secret is needed. The existing
 worker must be running; Docker Compose starts it with the main application.
 
+Enrolled servers automatically create checks for their reported public websites,
+including existing servers when the worker next reconciles them. Explicit website
+URLs take precedence over an assumed HTTPS hostname. A shared URL creates one
+check per workspace, not one per server or tag. New checks inherit server tags
+and only existing configured recipients who are eligible workspace members;
+other users are not automatically subscribed. Review recipients in Edit check.
+Servers with no reported public site remain covered by server heartbeat status.
+Paused, customized and explicitly deleted checks are not recreated or reset by
+reconciliation. Additional sites wait when the 50-check workspace limit is reached.
+Deleting a check retains a small suppression record so auto-enrollment respects
+your choice; workspace deletion removes it. You can manually add the URL again.
+
 ## Checks, charts and incidents
 
 - Public HTTP(S), ports 80/443, normal TLS validation, no credentials or queries.

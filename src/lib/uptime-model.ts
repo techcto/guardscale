@@ -5,6 +5,7 @@ export type UptimeMonitor={
  revision:number;createdAt:string;updatedAt:string;nextCheckAt:string;state:'unknown'|'up'|'down';stateSince?:string;
  failures:number;successes:number;samples:UptimeSample[];notices:UptimeNotice[];outages:{incidentId:string;startedAt:string;resolvedAt?:string}[];activeIncidentId?:string;
  leaseUntil?:number;leaseOwner?:string;
+ autoEnrolled?:boolean;sourceServerId?:string;deletedAt?:string;
 };
 export const uptimeLimits={monitors:50,samples:1440,intervals:[60,300,900],timeoutMs:8000};
 export function monitorStatus(m:Pick<UptimeMonitor,'paused'|'samples'|'intervalSeconds'|'state'>,now=Date.now()){

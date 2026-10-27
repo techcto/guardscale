@@ -30,7 +30,7 @@ export const memoryStore={
   async organizations(){return[...state.orgs.values()]},
   async putOrganization(v:Organization){state.orgs.set(v.id,v)},
   async deleteOrganization(id:string){
-    for(const monitor of await uptimeStore.list(id))await uptimeStore.remove(id,monitor.id);
+    for(const monitor of await uptimeStore.list(id,true))await uptimeStore.remove(id,monitor.id);
     for(const[k,m]of state.memberships)if(m.orgId===id)state.memberships.delete(k);
     for(const map of[state.nodes,state.incidents,state.events,state.usage])for(const k of map.keys())if(k.startsWith(id+'\0'))map.delete(k);
     for(const k of state.claims)if(k.startsWith(id+'\0'))state.claims.delete(k);
