@@ -1,7 +1,11 @@
 # Architecture
 
-Phase 1 flows from strict configuration and Apache/PHP parsers into typed observations, explainable detectors, an incident state machine, bounded evidence bundles, and the CLI. Package boundaries support outbound transport and an independently deployed API/worker/web control plane. AWS delivery uses independently healthy services, least-privilege IAM, CloudWatch observability, versioned artifacts, and reproducible CloudFormation.
+The current [AWS architecture and design choices](AWS-ARCHITECTURE.md) describe the
+web/API/worker runtime, actual CDS API calls, optional SES receiving, agent command
+boundary and deployment templates. The [judge field guide](JUDGES_FIELD_GUIDE.md)
+contains the perception-to-approval workflow and reproducible test routes.
 
-The control plane uses Next.js App Router for UI and API routes under `src`, an independently deployable SQS worker, tenant-scoped records, DynamoDB, S3 evidence, and ECS Fargate services behind ALB path routing. The local composition substitutes DynamoDB Local, ElasticMQ, and S3Mock. SES and WhatsApp outbound send adapters exist and require AWS configuration. Bedrock/AgentCore inference and inbound WhatsApp responses are not implemented in the audited source. Phase 1 does not execute cloud-directed mutations; no AI component receives shell authority.
-
-The threat model includes coordinated agent swarms whose individual requests resemble legitimate humans and remain below per-client thresholds. Detection therefore combines origin-wide request velocity, distributed identity, shared client characteristics, systematic URL/query traversal, origin-verification state, application latency, PHP worker behavior, repeated normalized stacks, and host exhaustion. High traffic or one user-agent string alone cannot authorize protection.
+The original detection-first agent has been extended with opt-in, human-approved,
+scoped temporary protection. Bedrock inspection and WhatsApp inbound processing are
+implemented; their availability requires runtime configuration. AgentCore hosting
+is not claimed by this architecture.

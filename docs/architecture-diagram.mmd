@@ -1,31 +1,13 @@
-flowchart TB
-  subgraph Origin[Monitored Linux origin]
-    Agent[GuardScale Go agent]
-    WebServer[Apache / nginx]
-    Runtime[PHP-FPM / runtime]
-    Recorder[Bounded local recorder]
-    Agent --- WebServer
-    Agent --- Runtime
-    Agent --- Recorder
-  end
-  Agent -->|Outbound HTTPS only| ALB[Application Load Balancer]
-  subgraph AWS[GuardScale AWS control plane]
-    ALB --> Web[guardscale-web\nECS Fargate]
-    ALB --> API[guardscale-api\nECS Fargate]
-    API --> DDB[(DynamoDB)]
-    API --> S3[(S3 evidence)]
-    API --> Queue[SQS + DLQ]
-    Queue --> Worker[guardscale-worker\nECS Fargate]
-    Worker -.->|Planned, not implemented| Bedrock[Bedrock / AgentCore]
-    Worker --> WhatsApp[AWS End User Messaging Social\nWhatsApp]
-    Worker --> SES[Amazon SES]
-    Web --> DDB
-    Web --> S3
-    Logs[CloudWatch logs / metrics / alarms]
-    API --> Logs
-    Worker --> Logs
-    Web --> Logs
-  end
-  WhatsApp -.->|Planned inbound reply| Worker
-  Worker -.->|Planned signed command| API
-  API -.->|Planned command delivery, Phase 1 disabled| Agent
+flowchart LR
+  Agent[Go origin agent] -->|HTTPS telemetry| API[ALB and ECS API]
+  API --> State[(DynamoDB and S3)]
+  API --> Queue[SQS and DLQ]
+  Queue --> Worker[ECS worker]
+  Worker --> Bedrock[Bedrock inspect and recommend]
+  Worker --> CDS[EUM Social and SES]
+  CDS --> Human[Operator review]
+  Human -->|WhatsApp or optional signed email| SNS[SNS]
+  SNS --> Queue
+  Worker -->|Validated approval| State
+  State -->|Command polling through API| Agent
+  Agent -->|Applied / removed / expired| API

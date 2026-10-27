@@ -7,15 +7,15 @@
 
                             Preamble
 
-  The GNU Affero General Public License is a free, copyleft license
-for software and other kinds of works, specifically designed to ensure
+  The GNU Affero General Public License is a free, copyleft license for
+software and other kinds of works, specifically designed to ensure
 cooperation with the community in the case of network server software.
 
-  The licenses for most software and other practical works are
-designed to take away your freedom to share and change the works.  By
-contrast, our General Public Licenses are intended to guarantee your
-freedom to share and change all versions of a program--to make sure it
-remains free software for all its users.
+  The licenses for most software and other practical works are designed
+to take away your freedom to share and change the works.  By contrast,
+our General Public Licenses are intended to guarantee your freedom to
+share and change all versions of a program--to make sure it remains free
+software for all its users.
 
   When we speak of free software, we are referring to freedom, not
 price.  Our General Public Licenses are designed to make sure that you
@@ -132,11 +132,12 @@ linked subprograms that the work is specifically designed to require,
 such as by intimate data communication or control flow between those
 subprograms and other parts of the work.
 
-  The Corresponding Source need not include anything that users can
-regenerate automatically from other parts of the Corresponding Source.
+  The Corresponding Source need not include anything that users
+can regenerate automatically from other parts of the Corresponding
+Source.
 
-  The Corresponding Source for a work in source code form is that same
-work.
+  The Corresponding Source for a work in source code form is that
+same work.
 
   2. Basic Permissions.
 
@@ -250,8 +251,8 @@ in one of these ways:
     product that is covered by this License, on a durable physical
     medium customarily used for software interchange, for a price no
     more than your reasonable cost of physically performing this
-    conveying of source, or (2) access to copy the Corresponding
-    Source from a network server at no charge.
+    conveying of source, or (2) access to copy the
+    Corresponding Source from a network server at no charge.
 
     c) Convey individual copies of the object code with a copy of the
     written offer to provide the Corresponding Source.  This
@@ -544,13 +545,18 @@ interacting with it remotely through a computer network (if your version
 supports such interaction) an opportunity to receive the Corresponding
 Source of your version by providing access to the Corresponding Source
 from a network server at no charge, through some standard or customary
-means of facilitating copying of software.  Notwithstanding any other
-provision of this License, you have permission to link or combine any
-covered work with a work licensed under version 3 of the GNU General
-Public License into a single combined work, and to convey the resulting
-work.  The terms of this License will continue to apply to the part which
-is the covered work, but the work with which it is combined will remain
-governed by version 3 of the GNU General Public License.
+means of facilitating copying of software.  This Corresponding Source
+shall include the Corresponding Source for any work covered by version 3
+of the GNU General Public License that is incorporated pursuant to the
+following paragraph.
+
+  Notwithstanding any other provision of this License, you have
+permission to link or combine any covered work with a work licensed
+under version 3 of the GNU General Public License into a single
+combined work, and to convey the resulting work.  The terms of this
+License will continue to apply to the part which is the covered work,
+but the work with which it is combined will remain governed by version
+3 of the GNU General Public License.
 
   14. Revised Versions of this License.
 
@@ -623,12 +629,12 @@ to attach them to the start of each source file to most effectively
 state the exclusion of warranty; and each file should have at least
 the "copyright" line and a pointer to where the full notice is found.
 
-    GuardScale -- coordinated-swarm detection and incident response
-    Copyright (C) 2026 Tech CTO
+    <one line to give the program's name and a brief idea of what it does.>
+    Copyright (C) <year>  <name of author>
 
     This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as published
-    by the Free Software Foundation, either version 3 of the License, or
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
     This program is distributed in the hope that it will be useful,
@@ -643,14 +649,13 @@ Also add information on how to contact you by electronic and paper mail.
 
   If your software can interact with users remotely through a computer
 network, you should also make sure that it provides a way for users to
-get its source code.  For example, if your program is a web application,
-its interface could display a "Source" link that leads users to an archive
-of the code.  There are many ways you could offer source code to users
-in various ways.  Consider using a "Standard AGPL" license file, or a
-similar arrangement, specifically designed to permit relicensing under
-this license.
+get its source.  For example, if your program is a web application, its
+interface could display a "Source" link that leads users to an archive
+of the code.  There are many ways you could offer source, and different
+solutions will be better for different programs; see section 13 for the
+specific requirements.
 
   You should also get your employer (if you work as a programmer) or school,
 if any, to sign a "copyright disclaimer" for the program, if necessary.
-For more details, contact your local hackers' meeting, or the source code
-of your favorite editor.
+For more information on this, and how to apply and follow the GNU AGPL, see
+<https://www.gnu.org/licenses/>.
