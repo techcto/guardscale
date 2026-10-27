@@ -1,12 +1,12 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {publicMonitorAddress,monitorURL,probeWebsite} from './uptime-probe';
-import {recordUptimeSample,runUptimeCycle,uptimeRecipients,validateMonitor} from './uptime';
+import {recordUptimeSample,runUptimeCycle,uptimeRecipients,validateMonitor,autoEnrolledName} from './uptime';
 import {uptimeStore} from './uptime-store';
 import {store} from './store';
 import {LogNotifier} from './notifications';
 import type {UptimeMonitor} from './uptime-model';
-import {monitorStatus} from './uptime-model';
+import {monitorStatus,uptimePortError} from './uptime-model';
 const now=()=>new Date().toISOString();
 function monitor(orgId:string):UptimeMonitor{return{id:'check-'+Math.random(),orgId,name:'Owned website',url:'https://example.com/',intervalSeconds:60,recipientIds:[],whatsapp:false,tags:[],paused:false,revision:0,createdAt:now(),updatedAt:now(),nextCheckAt:now(),state:'unknown',failures:0,successes:0,samples:[],notices:[],outages:[]};}
 test('monitor targets reject internal, metadata, reserved, mapped IPv6 and credentials',async()=>{
@@ -25,6 +25,24 @@ test('two failures open one incident; two successes recover that same incident',
  m=recordUptimeSample(m,{at:now(),ok:true,durationMs:120,statusCode:200});assert.equal(m.state,'down');
  m=recordUptimeSample(m,{at:now(),ok:true,durationMs:110,statusCode:200});assert.equal(m.state,'up');assert.equal(m.notices[1].incidentId,id);assert.equal(m.notices[1].kind,'recovered');assert.ok(m.outages[0].resolvedAt);
  assert.equal(monitorStatus(m,Date.parse(m.samples.at(-1)!.at)+181000),'stale');assert.equal(monitorStatus({...m,paused:true}),'paused');
+});
+test('an auto-enrolled check never alerts until it has been up once',()=>{
+ let m:UptimeMonitor={...monitor('auto-pending'),autoEnrolled:true};const bad={at:now(),ok:false,durationMs:8000,error:'DNS lookup or target validation failed'};
+ for(let i=0;i<3;i++)m=recordUptimeSample(m,bad);
+ assert.equal(m.state,'unknown');assert.equal(m.notices.length,0);assert.equal(m.outages.length,0);assert.equal(m.activeIncidentId,undefined);
+ m=recordUptimeSample(m,{at:now(),ok:true,durationMs:120,statusCode:200});assert.equal(m.state,'up');
+ m=recordUptimeSample(recordUptimeSample(m,bad),bad);assert.equal(m.state,'down');assert.equal(m.notices.length,1);assert.equal(m.notices[0].kind,'down');
+});
+test('unsupported ports get one clear message in the form and the API',async()=>{
+ const message='Port 8443 is not supported. Uptime checks use port 80 (HTTP) or 443 (HTTPS) only.';
+ assert.equal(uptimePortError('https://example.com:8443/'),message);
+ for(const ok of ['https://example.com/','http://example.com:80/','https://example.com:443/','http://example.com:443/','not a url','https://'])assert.equal(uptimePortError(ok),'',ok);
+ assert.throws(()=>monitorURL('https://example.com:8443/'),{message});
+ await assert.rejects(validateMonitor('port-test',{name:'Port',url:'https://example.com:8443/',intervalSeconds:60,recipientIds:[],tags:[]}),{message});
+});
+test('auto-enrolled names do not repeat a host used as the server name',()=>{
+ assert.equal(autoEnrolledName('local-fixture.test','https://local-fixture.test/'),'local-fixture.test');
+ assert.equal(autoEnrolledName('Web 1','https://example.com/'),'Web 1 — example.com');
 });
 test('a provider failure stays pending and retries without opening another incident',async()=>{
  const org=await store.createOrganization({name:'Notification retry regression',ownerId:'owner',orgType:'business'}),at=now(),userId='retry-'+org.id;

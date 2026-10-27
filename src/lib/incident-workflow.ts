@@ -3,13 +3,31 @@ import {SQSClient,SendMessageCommand} from '@aws-sdk/client-sqs';
 import {store} from './store';
 import {notifier,whatsappOrigination} from './notifications';
 import {acceptSetupReply,senderMatches} from './whatsapp-setup';
-import {approveProtection,commandsFor,cancelIncidentProtection} from './protection-commands';
+import {approveProtection,commandsFor,cancelIncidentProtection,claimAlertGroup} from './protection-commands';
 import {assessWithGuardian,type GuardianAssessment} from './guardian';
 import {incidentAlert} from './incident-alert';
 import {incidentEmail} from './incident-email';
 import {emailReplyAddress,validatedEmailReply} from './email-replies';
 import type {IncidentRecord} from './model';
-type Payload={candidate_id?:string;source_ip?:string;country?:string;findings?:unknown;analysis?:GuardianAssessment;notified?:string[];alertedAt?:string;alertDelivery?:'provider_accepted'|'local_only'};
+type Payload={candidate_id?:string;source_ip?:string;country?:string;findings?:unknown;analysis?:GuardianAssessment;notified?:string[];alertedAt?:string;alertDelivery?:'provider_accepted'|'local_only';alertGroup?:string};
+// The incident that owns the source's alert group. An absent source is never grouped,
+// matching the console's source grouping; a dismissed owner hands the group over.
+async function alertGroupFor(orgId:string,incident:IncidentRecord){
+ const source=(incident.payload as Payload).source_ip,startedAt=Date.parse(incident.startedAt);
+ if(!source||!Number.isFinite(startedAt))return incident.incidentId;
+ let primary=await claimAlertGroup(orgId,source,incident.incidentId,startedAt);
+ for(let attempt=0;attempt<3&&primary!==incident.incidentId;attempt++){
+  if((await store.incident(orgId,primary))?.state!=='resolved')return primary;
+  primary=await claimAlertGroup(orgId,source,incident.incidentId,startedAt,primary);
+ }
+ return primary;
+}
+// One reply answers every server in its alert group; each server keeps its own record.
+async function alertGroupMembers(orgId:string,incident:IncidentRecord){
+ const group=(incident.payload as Payload).alertGroup;if(!group)return [incident];
+ const members=(await store.incidents(orgId)).filter(i=>(i.payload as Payload|null)?.alertGroup===group);
+ return members.some(i=>i.incidentId===incident.incidentId)?members:[incident,...members];
+}
 function approvalCode(orgId:string,id:string){const secret=process.env.GUARDSCALE_SESSION_SECRET;if(!secret)throw Error('Approval signing is not configured');return createHmac('sha256',secret).update(orgId+':'+id).digest('hex').slice(0,16);}
 export async function enqueueIncident(orgId:string,incidentId:string){
  if(process.env.GUARDSCALE_QUEUE_URL)await new SQSClient({endpoint:process.env.GUARDSCALE_QUEUE_ENDPOINT}).send(new SendMessageCommand({QueueUrl:process.env.GUARDSCALE_QUEUE_URL,MessageBody:JSON.stringify({kind:'incident',orgId,incidentId})}));
@@ -18,11 +36,22 @@ export async function enqueueIncident(orgId:string,incidentId:string){
 export async function processIncident(orgId:string,incidentId:string){
  const incident=await store.incident(orgId,incidentId);if(!incident||incident.state==='resolved')return;
  const payload=incident.payload as Payload;
+ if(!payload.alertGroup&&payload.source_ip){
+  payload.alertGroup=await alertGroupFor(orgId,incident);
+  const current=await store.incident(orgId,incidentId);if(!current)return;
+  await store.putIncident({...current,payload:{...(current.payload as Payload),alertGroup:payload.alertGroup},updatedAt:new Date().toISOString()});
+  if(current.state==='resolved')return;
+ }
  if(!payload.analysis){
   payload.analysis=await assessWithGuardian(orgId,incidentId,payload.findings??[]);
   const current=await store.incident(orgId,incidentId);if(!current)return;
   await store.putIncident({...current,payload:{...(current.payload as Payload),...payload},updatedAt:new Date().toISOString()});
   if(current.state==='resolved')return;
+ }
+ if(payload.alertGroup&&payload.alertGroup!==incidentId){
+  // Another server already alerted for this source; its single reply covers this server too.
+  await store.putEvent({id:'alert-grouped-'+incidentId,tenantId:orgId,serverId:incident.serverId,agentId:incident.agentId,type:'alert.grouped',at:new Date().toISOString(),metadata:{incident_id:incidentId,alert_incident_id:payload.alertGroup}});
+  return;
  }
  const settings=await store.settings(orgId);
  const recipients=settings.notifications.recipients.split(/[\s,;]+/).filter(Boolean).slice(0,20);
@@ -46,25 +75,37 @@ export async function processIncident(orgId:string,incidentId:string){
  }
 }
 const phone=(s:string)=>s.replace(/\D/g,'');
-async function applyIncidentResponse(orgId:string,incident:IncidentRecord,action:'protect'|'watch'|'dismiss',actor:string){
+async function applyIncidentResponse(orgId:string,incident:IncidentRecord,action:'protect'|'watch'|'dismiss',actor:string):Promise<{text:string;incidents:IncidentRecord[]}>{
+ if(action==='protect'&&incident.state==='resolved')throw Error('This incident was dismissed; review a newer incident before protecting');
+ const targets=(await alertGroupMembers(orgId,incident)).filter(i=>i.incidentId===incident.incidentId||i.state!=='resolved');
+ const source=(incident.payload as Payload).source_ip??'agent-observed source';
  if(action==='protect'){
-  if(incident.state==='resolved')throw Error('This incident was dismissed; review a newer incident before protecting');
-  const command=await approveProtection(orgId,incident.incidentId,actor);
-  return `Protection ${command.status==='applied'?'already active':'requested'} for ${incident.serverId}. Source: ${(incident.payload as Payload).source_ip??'agent-observed source'}. Expires: ${command.expiresAt}. ${command.status==='applied'?'The agent has confirmed the rule.':'Waiting for the server agent to confirm the HTTP(S) block.'}`;
+  // Each server gets its own scoped command, so each agent confirms its own block.
+  const done:{incident:IncidentRecord;status:string;expiresAt:string}[]=[],skipped:string[]=[];let firstError:unknown;
+  for(const target of targets){
+   try{const command=await approveProtection(orgId,target.incidentId,actor);done.push({incident:target,status:command.status,expiresAt:command.expiresAt});}
+   catch(e){firstError??=e;skipped.push(`${target.serverId} (${e instanceof Error?e.message:'not approved'})`);}
+  }
+  if(!done.length)throw firstError;
+  if(targets.length===1){const [{status,expiresAt}]=done;return {incidents:[incident],text:`Protection ${status==='applied'?'already active':'requested'} for ${incident.serverId}. Source: ${source}. Expires: ${expiresAt}. ${status==='applied'?'The agent has confirmed the rule.':'Waiting for the server agent to confirm the HTTP(S) block.'}`};}
+  return {incidents:done.map(d=>d.incident),text:`Protection requested for ${done.length} servers: ${done.map(d=>d.incident.serverId).join(', ')}. Source: ${source}. Expires: ${done[0].expiresAt}. Each server agent confirms its own HTTP(S) block.${skipped.length?` Not requested for: ${skipped.join('; ')}.`:''}`};
  }
- await store.putIncident({...incident,state:action==='watch'?'watch':'resolved',updatedAt:new Date().toISOString()});
- if(action==='dismiss'){
-  const pending=await cancelIncidentProtection(orgId,incident.incidentId);
-  return `Dismissed ${incident.serverId}. Automatic extensions for this incident are stopped. ${pending?'Removal of its protection rule is requested; the server agent will confirm when it is removed.':'No active protection rule remains for this incident.'}`;
+ let pending=0;
+ for(const target of targets){
+  await store.putIncident({...target,state:action==='watch'?'watch':'resolved',updatedAt:new Date().toISOString()});
+  if(action==='dismiss')pending+=await cancelIncidentProtection(orgId,target.incidentId);
  }
- return `Monitoring continues for ${incident.serverId}. No new block was added; an existing block retains its original expiry.`;
+ if(targets.length===1)return {incidents:targets,text:action==='dismiss'?`Dismissed ${incident.serverId}. Automatic extensions for this incident are stopped. ${pending?'Removal of its protection rule is requested; the server agent will confirm when it is removed.':'No active protection rule remains for this incident.'}`:`Monitoring continues for ${incident.serverId}. No new block was added; an existing block retains its original expiry.`};
+ const servers=`${targets.length} servers: ${targets.map(t=>t.serverId).join(', ')}`;
+ if(action==='dismiss')return {incidents:targets,text:`Dismissed ${servers}. Automatic extensions for ${targets.length===1?'this incident':'these incidents'} are stopped. ${pending?`Removal of ${pending===1?'its protection rule':pending+' protection rules'} is requested; each server agent will confirm when its rule is removed.`:'No active protection rule remains for '+(targets.length===1?'this incident.':'these incidents.')}`};
+ return {incidents:targets,text:`Monitoring continues for ${servers}. No new block was added; an existing block retains its original expiry.`};
 }
 
 export async function processEmailEnvelope(envelope:unknown){
  const reply=await validatedEmailReply(envelope);if(!reply)return false;
  if(!await store.claimOnce(reply.orgId,'EMAIL_REPLY#'+reply.messageId,1))return false;
- const text=await applyIncidentResponse(reply.orgId,reply.incident,reply.action,'email:'+reply.sender);
- await store.putEvent({id:'email-reply-'+reply.messageId,tenantId:reply.orgId,serverId:reply.incident.serverId,agentId:reply.incident.agentId,type:'response.received',at:new Date().toISOString(),metadata:{option:reply.action,channel:'email',incident_id:reply.incident.incidentId}});
+ const {text,incidents}=await applyIncidentResponse(reply.orgId,reply.incident,reply.action,'email:'+reply.sender);
+ for(const target of incidents)await store.putEvent({id:'email-reply-'+reply.messageId+(target.incidentId===reply.incident.incidentId?'':'-'+target.incidentId),tenantId:reply.orgId,serverId:target.serverId,agentId:target.agentId,type:'response.received',at:new Date().toISOString(),metadata:{option:reply.action,channel:'email',incident_id:target.incidentId}});
  await notifier().send({channel:'email',destination:reply.sender,replyTo:reply.replyTo,subject:'GuardScale response: '+reply.incident.serverId,text});
  return true;
 }
@@ -101,8 +142,8 @@ export async function processWhatsAppEnvelope(envelope:unknown){
    continue;
   }
   const {orgId,incident,origin}=candidates[0],action=match[1].toLowerCase();
-  const confirmation=await applyIncidentResponse(orgId,incident,action as 'protect'|'watch'|'dismiss','whatsapp:'+phone(message.from));
-  await store.putEvent({id:'reply-'+message.id,tenantId:orgId,serverId:incident.serverId,agentId:incident.agentId,type:'response.received',at:new Date().toISOString(),metadata:{option:action,channel:'whatsapp',incident_id:incident.incidentId}});
+  const {text:confirmation,incidents}=await applyIncidentResponse(orgId,incident,action as 'protect'|'watch'|'dismiss','whatsapp:'+phone(message.from));
+  for(const target of incidents)await store.putEvent({id:'reply-'+message.id+(target.incidentId===incident.incidentId?'':'-'+target.incidentId),tenantId:orgId,serverId:target.serverId,agentId:target.agentId,type:'response.received',at:new Date().toISOString(),metadata:{option:action,channel:'whatsapp',incident_id:target.incidentId}});
   await notifier().send({channel:'whatsapp',destination:message.from,originationId:origin,subject:'GuardScale response',text:confirmation});
  }
  return true;

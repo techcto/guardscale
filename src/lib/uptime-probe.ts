@@ -2,7 +2,7 @@ import {lookup} from 'node:dns/promises';
 import {BlockList,isIP} from 'node:net';
 import http from 'node:http';
 import https from 'node:https';
-import {uptimeLimits,type UptimeSample} from './uptime-model';
+import {uptimeLimits,uptimePortError,type UptimeSample} from './uptime-model';
 
 const denied=new BlockList();
 for(const [address,prefix] of [['0.0.0.0',8],['10.0.0.0',8],['100.64.0.0',10],['127.0.0.0',8],['169.254.0.0',16],['172.16.0.0',12],['192.0.0.0',24],['192.0.2.0',24],['192.168.0.0',16],['198.18.0.0',15],['198.51.100.0',24],['203.0.113.0',24],['224.0.0.0',4],['240.0.0.0',4]] as const)denied.addSubnet(address,prefix,'ipv4');
@@ -16,6 +16,7 @@ export function localMonitorHostname(value:string){
 export function monitorURL(value:unknown){
  if(typeof value!=='string'||value.length>2048)throw Error('Enter a public HTTP(S) website URL');
  let url:URL;try{url=new URL(value.trim())}catch{throw Error('Enter a full http:// or https:// website URL')}
+ const portError=uptimePortError(url.href);if(portError)throw Error(portError);
  if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.hash||url.search||url.port&&!['80','443'].includes(url.port))throw Error('Use HTTP(S) on port 80 or 443, without credentials, queries or fragments');
  const host=url.hostname.replace(/^\[|\]$/g,'');
  if(localMonitorHostname(host))throw Error('Local and test hostnames are not public uptime targets');

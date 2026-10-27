@@ -34,14 +34,19 @@ test('server websites auto-enroll once, inherit tags and configured approved rec
   await store.upsertNode({...base,serverId:'private',websiteUrls:['http://127.0.0.1/','http://localhost:8186/']});
   await store.upsertNode({...base,serverId:'local-test',discoveredHosts:['local-fixture.test','demo.localhost','service.local','localtest.me','site.lvh.me']});
   await Promise.all([enrollServerWebsites(org.id),enrollServerWebsites(org.id)]);
-  let checks=await uptimeStore.list(org.id);assert.equal(checks.length,1);assert.equal(checks[0].url,'https://example.com/health');
+  let checks=await uptimeStore.list(org.id);assert.equal(checks.length,1);assert.equal(checks[0].url,'https://example.com/health');assert.equal(checks[0].name,'Server — example.com');
   assert.deepEqual(checks[0].tags,base.tags);assert.deepEqual(checks[0].recipientIds,[org.id+'approved']);assert.equal(checks[0].autoEnrolled,true);
   let check=checks[0];assert.ok(await uptimeStore.save({...check,name:'Operator-customized',paused:true},check.revision));
   await enrollServerWebsites(org.id);check=(await uptimeStore.get(org.id,check.id))!;assert.equal(check.name,'Operator-customized');assert.equal(check.paused,true);
   assert.ok(await uptimeStore.save({...check,deletedAt:at},check.revision));
   await enrollServerWebsites(org.id);assert.equal((await uptimeStore.list(org.id)).length,0);assert.equal((await uptimeStore.list(org.id,true)).length,1);
+  // A discovered host has no known scheme, so it is not guessed as HTTPS.
   await store.upsertNode({...base,serverId:'new-server',discoveredHosts:['other.example.com']});
-  await enrollServerWebsites(org.id);checks=await uptimeStore.list(org.id);assert.equal(checks.length,1);assert.equal(checks[0].url,'https://other.example.com/');
+  await enrollServerWebsites(org.id);assert.equal((await uptimeStore.list(org.id)).length,0);
+  // An explicit HTTP URL keeps its scheme; a server named after its host is not repeated.
+  await store.upsertNode({...base,serverId:'plain-host',displayName:'plain.example.com',websiteUrls:['http://plain.example.com/'],discoveredHosts:['plain.example.com']});
+  await enrollServerWebsites(org.id);checks=await uptimeStore.list(org.id);assert.equal(checks.length,1);
+  assert.equal(checks[0].url,'http://plain.example.com/');assert.equal(checks[0].name,'plain.example.com');
   const other=await store.createOrganization({name:'Separate workspace',ownerId:'owner',orgType:'business'});
   await store.upsertNode({...base,tenantId:other.id,serverId:'one',websiteUrls:['https://example.com/health']});await enrollServerWebsites(other.id);
   assert.equal((await uptimeStore.list(other.id)).length,1);await store.deleteOrganization(other.id);

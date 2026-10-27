@@ -1,6 +1,6 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {DynamoDBClient} from '@aws-sdk/client-dynamodb';
-import {DynamoDBDocumentClient,PutCommand,QueryCommand,UpdateCommand,DeleteCommand} from '@aws-sdk/lib-dynamodb';
+import {DynamoDBDocumentClient,PutCommand,QueryCommand,UpdateCommand,DeleteCommand,GetCommand} from '@aws-sdk/lib-dynamodb';
 import {store} from './store';
 export type ProtectionCommand={id:string;orgId:string;serverId:string;agentId:string;incidentId:string;candidateId:string;kind?:'inspect_server'|'protect';result?:Record<string,string>;expiresAt:string;approvedBy:string;createdAt:string;status:'queued'|'complete'|'applied'|'failed'|'rejected'|'expired'|'cancel_requested'|'cancelled';updatedAt:string};
 const db=DynamoDBDocumentClient.from(new DynamoDBClient({endpoint:process.env.GUARDSCALE_DYNAMODB_ENDPOINT}));
@@ -14,6 +14,23 @@ export async function withAutoGuardianLock(orgId:string,work:()=>Promise<void>){
   if(process.env.GUARDSCALE_TABLE)await db.send(new DeleteCommand({TableName:process.env.GUARDSCALE_TABLE,Key:key,ConditionExpression:'#token=:token',ExpressionAttributeNames:{'#token':'token'},ExpressionAttributeValues:{':token':token}}));
   else autoLocks.delete(orgId);
  }
+}
+// Autoscaled servers report the same source at once. The first incident claims its
+// organization's source group until 15 minutes after it started; later incidents join
+// that group instead of alerting again. `previous` replaces a dismissed group owner.
+export const alertGroupWindowMs=15*60000;
+const alertGroups=new Map<string,{primary:string;expiresAt:number}>();
+export async function claimAlertGroup(orgId:string,source:string,incidentId:string,startedAt:number,previous?:string){
+ const key={pk:'ORG#'+orgId,sk:'ALERT_GROUP#'+source},expiresAt=startedAt+alertGroupWindowMs;
+ if(process.env.GUARDSCALE_TABLE){
+  try{await db.send(new PutCommand({TableName:process.env.GUARDSCALE_TABLE,Item:{...key,primary:incidentId,expiresAt,ttl:Math.floor(expiresAt/1000)+86400},...(previous?{ConditionExpression:'#primary=:previous',ExpressionAttributeNames:{'#primary':'primary'},ExpressionAttributeValues:{':previous':previous}}:{ConditionExpression:'attribute_not_exists(pk) OR expiresAt < :start',ExpressionAttributeValues:{':start':startedAt}})}));return incidentId;}
+  catch(e){if(!(e instanceof Error&&e.name==='ConditionalCheckFailedException'))throw e;}
+  const current=(await db.send(new GetCommand({TableName:process.env.GUARDSCALE_TABLE,Key:key,ConsistentRead:true}))).Item as {primary?:string}|undefined;
+  return current?.primary??incidentId;
+ }
+ const memoryKey=orgId+'#'+source,current=alertGroups.get(memoryKey);
+ if(previous?current?.primary===previous:!current||current.expiresAt<startedAt){alertGroups.set(memoryKey,{primary:incidentId,expiresAt});return incidentId;}
+ return current!.primary;
 }
 export async function protect(orgId:string,approvalCommandId:string){
  const command=(await commandsFor(orgId)).find(c=>c.id===approvalCommandId&&c.kind!=='inspect_server');

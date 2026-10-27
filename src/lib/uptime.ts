@@ -5,12 +5,15 @@ import {probeWebsite,monitorURL,localMonitorHostname} from './uptime-probe';
 import {uptimeLimits,type UptimeMonitor,type UptimeSample} from './uptime-model';
 import {notifier,whatsappOrigination} from './notifications';
 import {setupNode,setupFingerprint} from './whatsapp-setup';
-import {validateDiscoveredHosts,serverDisplayName} from './server-sites';
+import {serverDisplayName} from './server-sites';
 export const uptimeURLId=(url:string)=>'url-'+createHash('sha256').update(url).digest('hex').slice(0,24);
+export function autoEnrolledName(server:string,url:string){const host=new URL(url).hostname;return (server.toLowerCase()===host?host:server+' — '+host).slice(0,100);}
 
 // Reconcile in the worker, never delay agent ingestion on external probes.
 // A URL is monitored once per workspace, regardless of the number of servers
 // reporting it. Paused, edited and explicitly deleted checks are not recreated.
+// Only the server's explicit website URLs are enrolled: discovered host names
+// carry no scheme, so guessing HTTP or HTTPS would report false outages.
 export async function enrollServerWebsites(orgId:string){
  const monitors=await uptimeStore.list(orgId,true),known=new Set(monitors.map(m=>m.url));
  for(const monitor of monitors){
@@ -22,22 +25,18 @@ export async function enrollServerWebsites(orgId:string){
    if((incident.payload as {kind?:string})?.kind==='uptime'&&incident.state!=='resolved')await store.putIncident({...incident,state:'resolved',updatedAt:at,payload:{...incident.payload as object,excludedReason:'Local/test hostname is outside public uptime monitoring'}});
   }
  }
- const knownHosts=new Set(monitors.map(m=>new URL(m.url).hostname));
  let active=monitors.filter(m=>!m.deletedAt).length;
  const settings=await store.settings(orgId),configured=new Set(settings.notifications.recipients.split(/[\s,;]+/).map(v=>v.toLowerCase()));
  const recipientIds=(await uptimeRecipients(orgId)).filter(u=>configured.has(u.email.toLowerCase())).map(u=>u.id).slice(0,20);
  const whatsapp=(await uptimeWhatsAppRecipients(orgId)).length>0;
  for(const node of await store.nodes(orgId)){
-  const explicitHosts=new Set((node.websiteUrls??[]).flatMap(value=>{try{return[new URL(value).hostname]}catch{return[]}}));
-  const candidates=[...(node.websiteUrls??[]),...validateDiscoveredHosts(node.discoveredHosts).filter(host=>!explicitHosts.has(host)&&!knownHosts.has(host)).map(host=>'https://'+host+'/')];
-  for(const candidate of candidates){
+  for(const candidate of node.websiteUrls??[]){
    let url:string;try{url=monitorURL(candidate).href;}catch{continue;}
    if(known.has(url))continue;
    if(active>=uptimeLimits.monitors)return;
    known.add(url);
-   knownHosts.add(new URL(url).hostname);
    const at=new Date().toISOString(),id=uptimeURLId(url);
-   const created=await uptimeStore.save({id,orgId,name:(serverDisplayName(node)+' — '+new URL(url).hostname).slice(0,100),url,intervalSeconds:60,recipientIds,whatsapp,tags:[...new Set(node.tags)].slice(0,10),paused:false,autoEnrolled:true,sourceServerId:node.serverId,revision:0,createdAt:at,updatedAt:at,nextCheckAt:at,state:'unknown',failures:0,successes:0,samples:[],notices:[],outages:[]});
+   const created=await uptimeStore.save({id,orgId,name:autoEnrolledName(serverDisplayName(node),url),url,intervalSeconds:60,recipientIds,whatsapp,tags:[...new Set(node.tags)].slice(0,10),paused:false,autoEnrolled:true,sourceServerId:node.serverId,revision:0,createdAt:at,updatedAt:at,nextCheckAt:at,state:'unknown',failures:0,successes:0,samples:[],notices:[],outages:[]});
    if(created)active++;
   }
  }
@@ -72,7 +71,9 @@ export function recordUptimeSample(m:UptimeMonitor,sample:UptimeSample):UptimeMo
  next.samples=[...next.samples,sample].filter(s=>Date.parse(s.at)>=Date.parse(sample.at)-86400000).slice(-uptimeLimits.samples);
  next.failures=sample.ok?0:next.failures+1;next.successes=sample.ok?next.successes+1:0;
  next.updatedAt=sample.at;next.nextCheckAt=new Date(Date.parse(sample.at)+m.intervalSeconds*1000).toISOString();
- if(!sample.ok&&next.failures>=2&&next.state!=='down'){
+ // An auto-enrolled check stays pending until it has been up once: a URL that never
+ // answered is a configuration question, not an outage worth an incident or alert.
+ if(!sample.ok&&next.failures>=2&&next.state!=='down'&&!(m.autoEnrolled&&next.state==='unknown')){
   const incidentId=randomUUID();next.state='down';next.stateSince=sample.at;next.activeIncidentId=incidentId;
   next.outages=[...next.outages,{incidentId,startedAt:sample.at}].slice(-50);
   next.notices.push({id:randomUUID(),incidentId,kind:'down',at:sample.at,sent:[],sample});

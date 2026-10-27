@@ -8,6 +8,11 @@ export type UptimeMonitor={
  autoEnrolled?:boolean;sourceServerId?:string;deletedAt?:string;
 };
 export const uptimeLimits={monitors:50,samples:1440,intervals:[60,300,900],timeoutMs:8000};
+// Checks are restricted to the standard web ports; explain that before any other URL error.
+export function uptimePortError(value:string){
+ let url:URL;try{url=new URL(value.trim())}catch{return ''}
+ return ['http:','https:'].includes(url.protocol)&&url.port&&!['80','443'].includes(url.port)?`Port ${url.port} is not supported. Uptime checks use port 80 (HTTP) or 443 (HTTPS) only.`:'';
+}
 export function monitorStatus(m:Pick<UptimeMonitor,'paused'|'samples'|'intervalSeconds'|'state'>,now=Date.now()){
  if(m.paused)return 'paused';
  const last=m.samples.at(-1);
