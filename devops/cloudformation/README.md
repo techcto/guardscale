@@ -5,6 +5,11 @@ registration, SES verification, required launch values and current automation li
 For container-version rollouts, use the [reviewed update command](../../docs/cft-update.md).
 No release is needed for the [local hackathon tests](../../docs/hackathon-local-testing.md).
 
+SES incident replies are optional resources in these same main templates. See
+[SES configuration and replies](../../docs/email-replies.md) for parameters,
+deployment permissions and the normal release/change-set workflow. Existing
+verified sender identities are reused; no extra identity or email stack is created.
+
 ## WhatsApp queues for private installs and development
 
 Each installation owns its work queue. For a fresh private installation, use

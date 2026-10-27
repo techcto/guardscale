@@ -2,7 +2,7 @@ import {SQSClient,ReceiveMessageCommand,DeleteMessageCommand,CreateQueueCommand}
 import {notifier,type Notification} from '../lib/notifications';
 import {store} from '../lib/store';
 import {evaluateAutoGuardian} from '../lib/auto-guardian';
-import {processIncident,processWhatsAppEnvelope,notifyProtectionOutcome} from '../lib/incident-workflow';
+import {processIncident,processWhatsAppEnvelope,processEmailEnvelope,notifyProtectionOutcome} from '../lib/incident-workflow';
 import {exportUsage,reconcileUsage,usageAlerts,usageExportEnabled} from '../lib/usage';
 import {stripe} from '../lib/stripe';
 import {messagingClientOptions} from '../lib/local-messaging-credentials';
@@ -20,7 +20,11 @@ async function main(){
   for(const message of batch.Messages??[]){
    try{
     const raw=message.Body?JSON.parse(message.Body):{};
-    const work=(raw.Type==='Notification'&&typeof raw.Message==='string'?JSON.parse(raw.Message):raw) as {kind?:string;orgId?:string;incidentId?:string;commandId?:string;notification?:Notification&{orgId?:string};whatsAppWebhookEntry?:string};
+    const work=(raw.Type==='Notification'&&typeof raw.Message==='string'?JSON.parse(raw.Message):raw) as {kind?:string;orgId?:string;incidentId?:string;commandId?:string;notification?:Notification&{orgId?:string};whatsAppWebhookEntry?:string;notificationType?:string};
+    if(work.notificationType==='Received'){
+     if(raw.Type!=='Notification'||!process.env.GUARDSCALE_EMAIL_REPLY_TOPIC_ARN||raw.TopicArn!==process.env.GUARDSCALE_EMAIL_REPLY_TOPIC_ARN)throw Error('Untrusted email reply topic');
+     await processEmailEnvelope(work);
+    }
     if(work.kind==='incident'&&work.orgId&&work.incidentId)await processIncident(work.orgId,work.incidentId);
     if(work.kind==='protection-outcome'&&work.orgId&&work.commandId)await notifyProtectionOutcome(work.orgId,work.commandId);
     if(work.whatsAppWebhookEntry){

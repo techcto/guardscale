@@ -24,6 +24,11 @@ jobs:
       - run: npm ci
       - run: npx next typegen && npm run typecheck
       - run: npm run lint
+      - run: npm run test:web
+      - name: Check messaging templates and guarded email activation
+        run: |
+          node --test devops/cloudformation/messaging.test.cjs
+          python3 devops/cloudformation/email-rule-activation.test.py
       - run: npm run build
       - name: Reject secrets and identifiable fixture data
         run: bash scripts/check-public-data.sh

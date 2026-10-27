@@ -10,7 +10,7 @@ export async function POST(req:NextRequest){
   if(!destination)return NextResponse.json({error:'A destination is required to send a test notification'},{status:400});
   try{
     const id=await notifier().send({channel,destination,originationId,subject:'GuardScale test notification',text:`This is a test notification from GuardScale, sent by ${session.username}.`});
-    return NextResponse.json({...notificationReceipt(id),id});
+    return NextResponse.json({...notificationReceipt(id,channel),id});
   }catch(error){
     return NextResponse.json({error:error instanceof Error?error.message:'Unable to send test notification'},{status:502});
   }

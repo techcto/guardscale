@@ -29,7 +29,9 @@ else{
   const dir=mkdtempSync(join(tmpdir(),'guardscale-whatsapp-'));chmodSync(dir,0o700);const path=join(dir,'session.json');
   writeFileSync(path,JSON.stringify({aws_access_key_id:c.AccessKeyId,aws_secret_access_key:c.SecretAccessKey,aws_session_token:c.SessionToken,expiration:c.Expiration}),{mode:0o600});
   let source=readFileSync(file,'utf8');
-  for(const[k,v]of Object.entries({GUARDSCALE_MESSAGING_CREDENTIALS_PATH:path.replaceAll('\\','/'),GUARDSCALE_WHATSAPP_DEV_QUEUE_URL:outputs.get('QueueUrl'),GUARDSCALE_WHATSAPP_LOCAL_ROLE_ARN:outputs.get('LocalTestingRoleArn'),GUARDSCALE_WHATSAPP_ORIGINATION_ID:parameters.get('WhatsappSenderId'),GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN:parameters.get('WhatsappEventTopicArn')})){
+  const updates={GUARDSCALE_MESSAGING_CREDENTIALS_PATH:path.replaceAll('\\','/'),GUARDSCALE_WHATSAPP_DEV_QUEUE_URL:outputs.get('QueueUrl'),GUARDSCALE_WHATSAPP_LOCAL_ROLE_ARN:outputs.get('LocalTestingRoleArn'),GUARDSCALE_WHATSAPP_ORIGINATION_ID:parameters.get('WhatsappSenderId'),GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN:parameters.get('WhatsappEventTopicArn')};
+  for(const [parameter,key]of [['SesFrom','GUARDSCALE_SES_FROM'],['LocalEmailRecipient','GUARDSCALE_LOCAL_EMAIL_RECIPIENT'],['EmailReplyDomain','GUARDSCALE_EMAIL_REPLY_DOMAIN'],['EmailReplyTopicArn','GUARDSCALE_EMAIL_REPLY_TOPIC_ARN']])if(parameters.get(parameter))updates[key]=parameters.get(parameter);
+  for(const[k,v]of Object.entries(updates)){
    if(!v)throw Error('Missing development setting '+k);const line=k+'='+v,re=new RegExp('^'+k+'=.*$','m');source=re.test(source)?source.replace(re,line):source.trimEnd()+'\n'+line+'\n';
   }
   writeFileSync(file,source,{mode:0o600});console.log(JSON.stringify({status:'ready',credentialFile:path,expiresAt:c.Expiration,recipientEnding:env.GUARDSCALE_LOCAL_WHATSAPP_RECIPIENT.slice(-4),separateReplyQueue:true,productionRoutingUnchanged:true},null,2));

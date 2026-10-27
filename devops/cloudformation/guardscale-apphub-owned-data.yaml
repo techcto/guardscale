@@ -241,6 +241,39 @@
       "Type": "String",
       "Default": "",
       "Description": "Optional comma-separated signup domain blocklist. Domain and subdomains are blocked for public registration; empty permits all valid email domains."
+    },
+    "EmailReplyTopicArn": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+$",
+      "Description": "Encrypted SES receiving topic from the email-replies stack; blank disables email replies."
+    },
+    "EmailReplyDomain": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^[a-z0-9.-]+\\.[a-z]{2,}$",
+      "Description": "Dedicated receiving subdomain matching the email-replies stack."
+    },
+    "EmailRepliesEnabled": {
+      "Type": "String",
+      "Default": "false",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Description": "Create SES reply routing in this application stack using the existing verified sender identity. Does not create another SES identity."
+    },
+    "EmailReplyHostedZoneId": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^Z[A-Z0-9]+$",
+      "Description": "Route 53 hosted zone for the dedicated reply subdomain. Required for managed email replies."
+    },
+    "EmailReplyExistingRuleSetName": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^[A-Za-z0-9._-]{1,64}$",
+      "Description": "Existing active SES rule set to extend. Blank creates a guarded stack-owned rule set only when no other rule set is active."
     }
   },
   "Conditions": {
@@ -473,6 +506,58 @@
           ]
         }
       ]
+    },
+    "HasEmailReplies": {
+      "Fn::Or": [
+        {
+          "Condition": "CreateManagedEmailReplies"
+        },
+        {
+          "Fn::Not": [
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "EmailReplyTopicArn"
+                },
+                ""
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "HasMessagingTopic": {
+      "Fn::Or": [
+        {
+          "Condition": "HasWhatsappTopic"
+        },
+        {
+          "Condition": "HasEmailReplies"
+        }
+      ]
+    },
+    "CreateManagedEmailReplies": {
+      "Fn::Equals": [
+        {
+          "Ref": "EmailRepliesEnabled"
+        },
+        "true"
+      ]
+    },
+    "CreateEmailReplyRuleSet": {
+      "Fn::And": [
+        {
+          "Condition": "CreateManagedEmailReplies"
+        },
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "EmailReplyExistingRuleSetName"
+            },
+            ""
+          ]
+        }
+      ]
     }
   },
   "Rules": {
@@ -540,6 +625,137 @@
             ]
           },
           "AssertDescription": "Supply both raw Stripe credentials or an existing secret ARN, never partial credentials or both sources."
+        }
+      ]
+    },
+    "EmailReplyConfiguration": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Or": [
+              {
+                "Fn::And": [
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "EmailRepliesEnabled"
+                      },
+                      "false"
+                    ]
+                  },
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "EmailReplyTopicArn"
+                      },
+                      ""
+                    ]
+                  },
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "EmailReplyDomain"
+                      },
+                      ""
+                    ]
+                  }
+                ]
+              },
+              {
+                "Fn::And": [
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "EmailRepliesEnabled"
+                      },
+                      "false"
+                    ]
+                  },
+                  {
+                    "Fn::Not": [
+                      {
+                        "Fn::Equals": [
+                          {
+                            "Ref": "EmailReplyTopicArn"
+                          },
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "Fn::Not": [
+                      {
+                        "Fn::Equals": [
+                          {
+                            "Ref": "EmailReplyDomain"
+                          },
+                          ""
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "Fn::And": [
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "EmailRepliesEnabled"
+                      },
+                      "true"
+                    ]
+                  },
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "EmailReplyTopicArn"
+                      },
+                      ""
+                    ]
+                  },
+                  {
+                    "Fn::Not": [
+                      {
+                        "Fn::Equals": [
+                          {
+                            "Ref": "EmailReplyDomain"
+                          },
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "Fn::Not": [
+                      {
+                        "Fn::Equals": [
+                          {
+                            "Ref": "EmailReplyHostedZoneId"
+                          },
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "Fn::Not": [
+                      {
+                        "Fn::Equals": [
+                          {
+                            "Ref": "SesFrom"
+                          },
+                          ""
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "AssertDescription": "Managed replies require a dedicated domain, hosted zone and verified SES From address with no external topic. Otherwise configure both external topic/domain, or leave replies disabled."
         }
       ]
     }
@@ -1169,6 +1385,26 @@
                 "Value": {
                   "Ref": "BlockedSignupDomains"
                 }
+              },
+              {
+                "Name": "GUARDSCALE_EMAIL_REPLY_DOMAIN",
+                "Value": {
+                  "Ref": "EmailReplyDomain"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_EMAIL_REPLY_TOPIC_ARN",
+                "Value": {
+                  "Fn::If": [
+                    "CreateManagedEmailReplies",
+                    {
+                      "Ref": "EmailReplyTopic"
+                    },
+                    {
+                      "Ref": "EmailReplyTopicArn"
+                    }
+                  ]
+                }
               }
             ],
             "LogConfiguration": {
@@ -1457,6 +1693,26 @@
                 "Value": {
                   "Ref": "BlockedSignupDomains"
                 }
+              },
+              {
+                "Name": "GUARDSCALE_EMAIL_REPLY_DOMAIN",
+                "Value": {
+                  "Ref": "EmailReplyDomain"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_EMAIL_REPLY_TOPIC_ARN",
+                "Value": {
+                  "Fn::If": [
+                    "CreateManagedEmailReplies",
+                    {
+                      "Ref": "EmailReplyTopic"
+                    },
+                    {
+                      "Ref": "EmailReplyTopicArn"
+                    }
+                  ]
+                }
               }
             ],
             "LogConfiguration": {
@@ -1697,6 +1953,26 @@
                 "Name": "GUARDSCALE_AI_CREDIT_WEIGHTS_JSON",
                 "Value": {
                   "Ref": "AICreditWeights"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_EMAIL_REPLY_DOMAIN",
+                "Value": {
+                  "Ref": "EmailReplyDomain"
+                }
+              },
+              {
+                "Name": "GUARDSCALE_EMAIL_REPLY_TOPIC_ARN",
+                "Value": {
+                  "Fn::If": [
+                    "CreateManagedEmailReplies",
+                    {
+                      "Ref": "EmailReplyTopic"
+                    },
+                    {
+                      "Ref": "EmailReplyTopicArn"
+                    }
+                  ]
                 }
               }
             ],
@@ -2147,7 +2423,7 @@
     },
     "WhatsappQueuePolicy": {
       "Type": "AWS::SQS::QueuePolicy",
-      "Condition": "HasWhatsappTopic",
+      "Condition": "HasMessagingTopic",
       "Properties": {
         "Queues": [
           {
@@ -2158,32 +2434,76 @@
           "Version": "2012-10-17",
           "Statement": [
             {
-              "Effect": "Allow",
-              "Principal": {
-                "Service": "sns.amazonaws.com"
-              },
-              "Action": "sqs:SendMessage",
-              "Resource": {
-                "Fn::GetAtt": [
-                  "Queue",
-                  "Arn"
-                ]
-              },
-              "Condition": {
-                "ArnEquals": {
-                  "aws:SourceArn": {
-                    "Fn::If": [
-                      "CreateWhatsappTopic",
-                      {
-                        "Ref": "WhatsappTopic"
-                      },
-                      {
-                        "Ref": "WhatsappEventTopicArn"
-                      }
+              "Fn::If": [
+                "HasWhatsappTopic",
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "Service": "sns.amazonaws.com"
+                  },
+                  "Action": "sqs:SendMessage",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "Queue",
+                      "Arn"
                     ]
+                  },
+                  "Condition": {
+                    "ArnEquals": {
+                      "aws:SourceArn": {
+                        "Fn::If": [
+                          "CreateWhatsappTopic",
+                          {
+                            "Ref": "WhatsappTopic"
+                          },
+                          {
+                            "Ref": "WhatsappEventTopicArn"
+                          }
+                        ]
+                      }
+                    }
                   }
+                },
+                {
+                  "Ref": "AWS::NoValue"
                 }
-              }
+              ]
+            },
+            {
+              "Fn::If": [
+                "HasEmailReplies",
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "Service": "sns.amazonaws.com"
+                  },
+                  "Action": "sqs:SendMessage",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "Queue",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "ArnEquals": {
+                      "aws:SourceArn": {
+                        "Fn::If": [
+                          "CreateManagedEmailReplies",
+                          {
+                            "Ref": "EmailReplyTopic"
+                          },
+                          {
+                            "Ref": "EmailReplyTopicArn"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "Ref": "AWS::NoValue"
+                }
+              ]
             }
           ]
         }
@@ -2389,6 +2709,393 @@
           "Fn::Sub": "{\"secret_key\":\"${StripeSecretKey}\",\"webhook_secret\":\"${StripeWebhookSecret}\"}"
         }
       }
+    },
+    "EmailReplySubscription": {
+      "Type": "AWS::SNS::Subscription",
+      "Condition": "HasEmailReplies",
+      "DependsOn": [
+        "WhatsappQueuePolicy"
+      ],
+      "Properties": {
+        "TopicArn": {
+          "Fn::If": [
+            "CreateManagedEmailReplies",
+            {
+              "Ref": "EmailReplyTopic"
+            },
+            {
+              "Ref": "EmailReplyTopicArn"
+            }
+          ]
+        },
+        "Protocol": "sqs",
+        "Endpoint": {
+          "Fn::GetAtt": [
+            "Queue",
+            "Arn"
+          ]
+        },
+        "RawMessageDelivery": false
+      }
+    },
+    "EmailReplyDns": {
+      "Type": "AWS::Route53::RecordSet",
+      "Condition": "CreateManagedEmailReplies",
+      "Properties": {
+        "HostedZoneId": {
+          "Ref": "EmailReplyHostedZoneId"
+        },
+        "Name": {
+          "Ref": "EmailReplyDomain"
+        },
+        "Type": "MX",
+        "TTL": "300",
+        "ResourceRecords": [
+          {
+            "Fn::Sub": "10 inbound-smtp.${AWS::Region}.amazonaws.com"
+          }
+        ]
+      }
+    },
+    "EmailReplyKey": {
+      "Type": "AWS::KMS::Key",
+      "Condition": "CreateManagedEmailReplies",
+      "Properties": {
+        "EnableKeyRotation": true,
+        "PendingWindowInDays": 7,
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": "guardscale"
+          }
+        ],
+        "KeyPolicy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+                }
+              },
+              "Action": "kms:*",
+              "Resource": "*"
+            },
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ses.amazonaws.com"
+              },
+              "Action": [
+                "kms:GenerateDataKey",
+                "kms:Decrypt"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "EmailReplyTopic": {
+      "Type": "AWS::SNS::Topic",
+      "Condition": "CreateManagedEmailReplies",
+      "Properties": {
+        "KmsMasterKeyId": {
+          "Ref": "EmailReplyKey"
+        },
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": "guardscale"
+          }
+        ]
+      }
+    },
+    "EmailReplyTopicPolicy": {
+      "Type": "AWS::SNS::TopicPolicy",
+      "Condition": "CreateManagedEmailReplies",
+      "Properties": {
+        "Topics": [
+          {
+            "Ref": "EmailReplyTopic"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ses.amazonaws.com"
+              },
+              "Action": "sns:Publish",
+              "Resource": {
+                "Ref": "EmailReplyTopic"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnEquals": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": [
+                      "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:receipt-rule-set/${RuleSet}:receipt-rule/${Rule}",
+                      {
+                        "RuleSet": {
+                          "Fn::If": [
+                            "CreateEmailReplyRuleSet",
+                            {
+                              "Ref": "EmailReplyRuleSet"
+                            },
+                            {
+                              "Ref": "EmailReplyExistingRuleSetName"
+                            }
+                          ]
+                        },
+                        "Rule": {
+                          "Fn::Sub": [
+                            "guardscale-${Id}-commands",
+                            {
+                              "Id": {
+                                "Fn::Select": [
+                                  0,
+                                  {
+                                    "Fn::Split": [
+                                      "-",
+                                      {
+                                        "Fn::Select": [
+                                          2,
+                                          {
+                                            "Fn::Split": [
+                                              "/",
+                                              {
+                                                "Ref": "AWS::StackId"
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "EmailReplyRuleSet": {
+      "Type": "AWS::SES::ReceiptRuleSet",
+      "Condition": "CreateEmailReplyRuleSet",
+      "Properties": {
+        "RuleSetName": {
+          "Fn::Sub": [
+            "guardscale-${Id}",
+            {
+              "Id": {
+                "Fn::Select": [
+                  2,
+                  {
+                    "Fn::Split": [
+                      "/",
+                      {
+                        "Ref": "AWS::StackId"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "EmailReplyRule": {
+      "Type": "AWS::SES::ReceiptRule",
+      "Condition": "CreateManagedEmailReplies",
+      "DependsOn": [
+        "EmailReplyTopicPolicy",
+        "EmailReplyDns"
+      ],
+      "Properties": {
+        "RuleSetName": {
+          "Fn::If": [
+            "CreateEmailReplyRuleSet",
+            {
+              "Ref": "EmailReplyRuleSet"
+            },
+            {
+              "Ref": "EmailReplyExistingRuleSetName"
+            }
+          ]
+        },
+        "Rule": {
+          "Name": {
+            "Fn::Sub": [
+              "guardscale-${Id}-commands",
+              {
+                "Id": {
+                  "Fn::Select": [
+                    0,
+                    {
+                      "Fn::Split": [
+                        "-",
+                        {
+                          "Fn::Select": [
+                            2,
+                            {
+                              "Fn::Split": [
+                                "/",
+                                {
+                                  "Ref": "AWS::StackId"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "Enabled": true,
+          "ScanEnabled": true,
+          "TlsPolicy": "Require",
+          "Recipients": [
+            {
+              "Ref": "EmailReplyDomain"
+            }
+          ],
+          "Actions": [
+            {
+              "SNSAction": {
+                "TopicArn": {
+                  "Ref": "EmailReplyTopic"
+                },
+                "Encoding": "Base64"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "EmailReplyActivationRole": {
+      "Type": "AWS::IAM::Role",
+      "Condition": "CreateEmailReplyRuleSet",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "guarded-email-receiving-activation",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ses:DescribeActiveReceiptRuleSet",
+                    "ses:SetActiveReceiptRuleSet"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "LogGroup",
+                      "Arn"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "EmailReplyActivationFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Condition": "CreateEmailReplyRuleSet",
+      "Properties": {
+        "Runtime": "python3.13",
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "EmailReplyActivationRole",
+            "Arn"
+          ]
+        },
+        "Timeout": 90,
+        "LoggingConfig": {
+          "LogGroup": {
+            "Ref": "LogGroup"
+          },
+          "LogFormat": "JSON"
+        },
+        "Code": {
+          "ZipFile": "import json\nimport urllib.request\nimport boto3\n\ndef handler(event, context):\n    props = event['ResourceProperties']\n    name = props['RuleSetName']\n    client = boto3.client('ses')\n    status, reason = 'SUCCESS', 'GuardScale email receiving activation checked'\n    try:\n        active = client.describe_active_receipt_rule_set().get('Metadata', {}).get('Name')\n        if event['RequestType'] == 'Delete':\n            if active == name:\n                client.set_active_receipt_rule_set()\n        else:\n            if active and active != name:\n                raise ValueError('A different SES receipt rule set is active; refusing to replace it. Use ExistingRuleSetName instead.')\n            client.set_active_receipt_rule_set(RuleSetName=name)\n    except Exception as error:\n        status, reason = 'FAILED', str(error)[:500]\n    body = json.dumps({'Status': status, 'Reason': reason,\n        'PhysicalResourceId': event.get('PhysicalResourceId', 'guardscale-email-activation-'+name),\n        'StackId': event['StackId'], 'RequestId': event['RequestId'],\n        'LogicalResourceId': event['LogicalResourceId'], 'Data': {}}).encode()\n    request = urllib.request.Request(event['ResponseURL'], data=body, method='PUT',\n        headers={'content-type': '', 'content-length': str(len(body))})\n    with urllib.request.urlopen(request, timeout=20):\n        pass\n"
+        }
+      }
+    },
+    "ActivateEmailReplyRules": {
+      "Type": "Custom::GuardScaleEmailRuleActivation",
+      "Condition": "CreateEmailReplyRuleSet",
+      "DependsOn": "EmailReplyRule",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "EmailReplyActivationFunction",
+            "Arn"
+          ]
+        },
+        "ServiceTimeout": 120,
+        "RuleSetName": {
+          "Fn::If": [
+            "CreateEmailReplyRuleSet",
+            {
+              "Ref": "EmailReplyRuleSet"
+            },
+            {
+              "Ref": "EmailReplyExistingRuleSetName"
+            }
+          ]
+        }
+      }
     }
   },
   "Outputs": {
@@ -2474,6 +3181,24 @@
             "Ref": "StripeCredentials"
           }
         ]
+      }
+    },
+    "EmailReplyTopicArn": {
+      "Value": {
+        "Fn::If": [
+          "CreateManagedEmailReplies",
+          {
+            "Ref": "EmailReplyTopic"
+          },
+          {
+            "Ref": "EmailReplyTopicArn"
+          }
+        ]
+      }
+    },
+    "EmailReplyDomain": {
+      "Value": {
+        "Ref": "EmailReplyDomain"
       }
     }
   }

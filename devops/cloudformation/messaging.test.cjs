@@ -22,7 +22,11 @@ for(const name of ['guardscale.yaml','guardscale-existing.yaml','guardscale-apph
    assert.equal(evaluate(r.WhatsappSubscription.Properties.TopicArn,p),managed?'WhatsappTopic':topic);
   }
   assert.equal(r.WhatsappSubscription.Properties.RawMessageDelivery,false,'worker requires trusted SNS envelope');
-  assert.deepEqual(r.WhatsappSubscription.Properties.TopicArn,r.WhatsappQueuePolicy.Properties.PolicyDocument.Statement[0].Condition.ArnEquals['aws:SourceArn']);
+  assert.deepEqual(r.WhatsappSubscription.Properties.TopicArn,r.WhatsappQueuePolicy.Properties.PolicyDocument.Statement[0]['Fn::If'][1].Condition.ArnEquals['aws:SourceArn']);
+  assert.equal(r.WhatsappQueuePolicy.Condition,'HasMessagingTopic');
+  assert.deepEqual(r.WhatsappQueuePolicy.Properties.PolicyDocument.Statement[1]['Fn::If'][1].Condition.ArnEquals['aws:SourceArn'],r.EmailReplySubscription.Properties.TopicArn);
+  assert.equal(r.EmailReplySubscription.Properties.RawMessageDelivery,false);
+  assert.equal(r.EmailReplySubscription.Condition,'HasEmailReplies');
   const policy=r.WhatsappTopicPolicy.Properties.PolicyDocument.Statement[0];
   assert.deepEqual(policy.Principal,{Service:'social-messaging.amazonaws.com'});
   assert.deepEqual(policy.Condition.StringEquals['aws:SourceAccount'],{Ref:'AWS::AccountId'});
@@ -36,9 +40,24 @@ for(const name of ['guardscale.yaml','guardscale-existing.yaml','guardscale-apph
    assert.deepEqual(env.GUARDSCALE_SES_FROM,{Ref:'SesFrom'});
    assert.deepEqual(env.GUARDSCALE_WHATSAPP_ORIGINATION_ID,{Ref:'WhatsappOriginationId'});
    assert.deepEqual(env.GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE,{Ref:'WhatsappTemplateLanguage'});
+   assert.deepEqual(env.GUARDSCALE_EMAIL_REPLY_DOMAIN,{Ref:'EmailReplyDomain'});
+   assert.deepEqual(env.GUARDSCALE_EMAIL_REPLY_TOPIC_ARN,r.EmailReplySubscription.Properties.TopicArn);
   }
   assert.deepEqual(t.Outputs.SesFrom.Value,{Ref:'SesFrom'});
   assert.equal(t.Parameters.WhatsappBusinessAccountId.Default,'','legacy stacks opt in explicitly');
   assert.ok(!t.Description.includes('social-messaging:'),'IAM statements must not be folded into template description');
  });
 }
+for(const file of ['guardscale.yaml','guardscale-existing.yaml','guardscale-apphub-migration.yaml','guardscale-apphub-owned-data.yaml','guardscale-apphub-relaunch.yaml'])test(file+': email replies belong to the main stack and reuse a verified identity',()=>{
+ const t=yaml.load(fs.readFileSync(path.join(__dirname,file),'utf8'),{schema}),r=t.Resources;
+ assert.equal(t.Parameters.EmailRepliesEnabled.Default,'false','existing installations opt in');
+ assert.equal(Object.values(r).some(x=>x.Type==='AWS::SES::EmailIdentity'),false,'never create another sender identity');
+ assert.equal(r.EmailReplyTopic.Properties.KmsMasterKeyId.Ref,'EmailReplyKey');
+ assert.equal(r.EmailReplyRule.Properties.Rule.TlsPolicy,'Require');
+ assert.equal(r.EmailReplyRule.Properties.Rule.ScanEnabled,true);
+ assert.equal(r.EmailReplyRule.Properties.Rule.Actions[0].SNSAction.Encoding,'Base64');
+ assert.equal(r.ActivateEmailReplyRules.Condition,'CreateEmailReplyRuleSet');
+ assert.equal(r.EmailReplyActivationFunction.Properties.Code.ZipFile,fs.readFileSync(path.join(__dirname,'email-rule-activation.py'),'utf8'));
+ assert.equal(r.EmailReplyDns.Properties.Type,'MX');
+ assert.deepEqual(r.EmailReplyDns.Properties.Name,{Ref:'EmailReplyDomain'});
+});

@@ -13,7 +13,7 @@ export function senderMatches(origin:string,arns:string[]){
  const id=origin.replace(/^phone-number-id-/,'');
  return arns.some(arn=>/^arn:aws[a-z-]*:social-messaging:[a-z0-9-]+:\d{12}:phone-number-id\/[a-zA-Z0-9-]+$/.test(arn)&&(arn.endsWith('/'+id)||arn.endsWith('/'+origin)));
 }
-export function notificationReceipt(id:string){return id==='local-notification-not-delivered'?{status:'local_only',message:'Recorded locally only. No message was delivered.'}:{status:'provider_accepted',message:'AWS accepted the message. Delivery is not yet confirmed; check your phone.'}}
+export function notificationReceipt(id:string,channel:'email'|'whatsapp'='whatsapp'){return id==='local-notification-not-delivered'?{status:'local_only',message:'Recorded locally only. No message was delivered.'}:{status:'provider_accepted',message:`AWS accepted the message. Delivery is not yet confirmed; check your ${channel==='email'?'inbox':'phone'}.`}}
 const secret=()=>{const value=process.env.GUARDSCALE_SESSION_SECRET;if(!value)throw Error('Session signing is not configured');return value};
 const digest=(value:string)=>createHmac('sha256',secret()).update(value).digest('hex');
 type Challenge={orgId:string;recipient:string;origin:string;expires:number;nonce:string};

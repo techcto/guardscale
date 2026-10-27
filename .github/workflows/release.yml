@@ -63,10 +63,10 @@ jobs:
           bash devops/public-assets.sh
           aws s3 cp dist/agent/ "s3://$GUARDSCALE_CFT_BUCKET/agent/$VERSION/" --recursive --cache-control "public,max-age=31536000,immutable" --no-progress
           aws s3 cp dist/agent/ "s3://$GUARDSCALE_CFT_BUCKET/agent/latest/" --recursive --cache-control no-cache --no-progress
-          aws s3 cp devops/cloudformation/guardscale.yaml "s3://$GUARDSCALE_CFT_BUCKET/cloudformation/guardscale-$VERSION.yaml" --content-type text/yaml --cache-control no-cache --no-progress
-          aws s3 cp devops/cloudformation/guardscale.yaml "s3://$GUARDSCALE_CFT_BUCKET/cloudformation/guardscale.yaml" --content-type text/yaml --cache-control no-cache --no-progress
-          aws s3 cp devops/cloudformation/guardscale-existing.yaml "s3://$GUARDSCALE_CFT_BUCKET/cloudformation/guardscale-existing-$VERSION.yaml" --content-type text/yaml --cache-control no-cache --no-progress
-          aws s3 cp devops/cloudformation/guardscale-existing.yaml "s3://$GUARDSCALE_CFT_BUCKET/cloudformation/guardscale-existing.yaml" --content-type text/yaml --cache-control no-cache --no-progress
+          for template in guardscale guardscale-existing guardscale-apphub-migration guardscale-apphub-owned-data guardscale-apphub-relaunch; do
+            aws s3 cp "devops/cloudformation/$template.yaml" "s3://$GUARDSCALE_CFT_BUCKET/cloudformation/$template-$VERSION.yaml" --content-type text/yaml --cache-control no-cache --no-progress
+            aws s3 cp "devops/cloudformation/$template.yaml" "s3://$GUARDSCALE_CFT_BUCKET/cloudformation/$template.yaml" --content-type text/yaml --cache-control no-cache --no-progress
+          done
       - name: Submit AWS Marketplace changeset
         timeout-minutes: 65
         if: ${{ vars.MP_AWS_MARKETPLACE_PRODUCT_ID != '' }}

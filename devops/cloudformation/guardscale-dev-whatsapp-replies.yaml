@@ -5,8 +5,14 @@ Parameters:
   LocalDeveloperArn: {Type: String, Default: '', AllowedPattern: '^$|^arn:aws[a-z-]*:iam::[0-9]{12}:(user|role)/[A-Za-z0-9_+=,.@/-]+$', Description: 'Optional exact IAM principal allowed to assume the temporary localhost testing role.'}
   WhatsappSenderId: {Type: String, Default: '', AllowedPattern: '^$|^phone-number-id-[a-zA-Z0-9]+$', Description: 'Existing registered sender ID, only needed for the optional localhost testing role.'}
   WhatsappBusinessAccountId: {Type: String, Default: '', AllowedPattern: '^$|^waba-[a-zA-Z0-9]+$', Description: 'Existing linked WABA ID, only needed for the optional localhost testing role.'}
+  SesFrom: {Type: String, Default: '', AllowedPattern: '^$|^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$', Description: 'Optional SES-verified sender for the selected local email test recipient.'}
+  LocalEmailRecipient: {Type: String, Default: '', AllowedPattern: '^$|^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$', Description: 'Optional exact authorized recipient. SES sends are restricted to this address.'}
+  EmailReplyTopicArn: {Type: String, Default: '', AllowedPattern: '^$|^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+$', Description: Optional SES receiving topic to copy to this developer's queue.}
+  EmailReplyDomain: {Type: String, Default: '', Description: Dedicated SES reply subdomain.}
 Conditions:
   CreateLocalRole: !Not [!Equals [!Ref LocalDeveloperArn, '']]
+  EnableLocalSes: !And [!Not [!Equals [!Ref SesFrom, '']], !Not [!Equals [!Ref LocalEmailRecipient, '']]]
+  HasEmailReplies: !Not [!Equals [!Ref EmailReplyTopicArn, '']]
 Rules:
   LocalRoleNeedsSender:
     Assertions:
@@ -28,8 +34,17 @@ Resources:
             Action: sqs:SendMessage
             Resource: {Fn::GetAtt: [DevQueue, Arn]}
             Condition: {ArnEquals: {'aws:SourceArn': {Ref: WhatsappEventTopicArn}}}
+          - !If
+            - HasEmailReplies
+            - Effect: Allow
+              Principal: {Service: sns.amazonaws.com}
+              Action: sqs:SendMessage
+              Resource: !GetAtt DevQueue.Arn
+              Condition: {ArnEquals: {'aws:SourceArn': !Ref EmailReplyTopicArn}}
+            - !Ref AWS::NoValue
   # The worker verifies the SNS envelope TopicArn, so raw delivery stays off, as in production.
   DevSubscription: {Type: 'AWS::SNS::Subscription', DependsOn: DevQueuePolicy, Properties: {TopicArn: {Ref: WhatsappEventTopicArn}, Protocol: sqs, Endpoint: {Fn::GetAtt: [DevQueue, Arn]}, RawMessageDelivery: false}}
+  EmailReplySubscription: {Type: 'AWS::SNS::Subscription', Condition: HasEmailReplies, DependsOn: DevQueuePolicy, Properties: {TopicArn: !Ref EmailReplyTopicArn, Protocol: sqs, Endpoint: !GetAtt DevQueue.Arn, RawMessageDelivery: false}}
   LocalTestingRole:
     Type: AWS::IAM::Role
     Condition: CreateLocalRole
@@ -46,6 +61,17 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              - !If
+                - EnableLocalSes
+                - Effect: Allow
+                  Action: ses:SendEmail
+                  Resource: !Sub
+                    - 'arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${SenderDomain}'
+                    - SenderDomain: !Select [1, !Split ['@', !Ref SesFrom]]
+                  Condition:
+                    StringEquals: {'ses:FromAddress': !Ref SesFrom}
+                    'ForAllValues:StringEquals': {'ses:Recipients': [!Ref LocalEmailRecipient]}
+                - !Ref AWS::NoValue
               - Effect: Allow
                 Action: ['sqs:ReceiveMessage', 'sqs:DeleteMessage', 'sqs:ChangeMessageVisibility', 'sqs:GetQueueAttributes']
                 Resource: !GetAtt DevQueue.Arn

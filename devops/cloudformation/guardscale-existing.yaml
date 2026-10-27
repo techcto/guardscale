@@ -185,6 +185,37 @@ Parameters:
   StripeCredentialsKmsKeyArn: {"Type":"String","Default":"","AllowedPattern":"^$|^arn:aws[a-z-]*:kms:[a-z0-9-]+:[0-9]{12}:key/[a-zA-Z0-9-]+$","Description":"Optional customer-managed KMS key ARN for the Stripe secret. Key policy must permit the task execution role to decrypt."}
   StripeCredentialsRevision: {"Type":"String","Default":"1","AllowedPattern":"[a-zA-Z0-9.-]+","Description":"Increment after rotating Stripe credentials to roll tasks through a reviewed CloudFormation change set."}
   StripeMode: {"Type":"String","Default":"live","AllowedValues":["live","sandbox"],"Description":"Stripe environment. Use live keys in production and sandbox keys only in isolated test deployments."}
+  EmailReplyTopicArn:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+$
+    Description: Encrypted SES receiving topic from the email-replies stack; blank disables email replies.
+  EmailReplyDomain:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^[a-z0-9.-]+\.[a-z]{2,}$
+    Description: Dedicated receiving subdomain matching the email-replies stack.
+  EmailRepliesEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >-
+      Create SES reply routing in this application stack using the existing verified sender identity. Does not create
+      another SES identity.
+  EmailReplyHostedZoneId:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^Z[A-Z0-9]+$
+    Description: Route 53 hosted zone for the dedicated reply subdomain. Required for managed email replies.
+  EmailReplyExistingRuleSetName:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^[A-Za-z0-9._-]{1,64}$
+    Description: >-
+      Existing active SES rule set to extend. Blank creates a guarded stack-owned rule set only when no other rule set is
+      active.
 Conditions:
   HasGuardianModel: !Not [!Equals [!Ref GuardianModelId, '']]
   HasWhatsappTopic: {"Fn::Or":[{"Condition":"HasExistingWhatsappTopic"},{"Condition":"CreateWhatsappTopic"}]}
@@ -195,8 +226,77 @@ Conditions:
   UseStripeCredentials: {"Fn::Or":[{"Fn::Not":[{"Fn::Equals":[{"Ref":"StripeCredentialsSecretArn"},""]}]},{"Fn::Not":[{"Fn::Equals":[{"Ref":"StripeSecretKey"},""]}]}]}
   UseStripeKmsKey: {"Fn::Not":[{"Fn::Equals":[{"Ref":"StripeCredentialsKmsKeyArn"},""]}]}
   UseStripeKmsAccess: {"Fn::And":[{"Fn::Not":[{"Fn::Equals":[{"Ref":"StripeCredentialsKmsKeyArn"},""]}]},{"Fn::Or":[{"Fn::Not":[{"Fn::Equals":[{"Ref":"StripeCredentialsSecretArn"},""]}]},{"Fn::Not":[{"Fn::Equals":[{"Ref":"StripeSecretKey"},""]}]}]}]}
+  HasEmailReplies:
+    Fn::Or:
+      - Condition: CreateManagedEmailReplies
+      - Fn::Not:
+          - Fn::Equals:
+              - Ref: EmailReplyTopicArn
+              - ''
+  HasMessagingTopic:
+    Fn::Or:
+      - Condition: HasWhatsappTopic
+      - Condition: HasEmailReplies
+  CreateManagedEmailReplies:
+    Fn::Equals:
+      - Ref: EmailRepliesEnabled
+      - 'true'
+  CreateEmailReplyRuleSet:
+    Fn::And:
+      - Condition: CreateManagedEmailReplies
+      - Fn::Equals:
+          - Ref: EmailReplyExistingRuleSetName
+          - ''
 Rules:
   StripeCredentialSource: {"Assertions":[{"Assert":{"Fn::Or":[{"Fn::And":[{"Fn::Equals":[{"Ref":"StripeSecretKey"},""]},{"Fn::Equals":[{"Ref":"StripeWebhookSecret"},""]}]},{"Fn::And":[{"Fn::Equals":[{"Ref":"StripeCredentialsSecretArn"},""]},{"Fn::Not":[{"Fn::Equals":[{"Ref":"StripeSecretKey"},""]}]},{"Fn::Not":[{"Fn::Equals":[{"Ref":"StripeWebhookSecret"},""]}]}]}]},"AssertDescription":"Supply both raw Stripe credentials or an existing secret ARN, never partial credentials or both sources."}]}
+  EmailReplyConfiguration:
+    Assertions:
+      - Assert:
+          Fn::Or:
+            - Fn::And:
+                - Fn::Equals:
+                    - Ref: EmailRepliesEnabled
+                    - 'false'
+                - Fn::Equals:
+                    - Ref: EmailReplyTopicArn
+                    - ''
+                - Fn::Equals:
+                    - Ref: EmailReplyDomain
+                    - ''
+            - Fn::And:
+                - Fn::Equals:
+                    - Ref: EmailRepliesEnabled
+                    - 'false'
+                - Fn::Not:
+                    - Fn::Equals:
+                        - Ref: EmailReplyTopicArn
+                        - ''
+                - Fn::Not:
+                    - Fn::Equals:
+                        - Ref: EmailReplyDomain
+                        - ''
+            - Fn::And:
+                - Fn::Equals:
+                    - Ref: EmailRepliesEnabled
+                    - 'true'
+                - Fn::Equals:
+                    - Ref: EmailReplyTopicArn
+                    - ''
+                - Fn::Not:
+                    - Fn::Equals:
+                        - Ref: EmailReplyDomain
+                        - ''
+                - Fn::Not:
+                    - Fn::Equals:
+                        - Ref: EmailReplyHostedZoneId
+                        - ''
+                - Fn::Not:
+                    - Fn::Equals:
+                        - Ref: SesFrom
+                        - ''
+        AssertDescription: >-
+          Managed replies require a dedicated domain, hosted zone and verified SES From address with no external topic.
+          Otherwise configure both external topic/domain, or leave replies disabled.
 Resources:
   GuardianModelPolicy:
     Type: AWS::IAM::Policy
@@ -212,7 +312,51 @@ Resources:
             Resource:
               - {Fn::Sub: 'arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-lite-v1:0'}
               - {Fn::Sub: 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.amazon.nova-lite-v1:0'}
-  WhatsappQueuePolicy: {"Type":"AWS::SQS::QueuePolicy","Condition":"HasWhatsappTopic","Properties":{"Queues":[{"Ref":"Queue"}],"PolicyDocument":{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"sns.amazonaws.com"},"Action":"sqs:SendMessage","Resource":{"Fn::GetAtt":["Queue","Arn"]},"Condition":{"ArnEquals":{"aws:SourceArn":{"Fn::If":["CreateWhatsappTopic",{"Ref":"WhatsappTopic"},{"Ref":"WhatsappEventTopicArn"}]}}}}]}}}
+  WhatsappQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: HasMessagingTopic
+    Properties:
+      Queues:
+        - Ref: Queue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Fn::If:
+              - HasWhatsappTopic
+              - Effect: Allow
+                Principal:
+                  Service: sns.amazonaws.com
+                Action: sqs:SendMessage
+                Resource:
+                  Fn::GetAtt:
+                    - Queue
+                    - Arn
+                Condition:
+                  ArnEquals:
+                    aws:SourceArn:
+                      Fn::If:
+                        - CreateWhatsappTopic
+                        - Ref: WhatsappTopic
+                        - Ref: WhatsappEventTopicArn
+              - Ref: AWS::NoValue
+          - Fn::If:
+              - HasEmailReplies
+              - Effect: Allow
+                Principal:
+                  Service: sns.amazonaws.com
+                Action: sqs:SendMessage
+                Resource:
+                  Fn::GetAtt:
+                    - Queue
+                    - Arn
+                Condition:
+                  ArnEquals:
+                    aws:SourceArn:
+                      Fn::If:
+                        - CreateManagedEmailReplies
+                        - Ref: EmailReplyTopic
+                        - Ref: EmailReplyTopicArn
+              - Ref: AWS::NoValue
   WhatsappSubscription: {"Type":"AWS::SNS::Subscription","Condition":"HasWhatsappTopic","Properties":{"TopicArn":{"Fn::If":["CreateWhatsappTopic",{"Ref":"WhatsappTopic"},{"Ref":"WhatsappEventTopicArn"}]},"Protocol":"sqs","Endpoint":{"Fn::GetAtt":["Queue","Arn"]},"RawMessageDelivery":false},"DependsOn":["WhatsappQueuePolicy"]}
   ServiceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -389,9 +533,461 @@ Resources:
       VpcId: !Ref VpcId
       HealthCheckPath: /api/health
 
-  WebTaskDefinition: {"Type":"AWS::ECS::TaskDefinition","Properties":{"Family":{"Fn::Sub":"${EnvironmentName}-web"},"Cpu":"256","Memory":"512","NetworkMode":"awsvpc","RequiresCompatibilities":["FARGATE"],"ExecutionRoleArn":{"Fn::GetAtt":["ExecutionRole","Arn"]},"TaskRoleArn":{"Fn::GetAtt":["TaskRole","Arn"]},"ContainerDefinitions":[{"Name":"web","Image":{"Ref":"WebImage"},"Essential":true,"PortMappings":[{"ContainerPort":3000}],"Environment":[{"Name":"GUARDSCALE_BLOCKED_SIGNUP_DOMAINS","Value":{"Ref":"BlockedSignupDomains"}},{"Name":"NODE_ENV","Value":"production"},{"Name":"PORT","Value":"3000"},{"Name":"GUARDSCALE_DEPLOYMENT_MODE","Value":{"Ref":"DeploymentMode"}},{"Name":"GUARDSCALE_ROOT_USER","Value":{"Ref":"RootUsername"}},{"Name":"GUARDSCALE_ROOT_PASSWORD","Value":{"Ref":"RootPassword"}},{"Name":"GUARDSCALE_SESSION_SECRET","Value":{"Ref":"SessionSecret"}},{"Name":"AWS_REGION","Value":{"Ref":"AWS::Region"}},{"Name":"GUARDSCALE_AI_MODEL_ID","Value":{"Ref":"GuardianModelId"}},{"Name":"GUARDSCALE_NOTIFICATION_MODE","Value":{"Ref":"NotificationMode"}},{"Name":"GUARDSCALE_WHATSAPP_ALERT_TEMPLATE","Value":{"Ref":"WhatsappAlertTemplate"}},{"Name":"GUARDSCALE_PUBLIC_URL","Value":{"Fn::Sub":"https://${HostHeader}"}},{"Name":"GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN","Value":{"Fn::If":["CreateWhatsappTopic",{"Ref":"WhatsappTopic"},{"Ref":"WhatsappEventTopicArn"}]}},{"Name":"GUARDSCALE_TABLE","Value":{"Ref":"GuardScaleTable"}},{"Name":"GUARDSCALE_QUEUE_URL","Value":{"Ref":"Queue"}},{"Name":"GUARDSCALE_EVIDENCE_BUCKET","Value":{"Ref":"EvidenceBucket"}},{"Name":"GUARDSCALE_WHATSAPP_ORIGINATION_ID","Value":{"Ref":"WhatsappOriginationId"}},{"Name":"GUARDSCALE_NOTIFICATION_RECIPIENTS","Value":{"Ref":"NotificationRecipients"}},{"Name":"GUARDSCALE_SES_FROM","Value":{"Ref":"SesFrom"}},{"Name":"STRIPE_STARTER_PRICE_ID","Value":{"Ref":"StripeStarterPriceId"}},{"Name":"STRIPE_SCALE_PRICE_ID","Value":{"Ref":"StripeScalePriceId"}},{"Name":"GUARDSCALE_USAGE_EXPORT","Value":{"Ref":"UsageExport"}},{"Name":"STRIPE_SERVER_OVERAGE_PRICE_ID","Value":{"Ref":"StripeServerOveragePriceId"}},{"Name":"STRIPE_LOG_OVERAGE_PRICE_ID","Value":{"Ref":"StripeLogOveragePriceId"}},{"Name":"STRIPE_AI_OVERAGE_PRICE_ID","Value":{"Ref":"StripeAIOveragePriceId"}},{"Name":"GUARDSCALE_LOG_MB_INCLUDED_JSON","Value":{"Ref":"LogMbIncluded"}},{"Name":"GUARDSCALE_AI_CREDIT_WEIGHTS_JSON","Value":{"Ref":"AICreditWeights"}},{"Name":"GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE","Value":{"Ref":"WhatsappTemplateLanguage"}},{"Name":"GUARDSCALE_STRIPE_CREDENTIALS_REVISION","Value":{"Ref":"StripeCredentialsRevision"}},{"Name":"GUARDSCALE_STRIPE_MODE","Value":{"Ref":"StripeMode"}}],"LogConfiguration":{"LogDriver":"awslogs","Options":{"awslogs-group":{"Ref":"WebLogGroup"},"awslogs-region":{"Ref":"AWS::Region"},"awslogs-stream-prefix":"web"}},"Secrets":[{"Fn::If":["UseStripeCredentials",{"Name":"STRIPE_SECRET_KEY","ValueFrom":{"Fn::Join":["",[{"Fn::If":["UseExternalStripeSecret",{"Ref":"StripeCredentialsSecretArn"},{"Ref":"StripeCredentials"}]},":secret_key::"]]}},{"Ref":"AWS::NoValue"}]},{"Fn::If":["UseStripeCredentials",{"Name":"STRIPE_WEBHOOK_SECRET","ValueFrom":{"Fn::Join":["",[{"Fn::If":["UseExternalStripeSecret",{"Ref":"StripeCredentialsSecretArn"},{"Ref":"StripeCredentials"}]},":webhook_secret::"]]}},{"Ref":"AWS::NoValue"}]}]}]}}
-  ApiTaskDefinition: {"Type":"AWS::ECS::TaskDefinition","Properties":{"Family":{"Fn::Sub":"${EnvironmentName}-api"},"Cpu":"256","Memory":"512","NetworkMode":"awsvpc","RequiresCompatibilities":["FARGATE"],"ExecutionRoleArn":{"Fn::GetAtt":["ExecutionRole","Arn"]},"TaskRoleArn":{"Fn::GetAtt":["TaskRole","Arn"]},"ContainerDefinitions":[{"Name":"api","Image":{"Ref":"ApiImage"},"Essential":true,"PortMappings":[{"ContainerPort":3001}],"Environment":[{"Name":"GUARDSCALE_BLOCKED_SIGNUP_DOMAINS","Value":{"Ref":"BlockedSignupDomains"}},{"Name":"NODE_ENV","Value":"production"},{"Name":"PORT","Value":"3001"},{"Name":"AWS_REGION","Value":{"Ref":"AWS::Region"}},{"Name":"GUARDSCALE_AI_MODEL_ID","Value":{"Ref":"GuardianModelId"}},{"Name":"GUARDSCALE_NOTIFICATION_MODE","Value":{"Ref":"NotificationMode"}},{"Name":"GUARDSCALE_WHATSAPP_ALERT_TEMPLATE","Value":{"Ref":"WhatsappAlertTemplate"}},{"Name":"GUARDSCALE_WHATSAPP_ORIGINATION_ID","Value":{"Ref":"WhatsappOriginationId"}},{"Name":"GUARDSCALE_SES_FROM","Value":{"Ref":"SesFrom"}},{"Name":"GUARDSCALE_PUBLIC_URL","Value":{"Fn::Sub":"https://${HostHeader}"}},{"Name":"GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN","Value":{"Fn::If":["CreateWhatsappTopic",{"Ref":"WhatsappTopic"},{"Ref":"WhatsappEventTopicArn"}]}},{"Name":"GUARDSCALE_TABLE","Value":{"Ref":"GuardScaleTable"}},{"Name":"GUARDSCALE_QUEUE_URL","Value":{"Ref":"Queue"}},{"Name":"GUARDSCALE_EVIDENCE_BUCKET","Value":{"Ref":"EvidenceBucket"}},{"Name":"GUARDSCALE_ROOT_USER","Value":{"Ref":"RootUsername"}},{"Name":"GUARDSCALE_ROOT_PASSWORD","Value":{"Ref":"RootPassword"}},{"Name":"GUARDSCALE_SESSION_SECRET","Value":{"Ref":"SessionSecret"}},{"Name":"GUARDSCALE_DEPLOYMENT_MODE","Value":{"Ref":"DeploymentMode"}},{"Name":"STRIPE_STARTER_PRICE_ID","Value":{"Ref":"StripeStarterPriceId"}},{"Name":"STRIPE_SCALE_PRICE_ID","Value":{"Ref":"StripeScalePriceId"}},{"Name":"GUARDSCALE_USAGE_EXPORT","Value":{"Ref":"UsageExport"}},{"Name":"STRIPE_SERVER_OVERAGE_PRICE_ID","Value":{"Ref":"StripeServerOveragePriceId"}},{"Name":"STRIPE_LOG_OVERAGE_PRICE_ID","Value":{"Ref":"StripeLogOveragePriceId"}},{"Name":"STRIPE_AI_OVERAGE_PRICE_ID","Value":{"Ref":"StripeAIOveragePriceId"}},{"Name":"GUARDSCALE_LOG_MB_INCLUDED_JSON","Value":{"Ref":"LogMbIncluded"}},{"Name":"GUARDSCALE_AI_CREDIT_WEIGHTS_JSON","Value":{"Ref":"AICreditWeights"}},{"Name":"GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE","Value":{"Ref":"WhatsappTemplateLanguage"}},{"Name":"GUARDSCALE_STRIPE_CREDENTIALS_REVISION","Value":{"Ref":"StripeCredentialsRevision"}},{"Name":"GUARDSCALE_STRIPE_MODE","Value":{"Ref":"StripeMode"}}],"LogConfiguration":{"LogDriver":"awslogs","Options":{"awslogs-group":{"Ref":"ApiLogGroup"},"awslogs-region":{"Ref":"AWS::Region"},"awslogs-stream-prefix":"api"}},"Secrets":[{"Fn::If":["UseStripeCredentials",{"Name":"STRIPE_SECRET_KEY","ValueFrom":{"Fn::Join":["",[{"Fn::If":["UseExternalStripeSecret",{"Ref":"StripeCredentialsSecretArn"},{"Ref":"StripeCredentials"}]},":secret_key::"]]}},{"Ref":"AWS::NoValue"}]},{"Fn::If":["UseStripeCredentials",{"Name":"STRIPE_WEBHOOK_SECRET","ValueFrom":{"Fn::Join":["",[{"Fn::If":["UseExternalStripeSecret",{"Ref":"StripeCredentialsSecretArn"},{"Ref":"StripeCredentials"}]},":webhook_secret::"]]}},{"Ref":"AWS::NoValue"}]}]}]}}
-  WorkerTaskDefinition: {"Type":"AWS::ECS::TaskDefinition","Properties":{"Family":{"Fn::Sub":"${EnvironmentName}-worker"},"Cpu":"256","Memory":"512","NetworkMode":"awsvpc","RequiresCompatibilities":["FARGATE"],"ExecutionRoleArn":{"Fn::GetAtt":["ExecutionRole","Arn"]},"TaskRoleArn":{"Fn::GetAtt":["TaskRole","Arn"]},"ContainerDefinitions":[{"Name":"worker","Image":{"Ref":"WorkerImage"},"Essential":true,"Environment":[{"Name":"GUARDSCALE_SESSION_SECRET","Value":{"Ref":"SessionSecret"}},{"Name":"NODE_ENV","Value":"production"},{"Name":"AWS_REGION","Value":{"Ref":"AWS::Region"}},{"Name":"GUARDSCALE_AI_MODEL_ID","Value":{"Ref":"GuardianModelId"}},{"Name":"GUARDSCALE_NOTIFICATION_MODE","Value":{"Ref":"NotificationMode"}},{"Name":"GUARDSCALE_WHATSAPP_ALERT_TEMPLATE","Value":{"Ref":"WhatsappAlertTemplate"}},{"Name":"GUARDSCALE_PUBLIC_URL","Value":{"Fn::Sub":"https://${HostHeader}"}},{"Name":"GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN","Value":{"Fn::If":["CreateWhatsappTopic",{"Ref":"WhatsappTopic"},{"Ref":"WhatsappEventTopicArn"}]}},{"Name":"GUARDSCALE_TABLE","Value":{"Ref":"GuardScaleTable"}},{"Name":"GUARDSCALE_QUEUE_URL","Value":{"Ref":"Queue"}},{"Name":"GUARDSCALE_EVIDENCE_BUCKET","Value":{"Ref":"EvidenceBucket"}},{"Name":"GUARDSCALE_WHATSAPP_ORIGINATION_ID","Value":{"Ref":"WhatsappOriginationId"}},{"Name":"GUARDSCALE_NOTIFICATION_RECIPIENTS","Value":{"Ref":"NotificationRecipients"}},{"Name":"GUARDSCALE_SES_FROM","Value":{"Ref":"SesFrom"}},{"Name":"GUARDSCALE_DEPLOYMENT_MODE","Value":{"Ref":"DeploymentMode"}},{"Name":"GUARDSCALE_USAGE_EXPORT","Value":{"Ref":"UsageExport"}},{"Name":"STRIPE_SERVER_OVERAGE_PRICE_ID","Value":{"Ref":"StripeServerOveragePriceId"}},{"Name":"STRIPE_LOG_OVERAGE_PRICE_ID","Value":{"Ref":"StripeLogOveragePriceId"}},{"Name":"STRIPE_AI_OVERAGE_PRICE_ID","Value":{"Ref":"StripeAIOveragePriceId"}},{"Name":"GUARDSCALE_LOG_MB_INCLUDED_JSON","Value":{"Ref":"LogMbIncluded"}},{"Name":"GUARDSCALE_AI_CREDIT_WEIGHTS_JSON","Value":{"Ref":"AICreditWeights"}},{"Name":"GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE","Value":{"Ref":"WhatsappTemplateLanguage"}},{"Name":"GUARDSCALE_STRIPE_CREDENTIALS_REVISION","Value":{"Ref":"StripeCredentialsRevision"}},{"Name":"GUARDSCALE_STRIPE_MODE","Value":{"Ref":"StripeMode"}}],"LogConfiguration":{"LogDriver":"awslogs","Options":{"awslogs-group":{"Ref":"WorkerLogGroup"},"awslogs-region":{"Ref":"AWS::Region"},"awslogs-stream-prefix":"worker"}},"Secrets":[{"Fn::If":["UseStripeCredentials",{"Name":"STRIPE_SECRET_KEY","ValueFrom":{"Fn::Join":["",[{"Fn::If":["UseExternalStripeSecret",{"Ref":"StripeCredentialsSecretArn"},{"Ref":"StripeCredentials"}]},":secret_key::"]]}},{"Ref":"AWS::NoValue"}]},{"Fn::If":["UseStripeCredentials",{"Name":"STRIPE_WEBHOOK_SECRET","ValueFrom":{"Fn::Join":["",[{"Fn::If":["UseExternalStripeSecret",{"Ref":"StripeCredentialsSecretArn"},{"Ref":"StripeCredentials"}]},":webhook_secret::"]]}},{"Ref":"AWS::NoValue"}]}]}]}}
+  WebTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family:
+        Fn::Sub: ${EnvironmentName}-web
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn:
+        Fn::GetAtt:
+          - ExecutionRole
+          - Arn
+      TaskRoleArn:
+        Fn::GetAtt:
+          - TaskRole
+          - Arn
+      ContainerDefinitions:
+        - Name: web
+          Image:
+            Ref: WebImage
+          Essential: true
+          PortMappings:
+            - ContainerPort: 3000
+          Environment:
+            - Name: GUARDSCALE_BLOCKED_SIGNUP_DOMAINS
+              Value:
+                Ref: BlockedSignupDomains
+            - Name: NODE_ENV
+              Value: production
+            - Name: PORT
+              Value: '3000'
+            - Name: GUARDSCALE_DEPLOYMENT_MODE
+              Value:
+                Ref: DeploymentMode
+            - Name: GUARDSCALE_ROOT_USER
+              Value:
+                Ref: RootUsername
+            - Name: GUARDSCALE_ROOT_PASSWORD
+              Value:
+                Ref: RootPassword
+            - Name: GUARDSCALE_SESSION_SECRET
+              Value:
+                Ref: SessionSecret
+            - Name: AWS_REGION
+              Value:
+                Ref: AWS::Region
+            - Name: GUARDSCALE_AI_MODEL_ID
+              Value:
+                Ref: GuardianModelId
+            - Name: GUARDSCALE_NOTIFICATION_MODE
+              Value:
+                Ref: NotificationMode
+            - Name: GUARDSCALE_WHATSAPP_ALERT_TEMPLATE
+              Value:
+                Ref: WhatsappAlertTemplate
+            - Name: GUARDSCALE_PUBLIC_URL
+              Value:
+                Fn::Sub: https://${HostHeader}
+            - Name: GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN
+              Value:
+                Fn::If:
+                  - CreateWhatsappTopic
+                  - Ref: WhatsappTopic
+                  - Ref: WhatsappEventTopicArn
+            - Name: GUARDSCALE_TABLE
+              Value:
+                Ref: GuardScaleTable
+            - Name: GUARDSCALE_QUEUE_URL
+              Value:
+                Ref: Queue
+            - Name: GUARDSCALE_EVIDENCE_BUCKET
+              Value:
+                Ref: EvidenceBucket
+            - Name: GUARDSCALE_WHATSAPP_ORIGINATION_ID
+              Value:
+                Ref: WhatsappOriginationId
+            - Name: GUARDSCALE_NOTIFICATION_RECIPIENTS
+              Value:
+                Ref: NotificationRecipients
+            - Name: GUARDSCALE_SES_FROM
+              Value:
+                Ref: SesFrom
+            - Name: STRIPE_STARTER_PRICE_ID
+              Value:
+                Ref: StripeStarterPriceId
+            - Name: STRIPE_SCALE_PRICE_ID
+              Value:
+                Ref: StripeScalePriceId
+            - Name: GUARDSCALE_USAGE_EXPORT
+              Value:
+                Ref: UsageExport
+            - Name: STRIPE_SERVER_OVERAGE_PRICE_ID
+              Value:
+                Ref: StripeServerOveragePriceId
+            - Name: STRIPE_LOG_OVERAGE_PRICE_ID
+              Value:
+                Ref: StripeLogOveragePriceId
+            - Name: STRIPE_AI_OVERAGE_PRICE_ID
+              Value:
+                Ref: StripeAIOveragePriceId
+            - Name: GUARDSCALE_LOG_MB_INCLUDED_JSON
+              Value:
+                Ref: LogMbIncluded
+            - Name: GUARDSCALE_AI_CREDIT_WEIGHTS_JSON
+              Value:
+                Ref: AICreditWeights
+            - Name: GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE
+              Value:
+                Ref: WhatsappTemplateLanguage
+            - Name: GUARDSCALE_STRIPE_CREDENTIALS_REVISION
+              Value:
+                Ref: StripeCredentialsRevision
+            - Name: GUARDSCALE_STRIPE_MODE
+              Value:
+                Ref: StripeMode
+            - Name: GUARDSCALE_EMAIL_REPLY_DOMAIN
+              Value:
+                Ref: EmailReplyDomain
+            - Name: GUARDSCALE_EMAIL_REPLY_TOPIC_ARN
+              Value:
+                Fn::If:
+                  - CreateManagedEmailReplies
+                  - Ref: EmailReplyTopic
+                  - Ref: EmailReplyTopicArn
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group:
+                Ref: WebLogGroup
+              awslogs-region:
+                Ref: AWS::Region
+              awslogs-stream-prefix: web
+          Secrets:
+            - Fn::If:
+                - UseStripeCredentials
+                - Name: STRIPE_SECRET_KEY
+                  ValueFrom:
+                    Fn::Join:
+                      - ''
+                      - - Fn::If:
+                            - UseExternalStripeSecret
+                            - Ref: StripeCredentialsSecretArn
+                            - Ref: StripeCredentials
+                        - ':secret_key::'
+                - Ref: AWS::NoValue
+            - Fn::If:
+                - UseStripeCredentials
+                - Name: STRIPE_WEBHOOK_SECRET
+                  ValueFrom:
+                    Fn::Join:
+                      - ''
+                      - - Fn::If:
+                            - UseExternalStripeSecret
+                            - Ref: StripeCredentialsSecretArn
+                            - Ref: StripeCredentials
+                        - ':webhook_secret::'
+                - Ref: AWS::NoValue
+  ApiTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family:
+        Fn::Sub: ${EnvironmentName}-api
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn:
+        Fn::GetAtt:
+          - ExecutionRole
+          - Arn
+      TaskRoleArn:
+        Fn::GetAtt:
+          - TaskRole
+          - Arn
+      ContainerDefinitions:
+        - Name: api
+          Image:
+            Ref: ApiImage
+          Essential: true
+          PortMappings:
+            - ContainerPort: 3001
+          Environment:
+            - Name: GUARDSCALE_BLOCKED_SIGNUP_DOMAINS
+              Value:
+                Ref: BlockedSignupDomains
+            - Name: NODE_ENV
+              Value: production
+            - Name: PORT
+              Value: '3001'
+            - Name: AWS_REGION
+              Value:
+                Ref: AWS::Region
+            - Name: GUARDSCALE_AI_MODEL_ID
+              Value:
+                Ref: GuardianModelId
+            - Name: GUARDSCALE_NOTIFICATION_MODE
+              Value:
+                Ref: NotificationMode
+            - Name: GUARDSCALE_WHATSAPP_ALERT_TEMPLATE
+              Value:
+                Ref: WhatsappAlertTemplate
+            - Name: GUARDSCALE_WHATSAPP_ORIGINATION_ID
+              Value:
+                Ref: WhatsappOriginationId
+            - Name: GUARDSCALE_SES_FROM
+              Value:
+                Ref: SesFrom
+            - Name: GUARDSCALE_PUBLIC_URL
+              Value:
+                Fn::Sub: https://${HostHeader}
+            - Name: GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN
+              Value:
+                Fn::If:
+                  - CreateWhatsappTopic
+                  - Ref: WhatsappTopic
+                  - Ref: WhatsappEventTopicArn
+            - Name: GUARDSCALE_TABLE
+              Value:
+                Ref: GuardScaleTable
+            - Name: GUARDSCALE_QUEUE_URL
+              Value:
+                Ref: Queue
+            - Name: GUARDSCALE_EVIDENCE_BUCKET
+              Value:
+                Ref: EvidenceBucket
+            - Name: GUARDSCALE_ROOT_USER
+              Value:
+                Ref: RootUsername
+            - Name: GUARDSCALE_ROOT_PASSWORD
+              Value:
+                Ref: RootPassword
+            - Name: GUARDSCALE_SESSION_SECRET
+              Value:
+                Ref: SessionSecret
+            - Name: GUARDSCALE_DEPLOYMENT_MODE
+              Value:
+                Ref: DeploymentMode
+            - Name: STRIPE_STARTER_PRICE_ID
+              Value:
+                Ref: StripeStarterPriceId
+            - Name: STRIPE_SCALE_PRICE_ID
+              Value:
+                Ref: StripeScalePriceId
+            - Name: GUARDSCALE_USAGE_EXPORT
+              Value:
+                Ref: UsageExport
+            - Name: STRIPE_SERVER_OVERAGE_PRICE_ID
+              Value:
+                Ref: StripeServerOveragePriceId
+            - Name: STRIPE_LOG_OVERAGE_PRICE_ID
+              Value:
+                Ref: StripeLogOveragePriceId
+            - Name: STRIPE_AI_OVERAGE_PRICE_ID
+              Value:
+                Ref: StripeAIOveragePriceId
+            - Name: GUARDSCALE_LOG_MB_INCLUDED_JSON
+              Value:
+                Ref: LogMbIncluded
+            - Name: GUARDSCALE_AI_CREDIT_WEIGHTS_JSON
+              Value:
+                Ref: AICreditWeights
+            - Name: GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE
+              Value:
+                Ref: WhatsappTemplateLanguage
+            - Name: GUARDSCALE_STRIPE_CREDENTIALS_REVISION
+              Value:
+                Ref: StripeCredentialsRevision
+            - Name: GUARDSCALE_STRIPE_MODE
+              Value:
+                Ref: StripeMode
+            - Name: GUARDSCALE_EMAIL_REPLY_DOMAIN
+              Value:
+                Ref: EmailReplyDomain
+            - Name: GUARDSCALE_EMAIL_REPLY_TOPIC_ARN
+              Value:
+                Fn::If:
+                  - CreateManagedEmailReplies
+                  - Ref: EmailReplyTopic
+                  - Ref: EmailReplyTopicArn
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group:
+                Ref: ApiLogGroup
+              awslogs-region:
+                Ref: AWS::Region
+              awslogs-stream-prefix: api
+          Secrets:
+            - Fn::If:
+                - UseStripeCredentials
+                - Name: STRIPE_SECRET_KEY
+                  ValueFrom:
+                    Fn::Join:
+                      - ''
+                      - - Fn::If:
+                            - UseExternalStripeSecret
+                            - Ref: StripeCredentialsSecretArn
+                            - Ref: StripeCredentials
+                        - ':secret_key::'
+                - Ref: AWS::NoValue
+            - Fn::If:
+                - UseStripeCredentials
+                - Name: STRIPE_WEBHOOK_SECRET
+                  ValueFrom:
+                    Fn::Join:
+                      - ''
+                      - - Fn::If:
+                            - UseExternalStripeSecret
+                            - Ref: StripeCredentialsSecretArn
+                            - Ref: StripeCredentials
+                        - ':webhook_secret::'
+                - Ref: AWS::NoValue
+  WorkerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family:
+        Fn::Sub: ${EnvironmentName}-worker
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn:
+        Fn::GetAtt:
+          - ExecutionRole
+          - Arn
+      TaskRoleArn:
+        Fn::GetAtt:
+          - TaskRole
+          - Arn
+      ContainerDefinitions:
+        - Name: worker
+          Image:
+            Ref: WorkerImage
+          Essential: true
+          Environment:
+            - Name: GUARDSCALE_SESSION_SECRET
+              Value:
+                Ref: SessionSecret
+            - Name: NODE_ENV
+              Value: production
+            - Name: AWS_REGION
+              Value:
+                Ref: AWS::Region
+            - Name: GUARDSCALE_AI_MODEL_ID
+              Value:
+                Ref: GuardianModelId
+            - Name: GUARDSCALE_NOTIFICATION_MODE
+              Value:
+                Ref: NotificationMode
+            - Name: GUARDSCALE_WHATSAPP_ALERT_TEMPLATE
+              Value:
+                Ref: WhatsappAlertTemplate
+            - Name: GUARDSCALE_PUBLIC_URL
+              Value:
+                Fn::Sub: https://${HostHeader}
+            - Name: GUARDSCALE_WHATSAPP_SNS_TOPIC_ARN
+              Value:
+                Fn::If:
+                  - CreateWhatsappTopic
+                  - Ref: WhatsappTopic
+                  - Ref: WhatsappEventTopicArn
+            - Name: GUARDSCALE_TABLE
+              Value:
+                Ref: GuardScaleTable
+            - Name: GUARDSCALE_QUEUE_URL
+              Value:
+                Ref: Queue
+            - Name: GUARDSCALE_EVIDENCE_BUCKET
+              Value:
+                Ref: EvidenceBucket
+            - Name: GUARDSCALE_WHATSAPP_ORIGINATION_ID
+              Value:
+                Ref: WhatsappOriginationId
+            - Name: GUARDSCALE_NOTIFICATION_RECIPIENTS
+              Value:
+                Ref: NotificationRecipients
+            - Name: GUARDSCALE_SES_FROM
+              Value:
+                Ref: SesFrom
+            - Name: GUARDSCALE_DEPLOYMENT_MODE
+              Value:
+                Ref: DeploymentMode
+            - Name: GUARDSCALE_USAGE_EXPORT
+              Value:
+                Ref: UsageExport
+            - Name: STRIPE_SERVER_OVERAGE_PRICE_ID
+              Value:
+                Ref: StripeServerOveragePriceId
+            - Name: STRIPE_LOG_OVERAGE_PRICE_ID
+              Value:
+                Ref: StripeLogOveragePriceId
+            - Name: STRIPE_AI_OVERAGE_PRICE_ID
+              Value:
+                Ref: StripeAIOveragePriceId
+            - Name: GUARDSCALE_LOG_MB_INCLUDED_JSON
+              Value:
+                Ref: LogMbIncluded
+            - Name: GUARDSCALE_AI_CREDIT_WEIGHTS_JSON
+              Value:
+                Ref: AICreditWeights
+            - Name: GUARDSCALE_WHATSAPP_TEMPLATE_LANGUAGE
+              Value:
+                Ref: WhatsappTemplateLanguage
+            - Name: GUARDSCALE_STRIPE_CREDENTIALS_REVISION
+              Value:
+                Ref: StripeCredentialsRevision
+            - Name: GUARDSCALE_STRIPE_MODE
+              Value:
+                Ref: StripeMode
+            - Name: GUARDSCALE_EMAIL_REPLY_DOMAIN
+              Value:
+                Ref: EmailReplyDomain
+            - Name: GUARDSCALE_EMAIL_REPLY_TOPIC_ARN
+              Value:
+                Fn::If:
+                  - CreateManagedEmailReplies
+                  - Ref: EmailReplyTopic
+                  - Ref: EmailReplyTopicArn
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group:
+                Ref: WorkerLogGroup
+              awslogs-region:
+                Ref: AWS::Region
+              awslogs-stream-prefix: worker
+          Secrets:
+            - Fn::If:
+                - UseStripeCredentials
+                - Name: STRIPE_SECRET_KEY
+                  ValueFrom:
+                    Fn::Join:
+                      - ''
+                      - - Fn::If:
+                            - UseExternalStripeSecret
+                            - Ref: StripeCredentialsSecretArn
+                            - Ref: StripeCredentials
+                        - ':secret_key::'
+                - Ref: AWS::NoValue
+            - Fn::If:
+                - UseStripeCredentials
+                - Name: STRIPE_WEBHOOK_SECRET
+                  ValueFrom:
+                    Fn::Join:
+                      - ''
+                      - - Fn::If:
+                            - UseExternalStripeSecret
+                            - Ref: StripeCredentialsSecretArn
+                            - Ref: StripeCredentials
+                        - ':webhook_secret::'
+                - Ref: AWS::NoValue
   WebService:
     Type: AWS::ECS::Service
     DependsOn: WebListenerRule
@@ -583,6 +1179,253 @@ Resources:
                   raise RuntimeError('Unable to deliver CloudFormation response; retry required.') from None
   WhatsappDestination: {"Type":"Custom::GuardScaleWhatsappDestination","Condition":"CreateWhatsappTopic","DependsOn":["WhatsappTopicPolicy","WhatsappSubscription"],"Properties":{"ServiceToken":{"Fn::GetAtt":["WhatsappRoutingFunction","Arn"]},"ServiceTimeout":120,"WabaId":{"Ref":"WhatsappBusinessAccountId"},"SenderId":{"Ref":"WhatsappOriginationId"},"TopicArn":{"Ref":"WhatsappTopic"}}}
   StripeCredentials: {"Type":"AWS::SecretsManager::Secret","Condition":"CreateStripeSecret","DeletionPolicy":"RetainExceptOnCreate","UpdateReplacePolicy":"Retain","Properties":{"Description":{"Fn::Sub":"${AWS::StackName} Stripe credentials; separate live and sandbox deployments"},"KmsKeyId":{"Fn::If":["UseStripeKmsKey",{"Ref":"StripeCredentialsKmsKeyArn"},{"Ref":"AWS::NoValue"}]},"SecretString":{"Fn::Sub":"{\"secret_key\":\"${StripeSecretKey}\",\"webhook_secret\":\"${StripeWebhookSecret}\"}"}}}
+  EmailReplySubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasEmailReplies
+    DependsOn:
+      - WhatsappQueuePolicy
+    Properties:
+      TopicArn:
+        Fn::If:
+          - CreateManagedEmailReplies
+          - Ref: EmailReplyTopic
+          - Ref: EmailReplyTopicArn
+      Protocol: sqs
+      Endpoint:
+        Fn::GetAtt:
+          - Queue
+          - Arn
+      RawMessageDelivery: false
+  EmailReplyDns:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateManagedEmailReplies
+    Properties:
+      HostedZoneId:
+        Ref: EmailReplyHostedZoneId
+      Name:
+        Ref: EmailReplyDomain
+      Type: MX
+      TTL: '300'
+      ResourceRecords:
+        - Fn::Sub: 10 inbound-smtp.${AWS::Region}.amazonaws.com
+  EmailReplyKey:
+    Type: AWS::KMS::Key
+    Condition: CreateManagedEmailReplies
+    Properties:
+      EnableKeyRotation: true
+      PendingWindowInDays: 7
+      Tags:
+        - Key: Application
+          Value: guardscale
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS:
+                Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: '*'
+          - Effect: Allow
+            Principal:
+              Service: ses.amazonaws.com
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:SourceAccount:
+                  Ref: AWS::AccountId
+  EmailReplyTopic:
+    Type: AWS::SNS::Topic
+    Condition: CreateManagedEmailReplies
+    Properties:
+      KmsMasterKeyId:
+        Ref: EmailReplyKey
+      Tags:
+        - Key: Application
+          Value: guardscale
+  EmailReplyTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Condition: CreateManagedEmailReplies
+    Properties:
+      Topics:
+        - Ref: EmailReplyTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ses.amazonaws.com
+            Action: sns:Publish
+            Resource:
+              Ref: EmailReplyTopic
+            Condition:
+              StringEquals:
+                aws:SourceAccount:
+                  Ref: AWS::AccountId
+              ArnEquals:
+                aws:SourceArn:
+                  Fn::Sub:
+                    - >-
+                      arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:receipt-rule-set/${RuleSet}:receipt-rule/${Rule}
+                    - RuleSet:
+                        Fn::If:
+                          - CreateEmailReplyRuleSet
+                          - Ref: EmailReplyRuleSet
+                          - Ref: EmailReplyExistingRuleSetName
+                      Rule:
+                        Fn::Sub:
+                          - guardscale-${Id}-commands
+                          - Id:
+                              Fn::Select:
+                                - 0
+                                - Fn::Split:
+                                    - '-'
+                                    - Fn::Select:
+                                        - 2
+                                        - Fn::Split:
+                                            - /
+                                            - Ref: AWS::StackId
+  EmailReplyRuleSet:
+    Type: AWS::SES::ReceiptRuleSet
+    Condition: CreateEmailReplyRuleSet
+    Properties:
+      RuleSetName:
+        Fn::Sub:
+          - guardscale-${Id}
+          - Id:
+              Fn::Select:
+                - 2
+                - Fn::Split:
+                    - /
+                    - Ref: AWS::StackId
+  EmailReplyRule:
+    Type: AWS::SES::ReceiptRule
+    Condition: CreateManagedEmailReplies
+    DependsOn:
+      - EmailReplyTopicPolicy
+      - EmailReplyDns
+    Properties:
+      RuleSetName:
+        Fn::If:
+          - CreateEmailReplyRuleSet
+          - Ref: EmailReplyRuleSet
+          - Ref: EmailReplyExistingRuleSetName
+      Rule:
+        Name:
+          Fn::Sub:
+            - guardscale-${Id}-commands
+            - Id:
+                Fn::Select:
+                  - 0
+                  - Fn::Split:
+                      - '-'
+                      - Fn::Select:
+                          - 2
+                          - Fn::Split:
+                              - /
+                              - Ref: AWS::StackId
+        Enabled: true
+        ScanEnabled: true
+        TlsPolicy: Require
+        Recipients:
+          - Ref: EmailReplyDomain
+        Actions:
+          - SNSAction:
+              TopicArn:
+                Ref: EmailReplyTopic
+              Encoding: Base64
+  EmailReplyActivationRole:
+    Type: AWS::IAM::Role
+    Condition: CreateEmailReplyRuleSet
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: guarded-email-receiving-activation
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ses:DescribeActiveReceiptRuleSet
+                  - ses:SetActiveReceiptRuleSet
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  Fn::GetAtt:
+                    - LogGroup
+                    - Arn
+  EmailReplyActivationFunction:
+    Type: AWS::Lambda::Function
+    Condition: CreateEmailReplyRuleSet
+    Properties:
+      Runtime: python3.13
+      Handler: index.handler
+      Role:
+        Fn::GetAtt:
+          - EmailReplyActivationRole
+          - Arn
+      Timeout: 90
+      LoggingConfig:
+        LogGroup:
+          Ref: LogGroup
+        LogFormat: JSON
+      Code:
+        ZipFile: |
+          import json
+          import urllib.request
+          import boto3
+
+          def handler(event, context):
+              props = event['ResourceProperties']
+              name = props['RuleSetName']
+              client = boto3.client('ses')
+              status, reason = 'SUCCESS', 'GuardScale email receiving activation checked'
+              try:
+                  active = client.describe_active_receipt_rule_set().get('Metadata', {}).get('Name')
+                  if event['RequestType'] == 'Delete':
+                      if active == name:
+                          client.set_active_receipt_rule_set()
+                  else:
+                      if active and active != name:
+                          raise ValueError('A different SES receipt rule set is active; refusing to replace it. Use ExistingRuleSetName instead.')
+                      client.set_active_receipt_rule_set(RuleSetName=name)
+              except Exception as error:
+                  status, reason = 'FAILED', str(error)[:500]
+              body = json.dumps({'Status': status, 'Reason': reason,
+                  'PhysicalResourceId': event.get('PhysicalResourceId', 'guardscale-email-activation-'+name),
+                  'StackId': event['StackId'], 'RequestId': event['RequestId'],
+                  'LogicalResourceId': event['LogicalResourceId'], 'Data': {}}).encode()
+              request = urllib.request.Request(event['ResponseURL'], data=body, method='PUT',
+                  headers={'content-type': '', 'content-length': str(len(body))})
+              with urllib.request.urlopen(request, timeout=20):
+                  pass
+  ActivateEmailReplyRules:
+    Type: Custom::GuardScaleEmailRuleActivation
+    Condition: CreateEmailReplyRuleSet
+    DependsOn: EmailReplyRule
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - EmailReplyActivationFunction
+          - Arn
+      ServiceTimeout: 120
+      RuleSetName:
+        Fn::If:
+          - CreateEmailReplyRuleSet
+          - Ref: EmailReplyRuleSet
+          - Ref: EmailReplyExistingRuleSetName
 Outputs:
   WebsiteUrl:
     Description: GuardScale hostname routed through the existing ALB.
@@ -605,3 +1448,12 @@ Outputs:
   WhatsappTemplateLanguage: {"Value":{"Ref":"WhatsappTemplateLanguage"}}
   AwsRegion: {"Value":{"Ref":"AWS::Region"}}
   StripeCredentialsSecretArn: {"Condition":"UseStripeCredentials","Description":"Stripe secret ARN only; values are never output.","Value":{"Fn::If":["UseExternalStripeSecret",{"Ref":"StripeCredentialsSecretArn"},{"Ref":"StripeCredentials"}]}}
+  EmailReplyTopicArn:
+    Value:
+      Fn::If:
+        - CreateManagedEmailReplies
+        - Ref: EmailReplyTopic
+        - Ref: EmailReplyTopicArn
+  EmailReplyDomain:
+    Value:
+      Ref: EmailReplyDomain

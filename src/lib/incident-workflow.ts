@@ -6,6 +6,8 @@ import {acceptSetupReply,senderMatches} from './whatsapp-setup';
 import {approveProtection,commandsFor,cancelIncidentProtection} from './protection-commands';
 import {assessWithGuardian,type GuardianAssessment} from './guardian';
 import {incidentAlert} from './incident-alert';
+import {emailReplyAddress,validatedEmailReply} from './email-replies';
+import type {IncidentRecord} from './model';
 type Payload={candidate_id?:string;source_ip?:string;country?:string;findings?:unknown;analysis?:GuardianAssessment;notified?:string[];alertedAt?:string;alertDelivery?:'provider_accepted'|'local_only'};
 function approvalCode(orgId:string,id:string){const secret=process.env.GUARDSCALE_SESSION_SECRET;if(!secret)throw Error('Approval signing is not configured');return createHmac('sha256',secret).update(orgId+':'+id).digest('hex').slice(0,16);}
 export async function enqueueIncident(orgId:string,incidentId:string){
@@ -35,12 +37,35 @@ export async function processIncident(orgId:string,incidentId:string){
   if(channel==='email'?!settings.notifications.emailEnabled:!settings.notifications.whatsappEnabled)continue;
   const key=createHmac('sha256',process.env.GUARDSCALE_SESSION_SECRET!).update(channel+destination+':'+(process.env.GUARDSCALE_NOTIFICATION_MODE??'log')).digest('hex');if(payload.notified.includes(key))continue;
   const text=incidentAlert({server:server?.displayName||incident.serverId,source:payload.source_ip,country:payload.country,detectedAt:incident.startedAt,analysisStatus:payload.analysis.status,summary:payload.analysis.summary,reviewUrl:link,websites:websites?.split('\n'),code,blockSeconds:Math.min(settings.response.defaultTtlSeconds,settings.response.maxTtlSeconds,900)},channel);
-  const messageId=await notifier().send({channel,destination,originationId:settings.notifications.whatsappSenderId||undefined,subject:'GuardScale: review server activity',text});
+  const replyTo=channel==='email'?emailReplyAddress(orgId,incidentId,destination):undefined;
+  const messageId=await notifier().send({channel,destination,replyTo,originationId:settings.notifications.whatsappSenderId||undefined,subject:'GuardScale: review server activity',text:replyTo?text.replace('Direct email replies are not supported.','Reply with Protect, Watch or Dismiss as the first line. Protect expires 15 minutes after detection; Dismiss stops extensions and requests removal of the active block.'):text});
   payload.notified.push(key);payload.alertDelivery=process.env.GUARDSCALE_NOTIFICATION_MODE==='aws'?'provider_accepted':'local_only';payload.alertedAt??=new Date().toISOString();const current=await store.incident(orgId,incidentId);if(!current)return;await store.putIncident({...current,payload:{...(current.payload as Payload),...payload},updatedAt:new Date().toISOString()});
   await store.putEvent({id:'notification-'+incidentId+'-'+key,tenantId:orgId,serverId:incident.serverId,agentId:incident.agentId,type:'notification.sent',at:new Date().toISOString(),metadata:{channel,message_id:messageId,delivery:process.env.GUARDSCALE_NOTIFICATION_MODE==='aws'?'provider_accepted':'local_only'}});
  }
 }
 const phone=(s:string)=>s.replace(/\D/g,'');
+async function applyIncidentResponse(orgId:string,incident:IncidentRecord,action:'protect'|'watch'|'dismiss',actor:string){
+ if(action==='protect'){
+  if(incident.state==='resolved')throw Error('This incident was dismissed; review a newer incident before protecting');
+  const command=await approveProtection(orgId,incident.incidentId,actor);
+  return `Protection ${command.status==='applied'?'already active':'requested'} for ${incident.serverId}. Source: ${(incident.payload as Payload).source_ip??'agent-observed source'}. Expires: ${command.expiresAt}. ${command.status==='applied'?'The agent has confirmed the rule.':'Waiting for the server agent to confirm the HTTP(S) block.'}`;
+ }
+ await store.putIncident({...incident,state:action==='watch'?'watch':'resolved',updatedAt:new Date().toISOString()});
+ if(action==='dismiss'){
+  const pending=await cancelIncidentProtection(orgId,incident.incidentId);
+  return `Dismissed ${incident.serverId}. Automatic extensions for this incident are stopped. ${pending?'Removal of its protection rule is requested; the server agent will confirm when it is removed.':'No active protection rule remains for this incident.'}`;
+ }
+ return `Monitoring continues for ${incident.serverId}. No new block was added; an existing block retains its original expiry.`;
+}
+
+export async function processEmailEnvelope(envelope:unknown){
+ const reply=await validatedEmailReply(envelope);if(!reply)return false;
+ if(!await store.claimOnce(reply.orgId,'EMAIL_REPLY#'+reply.messageId,1))return false;
+ const text=await applyIncidentResponse(reply.orgId,reply.incident,reply.action,'email:'+reply.sender);
+ await store.putEvent({id:'email-reply-'+reply.messageId,tenantId:reply.orgId,serverId:reply.incident.serverId,agentId:reply.incident.agentId,type:'response.received',at:new Date().toISOString(),metadata:{option:reply.action,channel:'email',incident_id:reply.incident.incidentId}});
+ await notifier().send({channel:'email',destination:reply.sender,replyTo:reply.replyTo,subject:'GuardScale response: '+reply.incident.serverId,text});
+ return true;
+}
 // Trusted SQS worker only; no public inbound approval webhook.
 export async function processWhatsAppEnvelope(envelope:unknown){
  const outer=envelope as {context?:{MetaPhoneNumberIds?:{arn?:string}[]};whatsAppWebhookEntry?:string};
@@ -74,17 +99,7 @@ export async function processWhatsAppEnvelope(envelope:unknown){
    continue;
   }
   const {orgId,incident,origin}=candidates[0],action=match[1].toLowerCase();
-  let confirmation=`${action==='watch'?'Monitoring continues':'Incident dismissed'} for ${incident.serverId}. No new block was added; an existing block retains its original expiry.`;
-  if(action==='protect'){
-   const command=await approveProtection(orgId,incident.incidentId,'whatsapp:'+phone(message.from));
-   confirmation=`Protection ${command.status==='applied'?'already active':'requested'} for ${incident.serverId}. Source: ${(incident.payload as Payload).source_ip??'agent-observed source'}. Expires: ${command.expiresAt}. ${command.status==='applied'?'The agent has confirmed the rule.':'Waiting for the server agent to confirm the HTTP(S) block.'}`;
-  }else {
-   await store.putIncident({...incident,state:action==='watch'?'watch':'resolved',updatedAt:new Date().toISOString()});
-   if(action==='dismiss'){
-    const pending=await cancelIncidentProtection(orgId,incident.incidentId);
-    confirmation=`Dismissed ${incident.serverId}. Automatic extensions for this incident are stopped. ${pending?'Removal of its protection rule is requested; the server agent will confirm when it is removed.':'No active protection rule remains for this incident.'}`;
-   }
-  }
+  const confirmation=await applyIncidentResponse(orgId,incident,action as 'protect'|'watch'|'dismiss','whatsapp:'+phone(message.from));
   await store.putEvent({id:'reply-'+message.id,tenantId:orgId,serverId:incident.serverId,agentId:incident.agentId,type:'response.received',at:new Date().toISOString(),metadata:{option:action,channel:'whatsapp',incident_id:incident.incidentId}});
   await notifier().send({channel:'whatsapp',destination:message.from,originationId:origin,subject:'GuardScale response',text:confirmation});
  }
@@ -103,6 +118,6 @@ export async function notifyProtectionOutcome(orgId:string,commandId:string,rene
  const text=command.status==='cancelled'?`*Protection removed*\n\nServer: ${command.serverId}\nSource IP: ${source}\nThe agent confirmed removal of this incident's HTTP(S) source block. Automatic extensions for this incident are stopped. Monitoring continues.`:command.status==='applied'?`${renewal?'*Protection extended*':'*Protected*'}\n\nServer: ${command.serverId}\nSource IP: ${source}\nRule: temporary HTTP(S) source block\nDuration: ${Math.round((Date.parse(command.expiresAt)-Date.parse(command.createdAt))/1000)} seconds\nExpires: ${command.expiresAt}\n\nThe server agent confirmed the rule is active. This is a temporary source block, not a guarantee that all attacks have stopped.`:command.status==='expired'?`*Protection expired*\n\nServer: ${command.serverId}\nSource IP: ${source}\nThe temporary HTTP(S) block has expired. Monitoring continues.`:`GuardScale ${command.serverId}: protection ${command.status}. Source: ${source}. Review the incident in your authenticated console; no active block is confirmed by this status.`;
  for(const destination of settings.notifications.recipients.split(/[\s,;]+/).filter(Boolean).slice(0,20)){
   const channel=destination.includes('@')?'email':'whatsapp';if(channel==='email'?!settings.notifications.emailEnabled:!settings.notifications.whatsappEnabled)continue;
-  await notifier().send({channel,destination,originationId:settings.notifications.whatsappSenderId||undefined,subject:'GuardScale protection '+command.status,text});
+  await notifier().send({channel,destination,replyTo:channel==='email'?emailReplyAddress(orgId,command.incidentId,destination):undefined,originationId:settings.notifications.whatsappSenderId||undefined,subject:'GuardScale protection '+command.status,text});
  }
 }
