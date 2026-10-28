@@ -150,6 +150,9 @@ func collect(ctx context.Context, c config.Config) error {
 	}
 	heartbeat := time.NewTicker(time.Duration(heartbeatSeconds) * time.Second)
 	defer heartbeat.Stop()
+	// Interactive inspection and approval commands must not wait for a 30s heartbeat.
+	commands := time.NewTicker(5 * time.Second)
+	defer commands.Stop()
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	batch := make([]logEntry, 0, 50)
@@ -189,6 +192,7 @@ func collect(ctx context.Context, c config.Config) error {
 				slog.Warn("heartbeat failed", "error", err)
 			}
 			response.evaluate(ctx)
+		case <-commands.C:
 			response.poll(ctx)
 		case <-metricsTick:
 			if sample, err := metricsSampler.Read(); err == nil {

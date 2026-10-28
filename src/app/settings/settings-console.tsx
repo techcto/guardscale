@@ -4,6 +4,8 @@ import {useRouter,useSearchParams} from 'next/navigation';
 import type {Settings} from '@/lib/model';
 import BillingConsole from '@/app/billing/billing-console';
 import OrganizationsConsole from '@/app/organizations/organizations-console';
+import {joinRecipients,splitRecipients} from '@/lib/notification-recipients';
+import styles from './notification-settings.module.css';
 
 const UNSAVED=new Date(0).toISOString();
 
@@ -11,11 +13,12 @@ export default function SettingsConsole({saas,isRoot,initialTab}:{saas:boolean;i
  const router=useRouter(),queryTab=useSearchParams().get('tab');
  const [settings,setSettings]=useState<Settings|null>(null),[saved,setSaved]=useState(false),[error,setError]=useState(''),[tab,setTab]=useState(initialTab??queryTab??'Detection');
  const [testWhatsapp,setTestWhatsapp]=useState(''),[testEmail,setTestEmail]=useState(''),[testStatus,setTestStatus]=useState<Record<string,string>>({});
+ const [whatsappRecipients,setWhatsappRecipients]=useState(''),[emailRecipients,setEmailRecipients]=useState('');
  const [purgeOpen,setPurgeOpen]=useState(false),[purgeConfirmation,setPurgeConfirmation]=useState(''),[purging,setPurging]=useState(false),[purgeStatus,setPurgeStatus]=useState('');
  async function purge(){setPurging(true);setPurgeStatus('');try{const r=await fetch('/api/v1/settings/purge',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirmation:purgeConfirmation})});const data=await r.json();if(!r.ok)throw new Error(data.error??'Unable to purge data');setPurgeStatus(`Removed ${data.events} activity records and ${data.incidents} incidents. New logs can continue arriving.`);setPurgeOpen(false);setPurgeConfirmation('')}catch(e){setPurgeStatus(e instanceof Error?e.message:'Unable to purge data')}finally{setPurging(false)}}
  const tabs=['Detection','Notifications','Response','Data',...(saas?['Billing']:[]),...(saas&&isRoot?['Organizations']:[])];
- useEffect(()=>{let active=true;fetch('/api/v1/settings').then(r=>r.ok?r.json():null).then(data=>{if(active&&data)setSettings(data)});return()=>{active=false}},[]);
- async function save(){if(!settings)return;setError('');const r=await fetch('/api/v1/settings',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(tab==='Billing'?{billing:settings.billing}:Object.fromEntries(Object.entries(settings).filter(([key])=>key!=='billing')))});if(!r.ok){setError((await r.json()).error??'Unable to save settings');return}setSettings(await r.json());setSaved(true);setTimeout(()=>setSaved(false),1800)}
+ useEffect(()=>{let active=true;fetch('/api/v1/settings').then(r=>r.ok?r.json():null).then(data=>{if(active&&data){setSettings(data);const recipients=splitRecipients(data.notifications.recipients);setWhatsappRecipients(recipients.whatsapp);setEmailRecipients(recipients.email)}});return()=>{active=false}},[]);
+ async function save(){if(!settings)return;setError('');try{const recipients=joinRecipients(whatsappRecipients,emailRecipients),updated={...settings,notifications:{...settings.notifications,recipients}};const r=await fetch('/api/v1/settings',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(tab==='Billing'?{billing:settings.billing}:Object.fromEntries(Object.entries(updated).filter(([key])=>key!=='billing')))});if(!r.ok){setError((await r.json()).error??'Unable to save settings');return}const data=await r.json();setSettings(data);const normalized=splitRecipients(data.notifications.recipients);setWhatsappRecipients(normalized.whatsapp);setEmailRecipients(normalized.email);setSaved(true);setTimeout(()=>setSaved(false),1800)}catch(e){setError(e instanceof Error?e.message:'Unable to save settings')}}
  async function sendTest(channel:'whatsapp'|'email',destination:string,originationId?:string){
   if(!destination){setTestStatus(s=>({...s,[channel]:'Enter a destination first.'}));return}
   setTestStatus(s=>({...s,[channel]:'Sending…'}));
@@ -41,17 +44,18 @@ export default function SettingsConsole({saas,isRoot,initialTab}:{saas:boolean;i
   {tab==='Notifications'&&<><Heading title="Notification channels" text="Choose where GuardScale sends incident alerts and recovery updates."/>
   {settings.updatedAt===UNSAVED&&<div className="notice"><strong>Showing deployment defaults</strong><span>These values come from environment configuration (e.g. Docker/CloudFormation) and haven&apos;t been saved to this organization yet. Save once to make them explicit and editable independently of the deployment.</span></div>}
   <Toggle title="WhatsApp alerts" text="Two-way response through AWS End User Messaging Social." checked={settings.notifications.whatsappEnabled} onChange={v=>set('notifications',{whatsappEnabled:v})}/>
-  <p className="muted small">WhatsApp sender and email From address are configured at launch through CloudFormation. Manage recipients here.</p>
+  <label className={styles.recipients}>WhatsApp recipients<textarea rows={3} value={whatsappRecipients} placeholder="+15551234567" onChange={e=>setWhatsappRecipients(e.target.value)} aria-describedby="whatsapp-recipient-help"/></label>
+  <p id="whatsapp-recipient-help" className="muted small">One international number per line, including the country code. Only configured recipients may reply. Save changes before sending a test.</p>
   <div className="test-row">
-   <input placeholder="Test phone number, e.g. +15551234567" value={testWhatsapp} onChange={e=>setTestWhatsapp(e.target.value)}/>
+   <input aria-label="WhatsApp test destination" placeholder="Test phone number, e.g. +15551234567" value={testWhatsapp} onChange={e=>setTestWhatsapp(e.target.value)}/>
    <button type="button" className="button" onClick={()=>sendTest('whatsapp',testWhatsapp,settings.notifications.whatsappSenderId)}>Send test</button>
    {testStatus.whatsapp&&<span className="muted small">{testStatus.whatsapp}</span>}
   </div>
-  <Toggle title="Email reports" text="Deliver bounded forensic summaries through Amazon SES." checked={settings.notifications.emailEnabled} onChange={v=>set('notifications',{emailEnabled:v})}/>
-  <TextField label="Notification recipients" value={settings.notifications.recipients} placeholder="ops@example.com, +15551234567" onChange={v=>set('notifications',{recipients:v})}/>
-  <span className="muted small">Comma-separated email addresses and WhatsApp numbers in international format. Only configured recipients may reply to incidents.</span>
+  <Toggle title="Email alerts" text="Incident summaries and replies through Amazon SES." checked={settings.notifications.emailEnabled} onChange={v=>set('notifications',{emailEnabled:v})}/>
+  <label className={styles.recipients}>Email recipients<textarea rows={3} value={emailRecipients} placeholder="ops@example.com" onChange={e=>setEmailRecipients(e.target.value)} aria-describedby="email-recipient-help"/></label>
+  <p id="email-recipient-help" className="muted small">One email address per line. Use the address you send replies from, rather than a forwarding alias. Save changes before sending a test.</p>
   <div className="test-row">
-   <input placeholder="Test email address" value={testEmail} onChange={e=>setTestEmail(e.target.value)}/>
+   <input type="email" aria-label="Email test destination" placeholder="Test email address" value={testEmail} onChange={e=>setTestEmail(e.target.value)}/>
    <button type="button" className="button" onClick={()=>sendTest('email',testEmail)}>Send test</button>
    {testStatus.email&&<span className="muted small">{testStatus.email}</span>}
   </div></>}
@@ -74,5 +78,4 @@ export default function SettingsConsole({saas,isRoot,initialTab}:{saas:boolean;i
 }
 function Heading({title,text}:{title:string;text:string}){return <div className="setting-heading"><h2>{title}</h2><p className="muted">{text}</p></div>}
 function NumberField({label,value,onChange}:{label:string;value:number;onChange:(v:number)=>void}){return <label className="field">{label}<input type="number" value={value} onChange={e=>onChange(Number(e.target.value))}/></label>}
-function TextField({label,value,placeholder,onChange}:{label:string;value:string;placeholder:string;onChange:(v:string)=>void}){return <label className="field">{label}<input value={value} placeholder={placeholder} onChange={e=>onChange(e.target.value)}/></label>}
 function Toggle({title,text,checked,onChange}:{title:string;text:string;checked:boolean;onChange:(v:boolean)=>void}){return <label className="toggle-row"><span><strong>{title}</strong><small>{text}</small></span><input type="checkbox" checked={checked} onChange={e=>onChange(e.target.checked)}/></label>}

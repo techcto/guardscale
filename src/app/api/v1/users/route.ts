@@ -12,12 +12,18 @@ export async function GET(req:NextRequest){const session=await operator(req);if(
 export async function POST(req:NextRequest){
  const session=await operator(req);if(!session||!['root','admin'].includes(session.role)||req.headers.get('origin')!==requestOrigin(req))return NextResponse.json({error:'forbidden'},{status:403});
  let v;try{v=JSON.parse(await readBody(req,8192));if(!v||typeof v!=='object')throw Error();}catch{return NextResponse.json({error:'Invalid user request'},{status:400});}
+ if(v.mode!==undefined&&!['existing','new'].includes(v.mode))return NextResponse.json({error:'Choose an existing or new user'},{status:400});
  const email=normalizeEmail(v.email);if(!email)return NextResponse.json({error:'Enter a valid email address'},{status:400});
  if(email===process.env.GUARDSCALE_ROOT_USER?.trim().toLowerCase())return NextResponse.json({error:'This email is reserved'},{status:409});
  if(!['admin','operator','viewer'].includes(v.role))return NextResponse.json({error:'Invalid role'},{status:400});
  const now=new Date().toISOString();let user=await store.userByName(email);
- if(user){if(await store.membership(session.orgId,user.id))return NextResponse.json({error:'User is already a member of this organization'},{status:409});}
+ if(user){
+  if(await store.membership(session.orgId,user.id))return NextResponse.json({error:'User is already a member of this organization'},{status:409});
+  if(user.status!=='active')return NextResponse.json({error:'This account is disabled'},{status:409});
+  if(v.mode==='new')return NextResponse.json({error:'This email already has an account. Choose Existing user to add them.'},{status:409});
+ }
  else{
+  if(v.mode==='existing')return NextResponse.json({error:'No account found for this email. Choose New user to create one.'},{status:404});
   if(typeof v.displayName!=='string'||!v.displayName.trim()||v.displayName.length>100)return NextResponse.json({error:'Enter a display name of 1-100 characters'},{status:400});
   if(typeof v.password!=='string'||v.password.length<12||v.password.length>256)return NextResponse.json({error:'Password must be 12-256 characters'},{status:400});
   const requireVerification=process.env.GUARDSCALE_DEPLOYMENT_MODE==='saas';

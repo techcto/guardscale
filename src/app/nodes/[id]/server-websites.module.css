@@ -1,0 +1,7 @@
+.links { margin: 0 0 16px; overflow-wrap: anywhere; }
+.links > span { display: grid; gap: 6px; }
+.form { display: grid; gap: 14px; }
+.field { display: grid; gap: 8px; color: var(--muted); font-size: 13px; }
+.field textarea { display: block; width: 100%; min-width: 0; min-height: 132px; box-sizing: border-box; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; line-height: 1.6; resize: vertical; }
+.field textarea:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }

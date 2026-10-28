@@ -113,11 +113,13 @@ export async function inspectServer(orgId:string,incidentId:string){
  const node=await store.node(orgId,incident.serverId);if(!node||node.agentId!==incident.agentId)throw Error('Server unavailable');
  const id=createHash('sha256').update('inspect:'+orgId+':'+incidentId).digest('hex');
  let command=(await commandsFor(orgId)).find(v=>v.id===id);
- if(!command){const now=new Date().toISOString();command={id,orgId,serverId:incident.serverId,agentId:incident.agentId,incidentId,candidateId:'',kind:'inspect_server',expiresAt:new Date(Date.parse(now)+20000).toISOString(),approvedBy:'guardian-read-only',createdAt:now,updatedAt:now,status:'queued'};
+ if(!command){const now=new Date().toISOString();command={id,orgId,serverId:incident.serverId,agentId:incident.agentId,incidentId,candidateId:'',kind:'inspect_server',expiresAt:new Date(Date.parse(now)+60000).toISOString(),approvedBy:'guardian-read-only',createdAt:now,updatedAt:now,status:'queued'};
   if(process.env.GUARDSCALE_TABLE){try{await db.send(new PutCommand({TableName:process.env.GUARDSCALE_TABLE,Item:{pk:'ORG#'+orgId,sk:'COMMAND#'+id,...command},ConditionExpression:'attribute_not_exists(pk)'}));}catch(e){if(!(e instanceof Error&&e.name==='ConditionalCheckFailedException'))throw e;}}
   else memory.set(id,command);
  }
- const deadline=Date.now()+15000;
+ // Existing agents poll with the default 30s heartbeat. Allow a complete poll
+ // interval and network margin while newer agents poll commands every 5s.
+ const deadline=Date.now()+45000;
  while(Date.now()<deadline){const value=(await commandsFor(orgId)).find(v=>v.id===id);if(value?.status==='complete')return value.result??{};if(value&&value.status!=='queued')throw Error('Agent inspection failed');await new Promise(resolve=>setTimeout(resolve,1000));}
  throw Error('Agent inspection timed out');
 }

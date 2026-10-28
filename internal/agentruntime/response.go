@@ -155,6 +155,7 @@ func (r *responder) emitReview(now time.Time, ip string, findings []detection.Fi
 	}
 	// Raw logs stay local; bounded findings and source context are private organization evidence.
 	payload := map[string]any{"id": id, "server_id": r.c.Server.ID, "state": "review", "started_at": now.Format(time.RFC3339Nano), "findings": findings}
+	payload["request_samples"] = requestSamples(r.requests, ip, now)
 	if ip != "" {
 		payload["candidate_id"] = id
 		payload["source_ip"] = ip

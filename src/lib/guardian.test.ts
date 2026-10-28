@@ -19,3 +19,14 @@ test('missing Guardian model is explicit and does not manufacture AI output',asy
  const original=process.env.GUARDSCALE_AI_MODEL_ID;delete process.env.GUARDSCALE_AI_MODEL_ID;
  try{assert.deepEqual(await assessWithGuardian('org','incident',[]),{status:'not_configured'});}finally{if(original)process.env.GUARDSCALE_AI_MODEL_ID=original;}
 });
+
+test('Guardian reports a specific inspection timeout separately from model failures without exposing errors',async()=>{
+ const model=process.env.GUARDSCALE_AI_MODEL_ID;process.env.GUARDSCALE_AI_MODEL_ID='test-model';
+ const send=async()=>({output:{message:{role:'assistant' as const,content:[{toolUse:{toolUseId:'inspect',name:'inspect_server',input:{}}}]}}});
+ try{
+  const result=await assessWithGuardian('timeout-test','incident',[],{send,inspect:async()=>{throw Error('Agent inspection timed out')}});
+  assert.equal(result.trace?.[0].reason,'agent_inspection_timeout');assert.match(result.summary!,/45 seconds/);assert.equal(result.recommendation,undefined);
+  const failed=await assessWithGuardian('model-test','incident',[],{send:async()=>{throw Error('private provider details')}});
+  assert.equal(failed.trace?.[0].tool,'bedrock_converse');assert.equal(failed.trace?.[0].reason,'model_request_failed');assert.ok(!JSON.stringify(failed).includes('private provider details'));
+ }finally{if(model===undefined)delete process.env.GUARDSCALE_AI_MODEL_ID;else process.env.GUARDSCALE_AI_MODEL_ID=model;}
+});
