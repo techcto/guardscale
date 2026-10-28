@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +17,11 @@ import (
 func TestRunSendsHeartbeatAndSanitizedActivity(t *testing.T) {
 	events := make(chan map[string]any, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer tenant-1.agent-1.enroll-secret" {
+		if r.URL.Path == "/api/v1/agents/credential" {
+			json.NewEncoder(w).Encode(map[string]any{"registered": true, "tenantId": "tenant-1", "agentId": "agent-1", "serverId": "node-1"})
+			return
+		}
+		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer tenant-1.agent-1.") || r.Header.Get("Authorization") == "Bearer tenant-1.agent-1.enroll-secret" {
 			t.Errorf("unexpected authorization")
 		}
 		var payload map[string]any

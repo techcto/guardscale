@@ -127,6 +127,7 @@ install -m 0600 /dev/null /etc/guardscale/enrollment.token
 printf '%s' "$GUARDSCALE_ENROLLMENT_TOKEN" > /etc/guardscale/enrollment.token
 
 /usr/local/bin/guardscale test-config --config /etc/guardscale/config.yaml
+/usr/local/bin/guardscale enroll --config /etc/guardscale/config.yaml
 systemctl daemon-reload
 systemctl enable guardscale
 systemctl restart guardscale

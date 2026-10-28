@@ -28,3 +28,8 @@ test('verification and password-reset links remain clickable in HTML emails',()=
  assert.ok(html.includes('href="https://guardscale.org/login/verify-email?token=signed.test&amp;purpose=verify"'));
  assert.ok(!notificationEmail('Test','<img onerror=bad> javascript:bad').includes('<img'));
 });
+
+test('proxied sources do not offer a Protect email shortcut',()=>{
+ const result=incidentEmail({...sample,protectionBlocked:true,replyTo:'reply+signed@example.test'});
+ assert.ok(!result.html.includes('body=Protect'));assert.ok(!result.text.includes('PROTECT —'));assert.ok(result.html.includes('body=Watch'));assert.match(result.html,/Origin firewall protection is unavailable/);
+});

@@ -62,14 +62,14 @@ func sourcePath(configured string, candidates ...string) string {
 	return configured
 }
 func collect(ctx context.Context, c config.Config) error {
-	token, err := os.ReadFile(c.ControlPlane.TokenFile)
-	if err != nil {
-		return fmt.Errorf("read enrollment token: %w", err)
-	}
-	if strings.TrimSpace(string(token)) == "" || c.ControlPlane.Endpoint == "" || c.ControlPlane.AgentID == "" {
+	if c.ControlPlane.Endpoint == "" || c.ControlPlane.AgentID == "" {
 		return fmt.Errorf("control plane enrollment is incomplete")
 	}
-	auth := c.Server.Tenant + "." + c.ControlPlane.AgentID + "." + strings.TrimSpace(string(token))
+	token, err := operatingCredential(ctx, c, false)
+	if err != nil {
+		return fmt.Errorf("agent credential setup: %w", err)
+	}
+	auth := c.Server.Tenant + "." + c.ControlPlane.AgentID + "." + token
 	client := agentclient.Client{Endpoint: c.ControlPlane.Endpoint, Token: auth, ServerID: c.Server.ID, DiscoveredHosts: discoverApacheHosts()}
 	client.DisplayName, client.Tags = ec2Identity(ctx, c.Server.ID)
 	response := newResponder(c, client)

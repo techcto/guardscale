@@ -47,6 +47,7 @@ cp -p /usr/local/bin/guardscale /usr/local/bin/guardscale.previous
 install -m 0755 "$binary" /usr/local/bin/guardscale.next
 mv -f /usr/local/bin/guardscale.next /usr/local/bin/guardscale
 changed=1
+/usr/local/bin/guardscale enroll --config /etc/guardscale/config.yaml
 systemctl restart guardscale.service
 for _ in $(seq 1 10); do sleep 1;systemctl is-active --quiet guardscale.service;done
 changed=0

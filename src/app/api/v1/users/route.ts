@@ -4,10 +4,11 @@ import {operator} from '@/lib/operator';
 import {store} from '@/lib/store';
 import type {MembershipRole,OrgMembership} from '@/lib/model';
 import {hashPassword} from '@/lib/password';
-import {normalizeEmail,sendVerificationEmail} from '@/lib/email-verification';
+import {normalizeEmail} from '@/lib/email-verification';
 import {SignupError,checkEmailDomain,requireEmailDelivery} from '@/lib/signup-policy';
 import {requestOrigin} from '@/lib/session';
 import {readBody} from '@/lib/read-body';
+import {sendMembershipEmail,type MembershipEmailResult} from '@/lib/membership-email';
 export async function GET(req:NextRequest){const session=await operator(req);if(!session)return NextResponse.json({error:'unauthorized'},{status:401});const members=await store.membersOfOrg(session.orgId);return NextResponse.json(members.map(({membership,user})=>({id:user.id,username:user.username,email:user.email,displayName:user.displayName,role:membership.role,status:membership.status,createdAt:membership.createdAt})));}
 export async function POST(req:NextRequest){
  const session=await operator(req);if(!session||!['root','admin'].includes(session.role)||req.headers.get('origin')!==requestOrigin(req))return NextResponse.json({error:'forbidden'},{status:403});
@@ -32,6 +33,7 @@ export async function POST(req:NextRequest){
   if(!await store.createUser(user,hashPassword(v.password)))return NextResponse.json({error:'This email is already taken'},{status:409});
  }
  const membership:OrgMembership={id:randomUUID(),orgId:session.orgId,userId:user.id,role:v.role as MembershipRole,status:'active',invitedByUserId:session.id,createdAt:now,updatedAt:now};await store.putMembership(membership);
- if(user.emailVerified===false){try{await sendVerificationEmail(req,user);}catch(e){return NextResponse.json({error:e instanceof SignupError?e.message:'Unable to send verification email. The account remains unverified.'},{status:503});}}
- return NextResponse.json({id:user.id,username:user.username,email:user.email,displayName:user.displayName,role:membership.role,status:membership.status,createdAt:membership.createdAt},{status:201});
+ let invitation:MembershipEmailResult;
+ try{invitation=await sendMembershipEmail(req,session.orgId,user.id);}catch{invitation={status:'failed',message:'Access was added, but the invitation email could not be sent. Use Resend invitation to retry.'};console.warn(JSON.stringify({level:'warn',message:'Membership saved; invitation email failed'}));}
+ return NextResponse.json({id:user.id,username:user.username,email:user.email,displayName:user.displayName,role:membership.role,status:membership.status,createdAt:membership.createdAt,invitation},{status:201});
 }

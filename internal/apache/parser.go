@@ -58,6 +58,9 @@ func (p *Parser) ParseGuardScale(line string) (Request, error) {
 	}
 	t, e := time.Parse(time.RFC3339Nano, f[0])
 	if e != nil {
+		t, e = time.Parse("2006-01-02T15:04:05-0700", f[0])
+	}
+	if e != nil {
 		return Request{}, e
 	}
 	status, e := strconv.Atoi(f[6])
@@ -135,5 +138,26 @@ func (p *Parser) ParseCombined(line string) (Request, error) {
 	if parseErr != nil {
 		return Request{}, fmt.Errorf("invalid request URI")
 	}
-	return Request{Time: t, ClientIP: pre[0], PeerIP: pre[0], Method: req[0], URI: req[1], Path: u.Path, Status: status, Bytes: b, Referer: parts[3], UserAgent: parts[5]}, nil
+	r := Request{Time: t, ClientIP: pre[0], PeerIP: pre[0], TrustedProxy: p.trustedPeer(pre[0]), Method: req[0], URI: req[1], Path: u.Path, Status: status, Bytes: b, Referer: parts[3], UserAgent: parts[5]}
+	// CMS appends quoted XFF, underlying peer and host, then duration in ms.
+	if len(parts) >= 13 {
+		if _, err := netip.ParseAddr(parts[9]); err != nil {
+			return Request{}, fmt.Errorf("invalid connection peer")
+		}
+		r.PeerIP = parts[9]
+		r.ClientIP = r.PeerIP
+		r.TrustedProxy = p.trustedPeer(r.PeerIP)
+		if r.TrustedProxy {
+			if client := clientFromXFF(parts[7], p.trusted); client != "" {
+				r.ClientIP = client
+			}
+		}
+		r.Host = strings.ToLower(parts[11])
+		ms, err := strconv.ParseFloat(strings.TrimSpace(parts[12]), 64)
+		if err != nil || ms < 0 {
+			return Request{}, fmt.Errorf("invalid request duration")
+		}
+		r.Duration = time.Duration(ms * float64(time.Millisecond))
+	}
+	return r, nil
 }

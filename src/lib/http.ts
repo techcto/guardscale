@@ -1,2 +1,3 @@
-import{NextRequest,NextResponse}from'next/server';import{authenticate}from'./auth';
-export function agent(req:NextRequest){return authenticate(req.headers.get('authorization'))}export const unauthorized=()=>NextResponse.json({error:'unauthorized'},{status:401});export async function body(req:NextRequest){const n=Number(req.headers.get('content-length')??0);if(n>2_097_152)throw new Error('too large');return req.json()}
+import{NextRequest,NextResponse}from'next/server';import{authenticate}from'./auth';import {readBody} from './read-body';
+export async function agent(req:NextRequest){const identity=await authenticate(req.headers.get('authorization'));if(!identity?.serverId)return identity;try{const serverId=req.method==='GET'?req.nextUrl.searchParams.get('server_id'):JSON.parse(await readBody(req.clone(),2_097_152)).server_id;return serverId===identity.serverId?identity:null;}catch{return null}}
+export const unauthorized=()=>NextResponse.json({error:'unauthorized'},{status:401});export async function body(req:NextRequest){const n=Number(req.headers.get('content-length')??0);if(n>2_097_152)throw new Error('too large');return req.json()}

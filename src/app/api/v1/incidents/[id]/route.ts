@@ -15,13 +15,14 @@ export async function GET(req:NextRequest,{params}:{params:Promise<{id:string}>}
   const settings=await store.settings(session.orgId);
   const membership=session.role==='root'?null:await store.membership(session.orgId,session.id);
   const admin=session.role==='root'||membership?.status==='active'&&membership.role==='admin';
-  const payload=incident.payload as {candidate_id?:unknown;analysis?:{trace?:{result?:{protection_enabled?:string}}[]}};
+  const payload=incident.payload as {candidate_id?:unknown;protection_blocked_reason?:unknown;analysis?:{trace?:{result?:{protection_enabled?:string}}[]}};
   const age=Date.now()-Date.parse(incident.startedAt);
   const previous=commands.find(c=>c.kind!=='inspect_server');
   const agentDisabled=payload.analysis?.trace?.some(v=>v.result?.protection_enabled==='false');
   const blockedReason=!admin?'An organization administrator must approve blocking.':
    !node?'This server is no longer connected to this organization.':
    previous?'This incident already has a protection command. Review its status below.':
+   payload.protection_blocked_reason==='proxied_source_requires_edge_or_http_filter'?'This source is behind a proxy or CDN. Configure edge/WAF or trusted HTTP filtering; origin network blocking does not apply.':
    typeof payload.candidate_id!=='string'||!/^[a-f0-9]{32}$/.test(payload.candidate_id)?'The agent did not identify an individual address eligible for blocking.':
    !Number.isFinite(age)||age<0||age>900000?'This alert’s 15-minute approval window has expired. Review a newer incident before blocking.':
    !settings.response.allowRemoteRequests?'Remote protection is disabled in Settings → Response.':

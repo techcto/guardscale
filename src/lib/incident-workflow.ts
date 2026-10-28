@@ -10,7 +10,7 @@ import {incidentEmail} from './incident-email';
 import {emailReplyAddress,validatedEmailReply} from './email-replies';
 import type {IncidentRecord} from './model';
 import {requestSamples} from './request-samples';
-type Payload={candidate_id?:string;source_ip?:string;country?:string;findings?:unknown;request_samples?:unknown;analysis?:GuardianAssessment;notified?:string[];alertedAt?:string;alertDelivery?:'provider_accepted'|'local_only';alertGroup?:string};
+type Payload={protection_blocked_reason?:string;candidate_id?:string;source_ip?:string;country?:string;findings?:unknown;request_samples?:unknown;analysis?:GuardianAssessment;notified?:string[];alertedAt?:string;alertDelivery?:'provider_accepted'|'local_only';alertGroup?:string};
 // The incident that owns the source's alert group. An absent source is never grouped,
 // matching the console's source grouping; a dismissed owner hands the group over.
 async function alertGroupFor(orgId:string,incident:IncidentRecord){
@@ -67,7 +67,7 @@ export async function processIncident(orgId:string,incidentId:string){
   const channel=destination.includes('@')?'email':'whatsapp';
   if(channel==='email'?!settings.notifications.emailEnabled:!settings.notifications.whatsappEnabled)continue;
   const key=createHmac('sha256',process.env.GUARDSCALE_SESSION_SECRET!).update(channel+destination+':'+(process.env.GUARDSCALE_NOTIFICATION_MODE??'log')).digest('hex');if(payload.notified.includes(key))continue;
-  const alert={server:server?.displayName||incident.serverId,source:payload.source_ip,country:payload.country,detectedAt:incident.startedAt,analysisStatus:payload.analysis.status,summary:payload.analysis.summary,requestSamples:requestSamples(payload.request_samples),reviewUrl:link,websites:websites?.split('\n'),code,blockSeconds:Math.min(settings.response.defaultTtlSeconds,settings.response.maxTtlSeconds,900)};
+  const alert={protectionBlocked:payload.protection_blocked_reason==='proxied_source_requires_edge_or_http_filter',server:server?.displayName||incident.serverId,source:payload.source_ip,country:payload.country,detectedAt:incident.startedAt,analysisStatus:payload.analysis.status,summary:payload.analysis.summary,requestSamples:requestSamples(payload.request_samples),reviewUrl:link,websites:websites?.split('\n'),code,blockSeconds:Math.min(settings.response.defaultTtlSeconds,settings.response.maxTtlSeconds,900)};
   const replyTo=channel==='email'?emailReplyAddress(orgId,incidentId,destination):undefined;
   const email=channel==='email'?incidentEmail({...alert,replyTo}):undefined;
   const messageId=await notifier().send({channel,destination,replyTo,originationId:settings.notifications.whatsappSenderId||undefined,subject:'GuardScale: review server activity',text:email?.text??incidentAlert(alert,channel),html:email?.html,reviewUrl:link});

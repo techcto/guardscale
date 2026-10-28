@@ -57,6 +57,28 @@ func TestDistributedReviewDoesNotInventAProtectionCandidate(t *testing.T) {
 	}
 }
 
+func TestProxiedViewerDoesNotBecomeAnOriginFirewallCandidate(t *testing.T) {
+	now := time.Now()
+	requests := sourceRequests("198.51.100.20", 40, true, now)
+	for i := range requests {
+		requests[i].PeerIP = "10.0.1.10"
+		requests[i].TrustedProxy = true
+	}
+	c := config.Default()
+	c.Server.ID = "proxy-test"
+	c.Storage.StateDir = t.TempDir()
+	r := newResponder(c, agentclient.Client{})
+	r.requests = requests
+	reviews := sourceReviews(requests, c, map[string]time.Time{}, now, 5)
+	if len(reviews) != 1 || reviews[0].BlockReason != "proxied_source_requires_edge_or_http_filter" {
+		t.Fatal("proxy traffic was offered as a network target")
+	}
+	r.evaluate(context.Background())
+	if len(r.candidates) != 0 {
+		t.Fatal("proxy source must not produce a firewall candidate")
+	}
+}
+
 func TestResponderBoundsSourceAlertsAcrossRepeatedEvaluations(t *testing.T) {
 	c := config.Default()
 	c.Server.ID = "local-test"

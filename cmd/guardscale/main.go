@@ -27,6 +27,24 @@ func main() {
 		versionCmd(os.Args[2:])
 	case "update":
 		updateCmd(os.Args[2:])
+	case "enroll":
+		withConfig(os.Args[2:], func(c config.Config) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := agentruntime.Enroll(ctx, c, false); err != nil {
+				fatal(err)
+			}
+			fmt.Println("Per-agent credential registered; organization bootstrap key replaced.")
+		})
+	case "rotate-credential":
+		withConfig(os.Args[2:], func(c config.Config) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := agentruntime.Enroll(ctx, c, true); err != nil {
+				fatal(err)
+			}
+			fmt.Println("Agent credential rotated. Restart guardscale.service to use it.")
+		})
 	case "test-config":
 		withConfig(os.Args[2:], func(c config.Config) { fmt.Println("configuration valid") })
 	case "health":
@@ -49,7 +67,7 @@ func main() {
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "guardscale version|update|run|status|health|test-config|incidents|diagnostics|replay <apache-log>")
+	fmt.Fprintln(os.Stderr, "guardscale version|update|enroll|rotate-credential|run|status|health|test-config|incidents|diagnostics|replay <apache-log>")
 }
 func withConfig(a []string, fn func(config.Config)) {
 	f := flag.NewFlagSet("config", flag.ExitOnError)

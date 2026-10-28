@@ -19,6 +19,8 @@ func TestInspectionPollDoesNotWaitForThirtySecondHeartbeat(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
+		case "/api/v1/agents/credential":
+			json.NewEncoder(w).Encode(map[string]any{"registered": true, "tenantId": "test", "agentId": "test-agent", "serverId": "poll-regression"})
 		case "/api/v1/agents/heartbeat":
 			heartbeats.Add(1)
 			w.WriteHeader(202)

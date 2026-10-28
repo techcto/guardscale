@@ -50,7 +50,8 @@ export async function approveProtection(orgId:string,incidentId:string,approvedB
  const incident=await store.incident(orgId,incidentId);if(!incident)throw Error('Incident not found');
  const settings=await store.settings(orgId);
  if(!settings.response.allowRemoteRequests||settings.response.dryRun)throw Error('Enable remote protection and disable dry-run in organization settings first');
- const payload=incident.payload as {candidate_id?:unknown};
+ const payload=incident.payload as {candidate_id?:unknown;protection_blocked_reason?:unknown};
+ if(payload.protection_blocked_reason==='proxied_source_requires_edge_or_http_filter')throw Error('This source is behind a proxy or CDN. Use edge/WAF or a trusted HTTP filter; an origin network block is not supported.');
  if(typeof payload.candidate_id!=='string'||!/^[a-f0-9]{32}$/.test(payload.candidate_id))throw Error('No agent-observed protection candidate');
  const age=Date.now()-Date.parse(incident.startedAt);
  if(!Number.isFinite(age)||age<0||age>15*60000)throw Error('Incident approval window expired');

@@ -11,13 +11,13 @@ export const verificationPending=(user:GuardScaleUser)=>process.env.GUARDSCALE_D
 // Minutes until another link may be sent, or 0 when one may go now.
 export const resendWaitMinutes=(user:GuardScaleUser,now=Date.now())=>user.verificationSentAt?Math.max(0,Math.ceil((Date.parse(user.verificationSentAt)+RESEND_VERIFICATION_MINUTES*60000-now)/60000)):0;
 // Returns the link only outside AWS notification mode, the same way the password reset flow exposes it for local installs.
-export async function sendVerificationEmail(req:{nextUrl:{protocol:string};headers:{get(name:string):string|null}},user:GuardScaleUser){
+export async function sendVerificationEmail(req:{nextUrl:{protocol:string};headers:{get(name:string):string|null}},user:GuardScaleUser,organization?:{name:string;role:string}){
  requireEmailDelivery();if(!user.email)throw new SignupError('Email address required');checkEmailDomain(user.email);
  const secret=process.env.GUARDSCALE_SESSION_SECRET!;
  const token=await createVerifyEmailToken(user.id,user.email,secret);
  const link=`${browserOrigin(req)}/login/verify-email?token=${token}`;
  const sentAt=new Date().toISOString(),cutoff=new Date(Date.now()-RESEND_VERIFICATION_MINUTES*60000).toISOString();
  if(!await store.reserveVerificationEmail(user.id,user.email,sentAt,cutoff))throw new SignupError('A verification email was recently requested. Please wait before requesting another.',409);
- try{await notifier().send({channel:'email',destination:user.email,subject:'Verify your GuardScale email',text:`Welcome to GuardScale, ${user.displayName}. Confirm this email address to finish setting up your account. This link expires in 24 hours: ${link}`});}catch{await store.releaseVerificationEmail(user.id,sentAt).catch(()=>{});console.error(JSON.stringify({level:'error',message:'verification email delivery failed'}));throw new SignupError('Unable to send verification email. Your account is not verified. Please request a new link from Sign in.',503);}
+ try{await notifier().send({channel:'email',destination:user.email,subject:'Verify your GuardScale email',text:`Welcome to GuardScale, ${user.displayName}. ${organization?`You have been added to ${organization.name} as ${organization.role}. After verifying your email and signing in, select ${organization.name} from the workspace picker. `:''}Confirm this email address to finish setting up your account. This link expires in 24 hours: ${link}`});}catch{await store.releaseVerificationEmail(user.id,sentAt).catch(()=>{});console.error(JSON.stringify({level:'error',message:'verification email delivery failed'}));throw new SignupError('Unable to send verification email. Your account is not verified. Please request a new link from Sign in.',503);}
  return localAuthLinks()?link:undefined;
 }

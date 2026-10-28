@@ -15,3 +15,8 @@ test('email directs users to authenticated review without implying reply approva
  assert.match(text,/AI assessment: unavailable/);assert.match(text,/Country: US/);assert.match(text,/Direct email replies are not supported/);
  assert.ok(!text.includes('Protect '+sample.code));
 });
+
+test('proxied sources offer monitoring without origin firewall approval',()=>{
+ const text=incidentAlert({...sample,protectionBlocked:true},'whatsapp');
+ assert.ok(!text.includes('Reply Protect'));assert.ok(!text.includes('Protect '+sample.code));assert.match(text,/proxy or CDN/);assert.ok(text.includes('Watch '+sample.code));
+});

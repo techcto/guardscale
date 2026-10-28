@@ -77,7 +77,7 @@ func (r *responder) evaluate(ctx context.Context) {
 	r.emissions = kept
 	// Per-source cooldown never hides a different source. Bound AI/alert fanout.
 	for _, review := range sourceReviews(recent, r.c, r.cooldown, now, 5-len(kept)) {
-		r.emitReview(now, review.IP, review.Findings)
+		r.emitReview(now, review.IP, review.Findings, review.BlockReason)
 	}
 	for key, until := range r.cooldown {
 		if now.After(until) {
@@ -87,8 +87,9 @@ func (r *responder) evaluate(ctx context.Context) {
 }
 
 type sourceReview struct {
-	IP       string
-	Findings []detection.Finding
+	IP          string
+	Findings    []detection.Finding
+	BlockReason string
 }
 
 func sourceReviews(requests []apache.Request, c config.Config, cooldown map[string]time.Time, now time.Time, limit int) []sourceReview {
@@ -123,7 +124,14 @@ func sourceReviews(requests []apache.Request, c config.Config, cooldown map[stri
 		if now.Before(cooldown[ip]) || len(reviews) >= limit {
 			continue
 		}
-		reviews = append(reviews, sourceReview{IP: ip, Findings: findings})
+		reason := ""
+		for _, request := range groups[ip] {
+			if request.TrustedProxy || request.PeerIP != "" && request.PeerIP != request.ClientIP {
+				reason = "proxied_source_requires_edge_or_http_filter"
+				break
+			}
+		}
+		reviews = append(reviews, sourceReview{IP: ip, Findings: findings, BlockReason: reason})
 	}
 	// Distributed evidence without an independently supported source stays advisory.
 	if !specific && !now.Before(cooldown[""]) {
@@ -135,10 +143,10 @@ func sourceReviews(requests []apache.Request, c config.Config, cooldown map[stri
 	return reviews
 }
 
-func (r *responder) emitReview(now time.Time, ip string, findings []detection.Finding) {
+func (r *responder) emitReview(now time.Time, ip string, findings []detection.Finding, blockReason string) {
 	digest := sha256.Sum256([]byte(r.c.Server.ID + ip + now.String()))
 	id := hex.EncodeToString(digest[:16])
-	if ip != "" {
+	if ip != "" && blockReason == "" {
 		r.candidates[id] = candidate{IP: ip, Expires: now.Add(15 * time.Minute)}
 	}
 	for key, c := range r.candidates {
@@ -156,8 +164,13 @@ func (r *responder) emitReview(now time.Time, ip string, findings []detection.Fi
 	// Raw logs stay local; bounded findings and source context are private organization evidence.
 	payload := map[string]any{"id": id, "server_id": r.c.Server.ID, "state": "review", "started_at": now.Format(time.RFC3339Nano), "findings": findings}
 	payload["request_samples"] = requestSamples(r.requests, ip, now)
+	if blockReason != "" {
+		payload["protection_blocked_reason"] = blockReason
+	}
 	if ip != "" {
-		payload["candidate_id"] = id
+		if blockReason == "" {
+			payload["candidate_id"] = id
+		}
 		payload["source_ip"] = ip
 	}
 	if err := r.outbox().Enqueue("/api/v1/agents/incidents", payload); err != nil {
